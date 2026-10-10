@@ -13,7 +13,7 @@ trình ghi cùng lúc — dừng lại, đó là dấu hiệu đã chạm ngư�
 
 ```bash
 # Cài đặt
-cp .env.example .env            # rồi điền APP_SECRET (bắt buộc) và DEEPSEEK_API_KEY
+cp .env.example .env            # rồi điền APP_SECRET (bắt buộc)
 pnpm install --store-dir .pnpm-store
 pnpm db:seed --company "Công ty Demo" --email owner@congty.vn --password 'doi-mat-khau-2026' --demo
 pnpm kb:index --company cong-ty-demo   # chỉ chạy được khi có file .md trong data/companies/cong-ty-demo/kb (xem §3.4)
@@ -75,9 +75,7 @@ cơ chế ưu tiên y hệt server, nhưng biến môi trường thật vẫn đ
 | `SESSION_TTL_DAYS` | Không | `30` | Số ngày một phiên đăng nhập còn hiệu lực (1–365). Phiên hết hạn bị dọn mỗi giờ |
 | `MAX_BODY_BYTES` | Không | `2000000` (2 MB) | Trần kích thước JSON body (1 024–50 000 000). Tăng khi nhập tài liệu KB lớn qua UI |
 | `WEB_DIST` | Không | `apps/web/dist` nếu tồn tại | Thư mục SPA đã build để server phục vụ tĩnh. Không tồn tại → server chạy API-only, `GET /` trả "Chưa có bản dựng giao diện" |
-| `DEFAULT_LLM_BASE_URL` | Không | `http://localhost:20128/v1` | Chỉ dùng **lúc `pnpm db:seed`** để tạo provider mặc định. Đổi sau đó phải sửa trong giao diện Cài đặt → Nhà cung cấp |
-| `DEFAULT_LLM_API_KEY_REF` | Không | `DEEPSEEK_API_KEY` | **Tên** biến môi trường giữ khoá, không phải khoá. Nhờ vậy khoá không bao giờ được ghi vào DB |
-| `DEEPSEEK_API_KEY` | Thực tế **có** | rỗng | Giá trị thật cho tham chiếu trên. Gateway yêu cầu key (gọi không key → `Missing API key`), nên để rỗng thì mọi lượt chat đều lỗi provider |
+| (không có) | — | — | **Không còn biến môi trường cho LLM.** URL, API key và model khai trong giao diện Cài đặt → Nhà cung cấp và lưu (đã mã hoá) trong DB. Xem §3.5 |
 | `EMBEDDING_PROVIDER` | Không | `local` | `local` \| `remote` \| `hash`. Giá trị khác → server dừng lúc khởi động. Xem §11 về fallback |
 | `EMBEDDING_MODEL` | Không | `Xenova/multilingual-e5-small` | Model ONNX (local) hoặc model id của API `/embeddings` (remote) |
 | `EMBEDDING_BASE_URL` | Chỉ khi `remote` | rỗng | Gốc API OpenAI-compatible; code tự thêm `/embeddings`. **Đừng trỏ vào gateway `:20128`** — nó trả 400 cho `/v1/embeddings` |
@@ -111,8 +109,11 @@ cp .env.example .env
 openssl rand -base64 48
 ```
 
-Dán kết quả vào `APP_SECRET=`. Điền `DEEPSEEK_API_KEY=` bằng khoá thật của
-gateway. Các biến còn lại có thể để mặc định.
+Dán kết quả vào `APP_SECRET=`. Các biến còn lại có thể để mặc định.
+
+Nhà cung cấp LLM **không** khai bằng biến môi trường: URL, API key và model nhập
+trực tiếp trong giao diện Cài đặt (xem §3.5). Nhờ vậy không còn tình trạng "cài xong
+mà quên điền `.env`" khiến mọi lượt chạy hỏng.
 
 ### 3.2 Cài phụ thuộc
 
@@ -153,12 +154,14 @@ Seed là **idempotent**: chạy lại không nhân bản dữ liệu, chỉ vá 
 lại được yên tâm sau mỗi lần cập nhật phiên bản.
 
 Server kiểm tra catalog lúc khởi động (`preflight`):
-- 0 định nghĩa agent → `pnpm db:seed`
-- 0 model đang bật → `pnpm db:seed` hoặc thêm provider trong giao diện
+- 0 định nghĩa agent hoặc 0 kỹ năng → `pnpm db:seed`
+- Provider/model **không** thuộc điều kiện sẵn sàng: mỗi công ty tự khai trong Cài đặt,
+  nên một hệ thống mới hợp lệ vẫn có 0 model.
 
-Khi chưa đủ, server **vẫn chạy** nhưng tạo công ty sẽ trả lỗi `needs_configuration`
-(HTTP 424). Đó là hành vi có chủ đích: một deployment quên seed sẽ báo rõ ngay ở
-màn hình đầu tiên, thay vì vỡ khó hiểu ở tin nhắn đầu tiên.
+Khi catalog chưa đủ, server **vẫn chạy** nhưng tạo công ty sẽ trả lỗi
+`needs_configuration` (HTTP 424). Đó là hành vi có chủ đích: một deployment quên seed
+sẽ báo rõ ngay ở màn hình đầu tiên, thay vì vỡ khó hiểu ở tin nhắn đầu tiên. Tạo công
+ty KHÔNG cần model: agent chỉ chạy sau khi bạn chọn model cho nó (xem §3.5).
 
 ### 3.4 Đưa nội dung vào kho kiến thức
 
@@ -206,6 +209,34 @@ ghi tài liệu vào DB (mỗi tài liệu một chunk toàn văn), **không** g
 nên hãy chạy trong thư mục repo có `.env`.
 
 ---
+
+### 3.5 Khai báo nhà cung cấp, khoá API và model
+
+Seed **không** tạo provider/model nào. Làm theo thứ tự:
+
+1. **Cài đặt → Nhà cung cấp**: nhập tên, loại (OpenAI-compatible/Anthropic) và base URL.
+   Có thể dán luôn API key đầu tiên.
+2. **Khoá API**: mở nút "Khoá API (n)" của provider để thêm nhiều khoá cho cùng một URL.
+   Hệ thống thử lần lượt theo "Thứ tự"; khoá lỗi (401/403/hết hạn mức) thì tự dùng khoá
+   kế tiếp **mà không đổi model**. Mỗi khoá được mã hoá, giao diện chỉ hiện vài ký tự gợi ý.
+3. **Fetch model**: chọn khoá rồi bấm "Fetch model" để gọi `GET {baseURL}/models`.
+   Danh sách trả về **chưa** được lưu; tick các model cần dùng rồi bấm "Thêm model đã
+   chọn". Vẫn có thể thêm model thủ công ở mục Model.
+4. **Chọn model cho từng agent**: màn **Đội agent** → "Cấu hình" → chọn model chính và
+   thêm các **model dự phòng** theo thứ tự. Hệ thống KHÔNG tự gắn model: agent chưa chọn
+   model sẽ báo `needs_configuration` khi chạy. Khi model chính lỗi, hệ thống thử lần lượt
+   model dự phòng, rồi tới route của tier cao hơn.
+5. **Xoá model không dùng**: trong mục Model, nút "Xoá model không dùng · <tên>" chỉ xoá
+   model không được agent/route/fallback nào tham chiếu. Model đang dùng trả **409**.
+   Xoá provider sẽ xoá theo toàn bộ khoá và model của nó.
+
+Hai URL khác nhau có thể trả về cùng một mã model: chúng vẫn là hai bản ghi riêng biệt,
+và giao diện luôn hiển thị kèm tên nhà cung cấp để phân biệt.
+
+> **Migration `0008`**: khi nâng cấp từ bản cũ, khoá cấp provider được chuyển thành khoá
+> đầu tiên trong bảng `llm_provider_keys`, và các provider toàn cục do seed cũ bị xoá
+> (model/route của chúng theo cascade). Sau khi nâng cấp hãy vào Cài đặt khai lại nhà
+> cung cấp và chọn model cho agent.
 
 ## 4. Chạy chế độ phát triển
 
@@ -584,7 +615,7 @@ Hiện có **6** migration:
 `0005_work`, `0006_accounting_integrations`.
 
 > Ghi chú: `docs/kien-truc.md` §4 nói "Bảy migration" — con số đúng tại thời điểm
-> viết tài liệu này là **6** (xem cũng `schema_migrations` trên DB đã seed).
+> viết tài liệu này là **8** (xem cũng `schema_migrations` trên DB đã seed).
 
 Quy tắc: **không sửa một migration đã phát hành.** DB của khách đã ghi id đó vào
 `schema_migrations`; sửa nội dung chỉ khiến các deployment lệch nhau. Cần đổi gì
@@ -701,15 +732,13 @@ thường do tiến trình khác đang giữ kết nối đọc mở mãi.
 Thử lại một request sai khoá chỉ tốn thời gian.
 
 Việc cần làm:
-1. Kiểm tra `DEEPSEEK_API_KEY` có giá trị trong `.env` không, và đã khởi động lại
-   server chưa (`.env` chỉ đọc lúc boot).
-2. Nếu provider nhập qua giao diện: **Cài đặt → Nhà cung cấp**, xem
-   `apiKeyConfigured`. Nhập lại key nếu cần. Sau khi đổi `APP_SECRET`, mọi key mã
+1. **Cài đặt → Nhà cung cấp**, mở "Khoá API (n)" của provider và kiểm tra từng khoá
+   bằng nút **Thử khoá**. Nếu một URL có nhiều khoá, hệ thống đã tự chuyển sang khoá
+   kế tiếp; lỗi 401/403 hiện ra nghĩa là **mọi** khoá của URL đó đều hỏng.
+2. Nhập lại khoá nếu cần (khoá là chỉ-ghi). Sau khi đổi `APP_SECRET`, mọi khoá đã mã
    hoá đều phải nhập lại (§9).
-3. Dùng nút **Kiểm tra** của provider (endpoint `/providers/:id/test` khi route
-   hoàn thành) để xác nhận kết nối.
-4. Nhớ rằng `DEFAULT_LLM_BASE_URL`/`DEFAULT_LLM_API_KEY_REF` chỉ có tác dụng lúc
-   `pnpm db:seed`. Chạy lại seed để tạo provider đúng, hoặc sửa trong giao diện.
+3. Không còn biến môi trường nào cho khoá LLM — đừng đi tìm `DEEPSEEK_API_KEY` trong
+   `.env` nữa. Nguồn sự thật duy nhất là Cài đặt.
 
 ### 11.3 Provider trả 429 / 5xx
 
@@ -839,9 +868,9 @@ Kiểm tra theo thứ tự:
   sẽ thất bại cho tới khi catalog được cài."
 - Tạo công ty → HTTP **424** `needs_configuration`.
 
-**Chữa:** `pnpm db:seed` (catalog), rồi tạo công ty. Nếu đã seed mà `models = 0`:
-kiểm tra `DEFAULT_LLM_BASE_URL` có đúng không, rồi chạy lại seed hoặc thêm provider
-trong giao diện.
+**Chữa:** `pnpm db:seed` (catalog), rồi tạo công ty. `models = 0` **không** phải lỗi:
+provider/model do từng công ty khai trong Cài đặt (§3.5). Agent chỉ chạy sau khi bạn
+chọn model cho nó.
 
 **Đừng xoá DB để "chữa".** Seed là idempotent, chạy lại luôn an toàn.
 

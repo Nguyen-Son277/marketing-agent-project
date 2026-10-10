@@ -3,8 +3,9 @@
 Tài liệu này là nguồn tham chiếu cho **cấu trúc đội agent**: ai làm gì, đọc được
 tri thức nào, dùng công cụ gì, và chạy model nào. Sơ đồ trong ứng dụng (màn hình
 **Sơ đồ**) đọc dữ liệu sống từ `/api/companies/:id/diagram`, nên khi bạn đổi cấu
-hình trong giao diện thì sơ đồ trong app đổi theo; tài liệu này mô tả cấu hình
-mặc định do seed tạo ra.
+hình trong giao diện thì sơ đồ trong app đổi theo. Tài liệu này mô tả **cấu trúc
+đội** và cấu hình gợi ý; cột model chỉ là ví dụ — model thật do bạn chọn trong
+Cài đặt → Đội agent, và hệ thống không tự gắn model cho agent.
 
 ---
 
@@ -86,7 +87,7 @@ lại sẽ làm prompt mơ hồ.
 
 ## 3. Danh sách agent đầy đủ
 
-| # | Vai trò (`role`) | Tên hiển thị | Nhiệm vụ chính | Model mặc định | Kỹ năng nạp sẵn | Công cụ được cấp | Danh mục tri thức đọc | Ghi |
+| # | Vai trò (`role`) | Tên hiển thị | Nhiệm vụ chính | Model gợi ý | Kỹ năng nạp sẵn | Công cụ được cấp | Danh mục tri thức đọc | Ghi |
 |---|---|---|---|---|---|---|---|---|
 | 1 | `marketing-leader` | Trưởng phòng Marketing | Làm rõ & chốt brief, chia việc, điều phối, kiểm tra chất lượng, tổng hợp báo cáo | `deepseek-v4-pro` | brief-intake, task-decomposition, quality-review, report-writing | `kb_search`, `kb_read`, `artifact_publish`, `agent_ask`, `blocker_report` | **tất cả (6/6)** | Ghi được `90-ket-qua` |
 | 2 | `market-research` | Nghiên cứu thị trường | Thị trường, đối thủ, ICP, xu hướng, đề xuất định vị | `deepseek-v4-flash` | market-research, competitor-analysis, persona-building | `kb_search`, `kb_read`, `kb_write`, `web_search`, `web_scrape`, `competitor_watch`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00-cong-ty`, `20-thi-truong`, `30-kenh` | Ghi `20-thi-truong` |
@@ -167,10 +168,15 @@ không bao giờ lệch với quyền thật:
 | paid-media | `deep` (fallback) | `deepseek-v4-pro` | Chỉ escalate khi cần tối ưu phức tạp |
 | 7 vai trò còn lại | `standard` | `deepseek-v4-flash` | Việc có cấu trúc rõ, flash đủ và rẻ hơn nhiều |
 
-Router chọn model theo thứ tự: `preset.model_fk` → route theo `tier` → model rẻ
-nhất đang bật. Khi một model không hỗ trợ tool-calling mà công việc cần tool,
-router **tự chuyển** sang model cùng provider có `supports_tools = 1` và ghi lại
-lý do — thà tốn thêm chút tiền còn hơn chạy hỏng âm thầm.
+Model do **người dùng chọn** cho từng agent (Cài đặt → Đội agent). Hệ thống không tự
+gắn model: agent chưa chọn model sẽ báo `needs_configuration` khi chạy.
+
+Khi chạy, thứ tự thử là: **model chính** → các **model dự phòng** theo thứ tự đã xếp →
+route của tier cao hơn. Trong cùng một model, hệ thống thử lần lượt từng API key của
+nhà cung cấp; khoá lỗi (401/403/hết hạn mức) thì dùng khoá kế tiếp **trước khi** đổi
+model. Khi một model không hỗ trợ tool-calling mà công việc cần tool, capability guard
+chuyển sang model dự phòng có `supports_tools = 1`, hoặc model cùng nhà cung cấp, và
+ghi lại lý do.
 
 Mỗi lần gọi đều ghi vào `runs` và cộng dồn vào `usage_daily`, nên màn hình **Chi
 phí** trả lời được: tuần này tốn bao nhiêu, agent nào tốn nhất, model nào tốn nhất.
@@ -193,6 +199,8 @@ agent mới xuất hiện trong sơ đồ và có thể được giao việc nga
 **Đổi model cho một agent:** sửa trong giao diện Cài đặt → Đội agent. Chỉ ảnh
 hưởng công ty đang chọn.
 
-**Thêm nhà cung cấp AI khác:** Cài đặt → Nhà cung cấp → thêm `base_url` + API key,
-rồi khai báo model và giá. API key được mã hoá AES-256-GCM trước khi lưu và
-không bao giờ trả về trình duyệt (chỉ trả `apiKeyConfigured` và 4 ký tự cuối).
+**Thêm nhà cung cấp AI khác:** Cài đặt → Nhà cung cấp → thêm `base_url`, rồi thêm
+một hoặc nhiều API key (cùng URL dùng nhiều khoá để dự phòng), bấm **Fetch model** để
+lấy danh sách model và chọn những model cần dùng. API key được mã hoá AES-256-GCM
+trước khi lưu và không bao giờ trả về trình duyệt (chỉ trả nhãn và vài ký tự gợi ý).
+Sau đó chọn model chính + model dự phòng cho từng agent ở màn Đội agent.

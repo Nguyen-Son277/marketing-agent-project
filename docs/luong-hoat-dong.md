@@ -169,7 +169,7 @@ vòng lặp agent tiêu hết ngân sách trong im lặng.
 
 | Tình huống | Hệ thống làm gì | Người dùng thấy gì |
 |---|---|---|
-| Provider trả 429 / 5xx | Backoff mũ, retry có giới hạn, rồi escalate model cùng tier | Task chậm hơn; nếu vẫn lỗi thì task `failed` kèm lý do |
+| Provider trả 429 / 5xx | Backoff mũ, retry có giới hạn; hết retry thì thử API key kế tiếp của cùng URL, rồi mới chuyển model dự phòng đã cấu hình | Task chậm hơn; nếu vẫn lỗi thì task `failed` kèm lý do |
 | Model không hỗ trợ tool | Capability guard tự chọn model cùng provider có `supports_tools` | Không thấy gì; lý do được ghi vào `runs` |
 | Vượt context | Nén phần cũ thành tóm tắt có cấu trúc, thu nhỏ top-K tri thức | Không thấy gì; bản ghi nén lưu trong `messages.meta_json` |
 | Vượt ngân sách | Dừng run, task `blocked` | Thông báo kèm số token/chi phí đã dùng và cách tăng trần |

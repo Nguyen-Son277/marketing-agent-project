@@ -2,7 +2,8 @@
  * Smoke test tuỳ chọn chạy thật với gateway nội bộ.
  *
  * Vì sao tách khỏi bộ test thường: CI không được phụ thuộc mạng hay khoá API. Chỉ chạy
- * khi đặt `LLM_LIVE=1`, và cần `DEEPSEEK_API_KEY` trong môi trường.
+ * khi đặt `LLM_LIVE=1`, và cần `LLM_LIVE_BASE_URL` và `LLM_LIVE_API_KEY` trong môi trường
+ * (chỉ dùng cho test này, KHÔNG phải cấu hình của ứng dụng).
  */
 import { describe, expect, it } from 'vitest'
 import { OpenAiCompatibleAdapter } from '../src/adapters/openai-compatible.ts'
@@ -11,11 +12,11 @@ const live = process.env.LLM_LIVE === '1'
 
 describe('gateway nội bộ (tuỳ chọn)', () => {
   it.skipIf(!live)('stream một câu trả lời ngắn từ gateway OpenAI-compatible', async () => {
-    const apiKey = process.env.DEEPSEEK_API_KEY
-    expect(apiKey, 'cần DEEPSEEK_API_KEY để chạy test live').toBeTruthy()
+    const apiKey = process.env.LLM_LIVE_API_KEY
+    expect(apiKey, 'cần LLM_LIVE_API_KEY để chạy test live').toBeTruthy()
 
     const adapter = new OpenAiCompatibleAdapter({
-      baseUrl: process.env.DEFAULT_LLM_BASE_URL ?? 'http://localhost:20128/v1',
+      baseUrl: process.env.LLM_LIVE_BASE_URL ?? 'http://localhost:20128/v1',
       apiKey,
     })
 
@@ -41,9 +42,9 @@ describe('gateway nội bộ (tuỳ chọn)', () => {
   })
 
   it.skipIf(!live)('gateway trả tool_calls đúng schema khi được cấp công cụ', async () => {
-    const apiKey = process.env.DEEPSEEK_API_KEY
+    const apiKey = process.env.LLM_LIVE_API_KEY
     const adapter = new OpenAiCompatibleAdapter({
-      baseUrl: process.env.DEFAULT_LLM_BASE_URL ?? 'http://localhost:20128/v1',
+      baseUrl: process.env.LLM_LIVE_BASE_URL ?? 'http://localhost:20128/v1',
       apiKey,
     })
 

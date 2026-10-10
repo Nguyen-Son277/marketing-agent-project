@@ -86,7 +86,7 @@ Request body: `registerSchema` `{ email, password, name }`;
 | Method | Path | Quyền | Mô tả | Phản hồi | Trạng thái |
 |---|---|---|---|---|---|
 | `GET` | `/api/companies` | đã đăng nhập | Danh sách công ty của tôi | `{ companies: CompanySummary[] }` | ✅ |
-| `POST` | `/api/companies` | đã đăng nhập | Tạo công ty; server cấp preset cho 10 agent, route theo tier và ACL tri thức (**yêu cầu catalog đã seed**, nếu không → `424`) | `201 { company, role, presets, routes }` | ✅ |
+| `POST` | `/api/companies` | đã đăng nhập | Tạo công ty; server cấp preset cho 10 agent + ACL tri thức (**yêu cầu catalog đã seed**, nếu không → `424`). Không tạo provider/model | `201 { company, role, presets, aclEntries }` | ✅ |
 | `DELETE` | `/api/companies/:companyId` | membership + `requireManage` | Xoá công ty; cascade toàn bộ dữ liệu con | `200 { deleted: true }` | ✅ |
 | `GET` | `/api/companies/:companyId/members` | membership | Danh sách thành viên | `{ members: [...] }` | ✅ |
 
@@ -97,7 +97,7 @@ Body tạo công ty: `createCompanySchema` `{ name }`.
 | Method | Path | Quyền | Mô tả | Phản hồi | Trạng thái |
 |---|---|---|---|---|---|
 | `GET` | `/healthz` | công khai | Liveness — **luôn** 200 khi tiến trình sống | `{ status: 'ok' }` | ✅ |
-| `GET` | `/readyz` | công khai | Readiness — **503** khi chưa seed catalog | `{ status, agentDefs, models, sseClients }` | ✅ |
+| `GET` | `/readyz` | công khai | Readiness — **503** khi chưa seed catalog (định nghĩa agent + kỹ năng); model không bắt buộc | `{ status, agentDefs, skills, models, sseClients }` | ✅ |
 | `GET` | `/api/system/status` | công khai | Trạng thái catalog + migration đã áp dụng ở lần boot này | `SystemStatusResponse` | ✅ |
 
 `SystemStatusResponse`: `{ ready, catalog: { ready, agentDefs, skills, models, problem? }, appliedMigrations }`.
@@ -164,15 +164,23 @@ Body: `reviewTaskSchema` `{ decision: 'approve' \| 'request_changes' \| 'cancel'
 
 | Method | Path | Quyền | Mô tả | Phản hồi | Trạng thái |
 |---|---|---|---|---|---|
-| `GET` | `/api/companies/:companyId/providers` | membership | Nhà cung cấp khả dụng (kèm model), **không** trả key | `ProvidersResponse` | ⏳ |
-| `POST` | `/api/companies/:companyId/providers` | `requireManage` | Thêm nhà cung cấp; `apiKey` nhận **một lần** rồi mã hoá | `201 ProviderView` | ⏳ |
-| `PATCH` | `/api/companies/:companyId/providers/:providerId` | `requireManage` | Sửa nhà cung cấp (kể cả đổi key) | `ProviderView` | ⏳ |
-| `DELETE` | `/api/companies/:companyId/providers/:providerId` | `requireManage` | Xoá nhà cung cấp | `200 { deleted: true }` | ⏳ |
-| `POST` | `/api/companies/:companyId/providers/:providerId/test` | `requireManage` | Gọi thử để kiểm tra kết nối | `ProviderTestResponse` `{ ok, message, latencyMs, modelsSeen? }` | ⏳ |
-| `GET` | `/api/companies/:companyId/models` | membership | Danh sách model + giá | `{ models: ModelOptionView[] }` | ⏳ |
-| `POST` | `/api/companies/:companyId/models` | `requireManage` | Khai báo model (model id, context, giá vào/ra, hỗ trợ tool/vision) | `201 ModelOptionView` | ⏳ |
-| `PATCH` | `/api/companies/:companyId/models/:modelId` | `requireManage` | Sửa model (không đổi `providerId`) | `ModelOptionView` | ⏳ |
-| `DELETE` | `/api/companies/:companyId/models/:modelId` | `requireManage` | Xoá model | `200 { deleted: true }` | ⏳ |
+| `GET` | `/api/companies/:companyId/providers` | membership | Nhà cung cấp kèm danh sách khoá (chỉ nhãn/hint) và model; **không** trả khoá gốc | `ProvidersResponse` | ✅ |
+| `POST` | `/api/companies/:companyId/providers` | `requireManage` | Thêm nhà cung cấp (URL); `apiKey`/`apiKeyLabel` tuỳ chọn tạo luôn khoá đầu | `201 ProviderView` | ✅ |
+| `PATCH` | `/api/companies/:companyId/providers/:providerId` | `requireManage` | Sửa tên/loại/URL/bật-tắt — **không** đổi khoá | `ProviderView` | ✅ |
+| `DELETE` | `/api/companies/:companyId/providers/:providerId` | `requireManage` | Xoá nhà cung cấp (cascade khoá + model) | `200 { deleted: true }` | ✅ |
+| `POST` | `/api/companies/:companyId/providers/:providerId/test` | `requireManage` | Gọi thử bằng khoá đang bật đầu tiên (hoặc `{ keyId }`) | `ProviderTestResponse` `{ ok, message, latencyMs, modelsSeen? }` | ✅ |
+| `GET` | `/api/companies/:companyId/providers/:providerId/keys` | membership | Danh sách khoá của URL | `{ keys: ProviderKeyView[] }` | ✅ |
+| `POST` | `/api/companies/:companyId/providers/:providerId/keys` | `requireManage` | Thêm khoá (`label`, `apiKey`, `priority`, `enabled`) | `201 ProviderKeyView` | ✅ |
+| `PATCH` | `/api/companies/:companyId/providers/:providerId/keys/:keyId` | `requireManage` | Sửa nhãn/thứ tự/bật-tắt, đổi khoá nếu gửi `apiKey` | `ProviderKeyView` | ✅ |
+| `DELETE` | `/api/companies/:companyId/providers/:providerId/keys/:keyId` | `requireManage` | Xoá một khoá | `200 { deleted: true }` | ✅ |
+| `POST` | `/api/companies/:companyId/providers/:providerId/keys/:keyId/test` | `requireManage` | Gọi thử riêng khoá đó | `ProviderTestResponse` | ✅ |
+| `POST` | `/api/companies/:companyId/providers/:providerId/fetch-models` | `requireManage` | Gọi `GET {baseURL}/models` (body `{ keyId? }`), **không ghi DB** | `FetchModelsResponse` | ✅ |
+| `POST` | `/api/companies/:companyId/providers/:providerId/import-models` | `requireManage` | Lưu các model đã chọn; bỏ qua model đã có | `201 { created, skipped }` | ✅ |
+| `POST` | `/api/companies/:companyId/providers/:providerId/purge-models` | `requireManage` | Xoá mọi model của URL không được tham chiếu | `{ deleted }` | ✅ |
+| `GET` | `/api/companies/:companyId/models` | membership | Danh sách model + giá + số agent đang dùng | `{ models: ModelOptionView[] }` | ✅ |
+| `POST` | `/api/companies/:companyId/models` | `requireManage` | Khai báo model (model id, context, giá vào/ra, hỗ trợ tool/vision) | `201 ModelOptionView` | ✅ |
+| `PATCH` | `/api/companies/:companyId/models/:modelId` | `requireManage` | Sửa model (không đổi `providerId`) | `ModelOptionView` | ✅ |
+| `DELETE` | `/api/companies/:companyId/models/:modelId` | `requireManage` | Xoá model; **409** nếu còn được agent/route/fallback dùng | `200 { deleted: true }` | ✅ |
 | `GET` | `/api/companies/:companyId/routes` | membership | Route model theo agent + tier | `{ routes: [...] }` | ⏳ |
 | `POST` | `/api/companies/:companyId/routes` | `requireManage` | Gán model cho một `agentRole` + `tier` | `201 { route }` | ⏳ |
 | `GET` | `/api/companies/:companyId/integrations` | membership | Tích hợp đã cấu hình (không trả credential) | `IntegrationsResponse` | ⏳ |

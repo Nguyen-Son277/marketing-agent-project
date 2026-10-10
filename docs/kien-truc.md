@@ -12,7 +12,7 @@ cho các quyết định bên dưới:
 | Phát hiện | Hệ quả thiết kế |
 |---|---|
 | Gateway LLM OpenAI-compatible đang chạy tại `http://localhost:20128/v1`, phục vụ **722 model** thuộc nhiều provider (`combo`, `cx`, `openrouter`, …) | Một `llm_providers` row là đủ để tiếp cận nhiều model; **không cần viết adapter riêng cho từng nhà cung cấp** |
-| Gateway **yêu cầu API key** (gọi không key → `Missing API key`) | Key phải được quản lý qua tham chiếu env hoặc mã hoá trong DB, không hard-code |
+| Gateway **yêu cầu API key** (gọi không key → `Missing API key`) | Key do người dùng nhập trong Cài đặt, mã hoá trong DB; một URL có thể có nhiều key để tự chuyển khi key lỗi. Không dùng biến môi trường cho khoá LLM |
 | Gateway **hỗ trợ function calling** (`finish_reason: "tool_calls"`, trả `tool_calls` chuẩn OpenAI) | Dùng được vòng lặp tool chuẩn; không cần cơ chế giả lập tool |
 | Gateway **KHÔNG hỗ trợ embeddings** (`/v1/embeddings` → 400) | Bắt buộc có embedding provider riêng; mặc định chạy local, fallback sang hash |
 | Docker Engine 29.8.1 khả dụng, Node 22, pnpm 11 | Đóng gói bằng Docker; không cần cài runtime lạ |

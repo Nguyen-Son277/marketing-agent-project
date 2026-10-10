@@ -30,9 +30,8 @@ services:
       PORT: "3000"
       DATABASE_PATH: /data/marketing.db
       COMPANIES_ROOT: /data/companies
-      # Trỏ mặc định tới gateway trên máy host khi chạy compose tại máy đó.
-      # Trong mạng nội bộ thật, hãy đổi thành URL của gateway và đặt trong .env.
-      DEFAULT_LLM_BASE_URL: ${DEFAULT_LLM_BASE_URL:-http://host.docker.internal:20128/v1}
+      # Nhà cung cấp LLM (URL + API key + model) khai trong giao diện Cài đặt và lưu
+      # trong volume /data, không đọc từ biến môi trường.
 
     # Gateway LLM chạy trên máy host (ví dụ http://localhost:20128). Cách này cho
     # container gọi được nó mà không cần --network host.
