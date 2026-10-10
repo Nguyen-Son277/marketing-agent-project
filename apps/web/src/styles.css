@@ -99,9 +99,26 @@ a {
 }
 
 .app__main {
+  /* Flex column để màn cao-đầy-đủ (Trao đổi) tự chia chiều cao còn lại cho khung chat,
+     thay vì trông vào một hằng số `calc(100vh - Npx)` — hằng số đó luôn lệch khi phần
+     đầu trang đổi chiều cao, và đó chính là lý do khung nhập tin bị đẩy xuống dưới đáy. */
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   padding: var(--khoang-lon);
   min-width: 0;
+}
+
+/* Màn cao-đầy-đủ: khoá cuộn của trang để chỉ còn MỘT vùng cuộn là khung tin nhắn. */
+.app__main--cao-day {
+  overflow: hidden;
+}
+
+.app__main--cao-day > .the {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .app__nav-item {
@@ -147,6 +164,21 @@ a {
 
 .the--rong {
   max-width: none;
+}
+
+.the--cao-day {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: var(--khoang);
+}
+
+/* Thẻ bao khung chat là phần giãn hết chiều cao còn lại. */
+.the--cao-day > .card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .the__tieu-de {
@@ -524,17 +556,24 @@ a {
 .chat {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 150px);
+  /* `flex: 1` + `min-height: 0`: nhận hết chiều cao còn lại, và `min-height: 0` là điều
+     kiện bắt buộc để một mục flex được phép NHỎ HƠN nội dung của nó — thiếu dòng này thì
+     khung chat sẽ cao theo số tin nhắn và đẩy khung nhập ra ngoài màn hình. */
+  flex: 1;
+  min-height: 0;
   gap: var(--khoang);
 }
 
 .chat__khung {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* Giữ vị trí cuộn ổn định khi nội dung phía trên đổi chiều cao. */
+  overflow-anchor: none;
 }
 
 .tin {
@@ -592,13 +631,22 @@ a {
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  /* Khung nhập không được co lại khi khung tin nhắn dài ra. */
+  flex: 0 0 auto;
 }
 
+/* Khung nhập cao tối đa 30% chiều cao màn hình.
+   Dùng `dvh` (chiều cao động) để đúng khi thanh địa chỉ trên di động hiện/ẩn; `vh`
+   đứng trước làm bản dự phòng cho trình duyệt cũ, và `min()` chọn giá trị nhỏ hơn nên
+   trên màn hình thấp khung nhập không bao giờ chiếm quá nửa chỗ đọc tin. */
 .chat__nhap textarea {
   flex: 1;
   min-height: 54px;
-  max-height: 180px;
-  resize: vertical;
+  max-height: min(30vh, 22rem);
+  max-height: min(30dvh, 22rem);
+  /* Tắt kéo tay: chiều cao do nội dung và trần quyết định, không phải do người dùng
+     kéo vượt giới hạn rồi che mất vùng đọc tin. */
+  resize: none;
 }
 
 .su-kien {
@@ -799,8 +847,10 @@ a {
   }
 
   .chat {
-    height: auto;
-    min-height: 60vh;
+    /* Trên khổ hẹp vẫn phải là khung cuộn cố định: nếu để `height: auto` thì khung chat
+       cao theo số tin nhắn và khung nhập lại bị đẩy khỏi màn hình — đúng lỗi đang sửa. */
+    flex: 1;
+    min-height: 0;
   }
 }
 
@@ -841,4 +891,171 @@ a {
   position: absolute;
   top: 18px;
   right: 18px;
+}
+
+/* ------------------------------------------- thẻ chọn phương án */
+
+/* Thẻ chọn nằm trong dòng chảy tin nhắn: người dùng vẫn cuộn lên đọc ngữ cảnh phía trên. */
+.hoi {
+  border: 1px solid var(--mau-chinh-nhat);
+  border-left: 3px solid var(--mau-chinh);
+  border-radius: var(--ban-kinh);
+  background: var(--mau-be-mat);
+  padding: 14px 16px;
+  box-shadow: var(--bong);
+  max-width: 720px;
+}
+
+.hoi__dau {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.hoi__tieu-de {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.hoi__dem {
+  font-size: 12px;
+  color: var(--mau-chu-mo);
+  white-space: nowrap;
+}
+
+.hoi__dan {
+  font-size: 14px;
+  color: var(--mau-chu);
+  margin-bottom: 12px;
+}
+
+.hoi__cau {
+  border: 0;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.hoi__cau:last-of-type {
+  margin-bottom: 8px;
+}
+
+.hoi__cau-tieu-de {
+  font-weight: 600;
+  font-size: 14px;
+  /* `legend` mặc định không co giãn theo bề rộng; đặt lại để chữ dài xuống dòng. */
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 2px;
+}
+
+.hoi__cau-goi-y {
+  font-size: 12.5px;
+  color: var(--mau-chu-mo);
+  margin-bottom: 8px;
+  clear: both;
+}
+
+/* Mỗi phương án là một nhãn bấm được, có viền và trạng thái chọn rõ ràng. */
+.hoi__pa {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--mau-vien);
+  border-radius: var(--ban-kinh-nho);
+  background: var(--mau-nen);
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.hoi__pa:hover {
+  border-color: var(--mau-chinh);
+}
+
+.hoi__pa.is-chon {
+  border-color: var(--mau-chinh);
+  background: var(--mau-chinh-nhat);
+}
+
+.hoi__pa input {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.hoi__pa-than {
+  min-width: 0;
+}
+
+.hoi__pa-nhan {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.hoi__pa-goi-y {
+  font-size: 12px;
+  color: var(--mau-chu-mo);
+  margin-top: 2px;
+}
+
+/* Nhãn "không làm" cho phương án loại trừ trong câu hỏi chọn nhiều. */
+.hoi__pa-nhan-phu {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mau-canh-bao);
+  background: var(--mau-canh-bao-nen);
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-left: 6px;
+}
+
+.hoi__khac {
+  margin-top: 8px;
+}
+
+.hoi__khac-nhan {
+  font-size: 12.5px;
+  color: var(--mau-chu-mo);
+  margin-bottom: 4px;
+}
+
+.hoi__khac textarea {
+  width: 100%;
+  min-height: 44px;
+  max-height: min(18dvh, 10rem);
+  resize: vertical;
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.hoi__nut {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--mau-vien);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.hoi__xong {
+  font-size: 13px;
+  color: var(--mau-chu-mo);
+}
+
+/* Trạng thái chỉ đọc sau khi đã gửi: hiện lại lựa chọn để đọc lịch sử. */
+.hoi--xong {
+  border-left-color: var(--mau-thanh-cong);
+}
+
+.hoi__chon-lai {
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.hoi__chon-lai strong {
+  font-weight: 600;
 }

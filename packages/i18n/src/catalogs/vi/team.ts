@@ -65,10 +65,22 @@ export const vi_team = {
 
   'team.skillsHeading': 'Kỹ năng ({{n}})',
   'team.toolsHeading': 'Tool ({{n}})',
-  'team.useTierDefault': '— Dùng model mặc định của tier —',
+  'team.useTierDefault': '— Chưa chọn model —',
   'team.modelHint':
-    'Model không hỗ trợ tool-call sẽ bị router tự động đổi sang model khác cùng tier.',
-  'team.tierHint': 'Tier quyết định model dự phòng khi agent không gán model cứng.',
+    'Hệ thống không tự gắn model. Chọn model chính ở đây; nếu để trống, agent dùng route theo tier (nếu có).',
+  'team.tierHint': 'Tier quyết định route model nào được dùng khi agent để trống model chính.',
+  'team.fallbackHeading': 'Model dự phòng ({{n}})',
+  'team.fallbackHint':
+    'Khi model chính lỗi, hệ thống thử lần lượt các model này theo thứ tự đã xếp, rồi mới tới route của tier cao hơn.',
+  'team.fallbackEmpty': 'Chưa có model dự phòng.',
+  'team.fallbackAddPlaceholder': 'Chọn model để thêm vào dự phòng',
+  'team.fallbackAdd': 'Thêm',
+  'team.fallbackRemoveTitle': 'Bỏ model này khỏi danh sách dự phòng',
+  'team.fallbackUp': 'Lên',
+  'team.fallbackDown': 'Xuống',
+  'team.fallbackMax': 'Tối đa 5 model dự phòng.',
+  'team.noPrimaryModel':
+    'Agent này chưa được chọn model chính; lượt chạy sẽ báo cần cấu hình cho tới khi bạn chọn trong Cài đặt.',
   'team.toolNote':
     'Các tool ghi ra kênh ngoài (đăng bài, gửi email, chạy quảng cáo) đều đánh dấu “cần duyệt”: agent chỉ tạo bản nháp, con người duyệt ở màn “Công việc” rồi mới thực thi.',
 

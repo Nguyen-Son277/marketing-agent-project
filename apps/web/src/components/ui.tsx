@@ -9,8 +9,25 @@
 import type { ChangeEvent, ReactNode } from 'react'
 import { useI18n } from '../lib/i18n.tsx'
 
-export function Trang({ children, rong = false }: { children: ReactNode; rong?: boolean }): ReactNode {
-  return <div className={rong ? 'the the--rong' : 'the'}>{children}</div>
+/**
+ * Khung bao một màn hình.
+ *
+ * `caoDay` dùng cho màn cần chiếm trọn chiều cao còn lại của cửa sổ (hiện là màn Trao
+ * đổi): thêm lớp `the--cao-day` để vùng nội dung bên trong tự cuộn thay vì cả trang
+ * cuộn, nhờ đó khung nhập tin luôn nằm trong tầm nhìn. Các màn còn lại giữ nguyên hành
+ * vi cuộn trang như trước.
+ */
+export function Trang({
+  children,
+  rong = false,
+  caoDay = false,
+}: {
+  children: ReactNode
+  rong?: boolean
+  caoDay?: boolean
+}): ReactNode {
+  const lop = ['the', rong ? 'the--rong' : '', caoDay ? 'the--cao-day' : ''].filter(Boolean).join(' ')
+  return <div className={lop}>{children}</div>
 }
 
 export function TieuDeTrang({ children, moTa }: { children: ReactNode; moTa?: ReactNode }): ReactNode {

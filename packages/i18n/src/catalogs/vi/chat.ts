@@ -89,4 +89,20 @@ export const vi_chat = {
   'chat.event.briefIncomplete': '❓ Cần bổ sung thông tin cho brief.',
   'chat.event.warning': '⚠️ {{message}}',
   'chat.event.systemWarning': 'Có cảnh báo từ hệ thống.',
+
+  /* -------------------------------------------- thẻ chọn phương án */
+  // Câu hỏi và nhãn phương án đến từ server (đã dịch theo ngôn ngữ cuộc trao đổi) nên
+  // không nằm ở đây; các khoá dưới chỉ là câu chữ cố định của khung thẻ.
+  'chat.scrollToLatest': 'Xuống tin mới nhất',
+  'chat.exclusiveTag': 'không làm',
+  // Đếm dạng nhãn thay vì câu đầy đủ: catalog phẳng không có dạng số nhiều, nên viết
+  // "Câu hỏi: 3" để tiếng Anh không bao giờ ra "1 questions".
+  'chat.questionCount': 'Câu hỏi: {{count}}',
+  'chat.sendAnswers': 'Gửi câu trả lời',
+  'chat.skipAnswers': 'Bỏ qua, tôi trả lời tự do',
+  // Nội dung gửi thay khi người dùng bấm bỏ qua mà chưa gõ gì vào ô nhập chính.
+  'chat.skipAnswersMessage': 'Tôi sẽ trả lời tự do.',
+  'chat.answersSent': 'Bạn đã trả lời câu hỏi này.',
+  // Nói rõ vì sao nút gửi đang khoá: nút chết không lời giải thích là trải nghiệm tệ.
+  'chat.answersRequired': 'Chọn ít nhất một phương án hoặc ghi ý kiến riêng để gửi.',
 } as const

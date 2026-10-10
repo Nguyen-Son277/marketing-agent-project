@@ -63,6 +63,8 @@ interface QuyenKienThuc {
 interface BanNhap {
   readonly enabled: boolean
   readonly modelFk: string
+  /** Model dự phòng theo thứ tự dùng khi model chính lỗi. */
+  readonly fallbackModelFks: readonly string[]
   readonly tier: ModelTier
   readonly skills: readonly string[]
   readonly tools: readonly string[]
@@ -108,6 +110,7 @@ function taoBanNhap(team: TeamResponse): Record<string, BanNhap> {
       enabled: member.enabled,
       // `modelFk` là khoá nội bộ server trả về sẵn để đọc-rồi-ghi lại chính xác.
       modelFk: member.modelFk ?? '',
+      fallbackModelFks: [...member.fallbackModelFks],
       tier: member.tier,
       skills: member.skills.map((kyNang) => kyNang.name),
       tools: [...member.tools],
@@ -130,6 +133,8 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
   const [dangLuu, setDangLuu] = useState<string | null>(null)
   const [thongBao, setThongBao] = useState<Record<string, string>>({})
   const [loiLuu, setLoiLuu] = useState<Record<string, string>>({})
+  /** Model đang chọn trong ô "thêm model dự phòng" của từng agent. */
+  const [chonFallback, setChonFallback] = useState<Record<string, string>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -207,6 +212,36 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
     })
   }
 
+  /** Thêm model đang chọn vào cuối danh sách dự phòng (tối đa 5). */
+  function themFallback(role: string): void {
+    const modelId = chonFallback[role] ?? ''
+    const hienTai = banNhap[role]
+    if (modelId.length === 0 || !hienTai) return
+    if (hienTai.fallbackModelFks.includes(modelId) || hienTai.fallbackModelFks.length >= 5) return
+    capNhat(role, { fallbackModelFks: [...hienTai.fallbackModelFks, modelId] })
+    setChonFallback((truoc) => ({ ...truoc, [role]: '' }))
+  }
+
+  function xoaFallback(role: string, modelId: string): void {
+    const hienTai = banNhap[role]
+    if (!hienTai) return
+    capNhat(role, { fallbackModelFks: hienTai.fallbackModelFks.filter((id) => id !== modelId) })
+  }
+
+  function doiThuTuFallback(role: string, index: number, delta: number): void {
+    const hienTai = banNhap[role]
+    if (!hienTai) return
+    const target = index + delta
+    if (target < 0 || target >= hienTai.fallbackModelFks.length) return
+    const next = [...hienTai.fallbackModelFks]
+    const current = next[index]
+    const swap = next[target]
+    if (current === undefined || swap === undefined) return
+    next[index] = swap
+    next[target] = current
+    capNhat(role, { fallbackModelFks: next })
+  }
+
   async function luu(member: TeamMemberView): Promise<void> {
     const nhap = banNhap[member.role]
     if (!nhap) return
@@ -218,6 +253,7 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
         enabled: nhap.enabled,
         tier: nhap.tier,
         modelFk: nhap.modelFk.length > 0 ? nhap.modelFk : null,
+        fallbackModelFks: [...nhap.fallbackModelFks],
         skills: nhap.skills,
         tools: nhap.tools,
         knowledge: nhap.knowledge,
@@ -389,6 +425,11 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
                 <ThongBao loai="canh-bao">{t('team.memberNoCategories')}</ThongBao>
               </div>
             ) : null}
+            {member.enabled && member.modelId === null ? (
+              <div style={{ marginBottom: 8 }}>
+                <ThongBao loai="canh-bao">{t('team.noPrimaryModel')}</ThongBao>
+              </div>
+            ) : null}
 
             {mo ? (
               <div className="cot" style={{ gap: 16, marginTop: 12 }}>
@@ -427,6 +468,80 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
                       {t('team.tierHint')}
                     </p>
                   </div>
+                </div>
+
+                <div>
+                  <h3 className="card__tieu-de">
+                    {t('team.fallbackHeading', { n: formatNumber(nhap.fallbackModelFks.length) })}
+                  </h3>
+                  {nhap.fallbackModelFks.length === 0 ? (
+                    <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)', marginBottom: 6 }}>
+                      {t('team.fallbackEmpty')}
+                    </p>
+                  ) : null}
+                  <div className="cot" style={{ gap: 6 }}>
+                    {nhap.fallbackModelFks.map((modelFk, index) => {
+                      const model = duLieu.models.find((item) => item.id === modelFk)
+                      return (
+                        <div key={modelFk} className="hang" style={{ gap: 8 }}>
+                          <span style={{ fontSize: 13 }}>
+                            {model
+                              ? t('team.modelOption', { model: model.label, provider: model.providerName })
+                              : modelFk}
+                          </span>
+                          <Nut
+                            bien="phu"
+                            nho
+                            disabled={index === 0}
+                            onClick={() => doiThuTuFallback(member.role, index, -1)}
+                          >
+                            {t('team.fallbackUp')}
+                          </Nut>
+                          <Nut
+                            bien="phu"
+                            nho
+                            disabled={index === nhap.fallbackModelFks.length - 1}
+                            onClick={() => doiThuTuFallback(member.role, index, 1)}
+                          >
+                            {t('team.fallbackDown')}
+                          </Nut>
+                          <Nut bien="nguy-hiem" nho onClick={() => xoaFallback(member.role, modelFk)}>
+                            {t('team.fallbackRemoveTitle')}
+                          </Nut>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="hang" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                    <OChon
+                      value={chonFallback[member.role] ?? ''}
+                      onChange={(giaTri) => setChonFallback((truoc) => ({ ...truoc, [member.role]: giaTri }))}
+                      options={[
+                        { value: '', label: t('team.fallbackAddPlaceholder') },
+                        ...duLieu.models
+                          .filter(
+                            (model) => !nhap.fallbackModelFks.includes(model.id) && model.id !== nhap.modelFk,
+                          )
+                          .map((model) => ({
+                            value: model.id,
+                            label: t('team.modelOption', { model: model.label, provider: model.providerName }),
+                          })),
+                      ]}
+                    />
+                    <Nut
+                      bien="phu"
+                      nho
+                      onClick={() => themFallback(member.role)}
+                      disabled={
+                        (chonFallback[member.role] ?? '').length === 0 || nhap.fallbackModelFks.length >= 5
+                      }
+                    >
+                      {t('team.fallbackAdd')}
+                    </Nut>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
+                    {t('team.fallbackHint')} {t('team.fallbackMax')}
+                  </p>
                 </div>
 
                 <div>

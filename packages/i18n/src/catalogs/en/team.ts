@@ -57,10 +57,22 @@ export const en_team = {
 
   'team.skillsHeading': 'Skills ({{n}})',
   'team.toolsHeading': 'Tools ({{n}})',
-  'team.useTierDefault': '— Use the tier default model —',
+  'team.useTierDefault': '— No model selected —',
   'team.modelHint':
-    'A model without tool-call support is automatically switched by the router to another model in the same tier.',
-  'team.tierHint': 'The tier decides the fallback model when an agent has no fixed model.',
+    'The system never assigns a model on its own. Pick the primary model here; if left empty, the agent uses its tier route (when one exists).',
+  'team.tierHint': 'The tier decides which tier route is used when the agent has no primary model.',
+  'team.fallbackHeading': 'Fallback models ({{n}})',
+  'team.fallbackHint':
+    'When the primary model fails, these are tried in order, then routes of higher tiers.',
+  'team.fallbackEmpty': 'No fallback models yet.',
+  'team.fallbackAddPlaceholder': 'Pick a model to add as fallback',
+  'team.fallbackAdd': 'Add',
+  'team.fallbackRemoveTitle': 'Remove this model from the fallback list',
+  'team.fallbackUp': 'Up',
+  'team.fallbackDown': 'Down',
+  'team.fallbackMax': 'At most 5 fallback models.',
+  'team.noPrimaryModel':
+    'This agent has no primary model yet; runs will report a configuration error until you pick one in Settings.',
   'team.toolNote':
     'Tools that write to external channels (publishing posts, sending email, running ads) are all marked “needs approval”: the agent only drafts, a human approves on the “Tasks” screen, and only then does it execute.',
 

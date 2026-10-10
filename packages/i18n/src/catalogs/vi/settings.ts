@@ -14,13 +14,13 @@ export const vi_settings = {
   /* ---------------------------------------------------------- trang */
   'settings.title': 'Cài đặt',
   'settings.subtitle':
-    'Khai báo nhà cung cấp, model, route theo mức năng lực, kết nối ngoài và giới hạn chi phí.',
+    'Khai báo nhà cung cấp (URL + nhiều API key), lấy danh sách model, chọn model và model dự phòng cho từng agent, cùng kết nối ngoài và giới hạn chi phí.',
   'settings.needsConfigurationHint': 'Kiểm tra lại nhà cung cấp và API key ngay tại màn hình này.',
 
   /* ------------------------------------------------- nhà cung cấp */
   'settings.providers.title': 'Nhà cung cấp model',
   'settings.providers.subtitle':
-    'Nơi agent gửi yêu cầu tới. API key là chỉ-ghi: gửi lên một lần, server mã hoá, và không bao giờ trả lại giá trị gốc.',
+    'Mỗi URL là một nhà cung cấp và có thể có nhiều API key: khoá lỗi thì hệ thống tự dùng khoá kế tiếp. API key là chỉ-ghi, server mã hoá và không bao giờ trả lại giá trị gốc.',
   'settings.providers.empty':
     'Chưa có nhà cung cấp nào. Thêm một nhà cung cấp OpenAI-compatible để agent gọi được model.',
   'settings.providers.table.name': 'Tên',
@@ -55,6 +55,53 @@ export const vi_settings = {
   'settings.providers.created': 'Đã thêm nhà cung cấp.',
   'settings.providers.saveFailed': 'Không lưu được nhà cung cấp.',
   'settings.providers.testFailed': 'Không kiểm tra được kết nối.',
+  'settings.providers.delete': 'Xoá',
+  'settings.providers.deleteConfirm':
+    'Xoá nhà cung cấp "{{name}}"? Mọi khoá và model của nó sẽ bị xoá; route/preset trỏ tới model đó cũng mất.',
+  'settings.providers.deleted': 'Đã xoá nhà cung cấp.',
+  'settings.providers.deleteFailed': 'Không xoá được nhà cung cấp.',
+
+  /* --------------------------------------------------------- api key */
+  'settings.providers.keys.title': 'Khoá API ({{count}})',
+  'settings.providers.keys.hint':
+    'Một URL có thể có nhiều khoá. Hệ thống thử lần lượt theo thứ tự; khoá lỗi thì tự dùng khoá kế tiếp.',
+  'settings.providers.keys.empty': 'Chưa có khoá nào. Gateway nội bộ có thể không cần khoá.',
+  'settings.providers.keys.label': 'Nhãn',
+  'settings.providers.keys.priority': 'Thứ tự',
+  'settings.providers.keys.status': 'Trạng thái',
+  'settings.providers.keys.enabled': 'Đang bật',
+  'settings.providers.keys.disabled': 'Đã tắt',
+  'settings.providers.keys.addTitle': 'Thêm khoá API',
+  'settings.providers.keys.labelPlaceholder': 'Nhãn, ví dụ: Key chính',
+  'settings.providers.keys.keyPlaceholder': 'Dán API key',
+  'settings.providers.keys.editPlaceholder': 'Khoá mới (để trống nếu giữ nguyên)',
+  'settings.providers.keys.priorityPlaceholder': 'Thứ tự dùng (nhỏ trước)',
+  'settings.providers.keys.submit': 'Thêm khoá',
+  'settings.providers.keys.needLabelAndKey': 'Cần nhập nhãn và giá trị khoá.',
+  'settings.providers.keys.created': 'Đã thêm khoá.',
+  'settings.providers.keys.updated': 'Đã cập nhật khoá.',
+  'settings.providers.keys.deleted': 'Đã xoá khoá.',
+  'settings.providers.keys.saveFailed': 'Không lưu được khoá.',
+  'settings.providers.keys.deleteFailed': 'Không xoá được khoá.',
+  'settings.providers.keys.test': 'Thử khoá',
+  'settings.providers.keys.cancelEdit': 'Huỷ sửa khoá',
+
+  /* ------------------------------------------------------- fetch model */
+  'settings.providers.fetch.title': 'Lấy danh sách model từ nhà cung cấp',
+  'settings.providers.fetch.hint':
+    'Gọi /models bằng khoá đã chọn để xem nhà cung cấp có những model nào. Chưa lưu gì cho tới khi bạn chọn.',
+  'settings.providers.fetch.action': 'Fetch model',
+  'settings.providers.fetch.keyLabel': 'Dùng khoá',
+  'settings.providers.fetch.selectAll': 'Chọn tất cả',
+  'settings.providers.fetch.clear': 'Bỏ chọn',
+  'settings.providers.fetch.import': 'Thêm model đã chọn ({{count}})',
+  'settings.providers.fetch.imported': 'Đã thêm {{created}} model, bỏ qua {{skipped}} model đã có.',
+  'settings.providers.fetch.noModels': 'Nhà cung cấp không trả về model nào.',
+  'settings.providers.fetch.alreadyAdded': 'Đã có',
+  'settings.providers.fetch.failed': 'Không lấy được danh sách model.',
+  'settings.providers.fetch.importFailed': 'Không thêm được model đã chọn.',
+  'settings.providers.fetch.pickKeyHint':
+    'Nếu gateway không cần khoá, hãy để nguyên và bấm Fetch model.',
 
   /* ------------------------------------------------------- model */
   'settings.models.title': 'Model',
@@ -62,14 +109,24 @@ export const vi_settings = {
     'Khai báo model kèm giá vào/ra mỗi triệu token. Giá này là cơ sở để tính chi phí và so với trần ngày.',
   'settings.models.emptyNoProvider':
     'Chưa có nhà cung cấp nào. Thêm nhà cung cấp ở mục trên trước khi khai báo model.',
-  'settings.models.empty': 'Chưa có model nào. Khai báo model đầu tiên bằng biểu mẫu bên dưới.',
+  'settings.models.empty': 'Chưa có model nào. Dùng "Fetch model" ở mục Nhà cung cấp để lấy danh sách, hoặc khai báo thủ công bên dưới.',
   'settings.models.table.label': 'Nhãn',
   'settings.models.table.modelId': 'Mã model',
   'settings.models.table.provider': 'Nhà cung cấp',
   'settings.models.table.context': 'Ngữ cảnh',
   'settings.models.table.tools': 'Tool',
+  'settings.models.table.usage': 'Đang dùng',
   'settings.models.table.costIn': 'Giá vào / 1M',
   'settings.models.table.costOut': 'Giá ra / 1M',
+  'settings.models.usageCount': '{{count}} agent',
+  'settings.models.delete': 'Xoá',
+  'settings.models.deleteConfirm': 'Xoá model "{{label}}"?',
+  'settings.models.deleted': 'Đã xoá model.',
+  'settings.models.deleteFailed': 'Không xoá được model. Hãy gỡ model khỏi agent/route trước.',
+  'settings.models.purge': 'Xoá model không dùng',
+  'settings.models.purgeConfirm': 'Xoá mọi model không được agent nào dùng của "{{name}}"?',
+  'settings.models.purged': 'Đã xoá {{count}} model không dùng.',
+  'settings.models.purgeFailed': 'Không xoá được model không dùng.',
   'settings.models.form.title': 'Thêm model',
   'settings.models.form.modelIdPlaceholder': 'Mã model, ví dụ: deepseek-v4-flash',
   'settings.models.form.labelPlaceholder': 'Nhãn hiển thị',
@@ -89,7 +146,7 @@ export const vi_settings = {
   'settings.routes.subtitle':
     'Khi agent không gán model cứng, router chọn model theo cặp (agent, tier). Đây là cơ chế dự phòng khi model đã chọn thiếu năng lực.',
   'settings.routes.empty':
-    'Chưa có route nào. Agent sẽ dùng model rẻ nhất còn bật nếu không có route lẫn model gán cứng.',
+    'Chưa có route nào. Agent chỉ chạy khi bạn chọn model trực tiếp trong màn Đội agent; route theo tier chỉ là phương án bổ sung.',
   'settings.routes.table.agent': 'Agent',
   'settings.routes.table.role': 'Vai trò',
   'settings.routes.table.tier': 'Mức',

@@ -154,7 +154,9 @@ export function Shell(): ReactNode {
         ))}
       </nav>
 
-      <main className="app__main">{manHinh}</main>
+      {/* Màn Trao đổi cần khoá cuộn trang để khung nhập tin luôn nằm trong tầm nhìn;
+          các màn khác giữ nguyên cuộn trang như trước. */}
+      <main className={route === 'trao-doi' ? 'app__main app__main--cao-day' : 'app__main'}>{manHinh}</main>
     </div>
   )
 }

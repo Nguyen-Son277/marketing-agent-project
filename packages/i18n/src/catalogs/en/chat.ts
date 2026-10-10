@@ -83,4 +83,14 @@ export const en_chat = {
   'chat.event.briefIncomplete': '❓ The brief still needs more information.',
   'chat.event.warning': '⚠️ {{message}}',
   'chat.event.systemWarning': 'The system raised a warning.',
+
+  /* --------------------------------------------------- option picker */
+  'chat.scrollToLatest': 'Jump to latest',
+  'chat.exclusiveTag': "won't do",
+  'chat.questionCount': 'Questions: {{count}}',
+  'chat.sendAnswers': 'Send answers',
+  'chat.skipAnswers': 'Skip, I will answer in my own words',
+  'chat.skipAnswersMessage': "I'll answer in my own words.",
+  'chat.answersSent': 'You answered this question.',
+  'chat.answersRequired': 'Pick at least one option or write your own note to send.',
 } as const

@@ -9,12 +9,14 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type {
+  FetchedModelView,
   IntegrationKind,
   IntegrationTestResponse,
   IntegrationView,
   ModelOptionView,
   ModelRouteView,
   ModelTier,
+  ProviderKeyView,
   ProviderKind,
   ProviderTestResponse,
   ProviderView,
@@ -129,7 +131,10 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
   const [kind, setKind] = useState<ProviderKind>('openai_compatible')
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const [apiKeyLabel, setApiKeyLabel] = useState('')
   const [bat, setBat] = useState(true)
+  /** Provider đang mở bảng quản lý khoá/model. Một lúc chỉ mở một cái cho dễ đọc. */
+  const [moProvider, setMoProvider] = useState<string | null>(null)
 
   const [dangLuu, setDangLuu] = useState(false)
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
@@ -168,6 +173,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     setKind(provider.kind)
     setBaseUrl(provider.baseUrl)
     setApiKey('')
+    setApiKeyLabel('')
     setBat(provider.enabled)
     setLoiLuu(null)
     setThongBao(null)
@@ -179,9 +185,25 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     setKind('openai_compatible')
     setBaseUrl('')
     setApiKey('')
+    setApiKeyLabel('')
     setBat(true)
     setLoiLuu(null)
     setThongBao(null)
+  }
+
+  /** Xoá provider kéo theo toàn bộ khoá/model và route trỏ tới model của nó. */
+  async function xoaProvider(provider: ProviderView): Promise<void> {
+    if (!window.confirm(t('settings.providers.deleteConfirm', { name: provider.name }))) return
+    setLoiLuu(null)
+    setThongBao(null)
+    try {
+      await api.deleteProvider(companyId, provider.id)
+      if (moProvider === provider.id) setMoProvider(null)
+      setThongBao(t('settings.providers.deleted'))
+      taiLai()
+    } catch (error) {
+      setLoiLuu(error instanceof ApiError ? error.message : t('settings.providers.deleteFailed'))
+    }
   }
 
   async function luu(): Promise<void> {
@@ -194,12 +216,12 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     setDangLuu(true)
     try {
       if (suaId) {
+        // Sửa provider không đổi khoá: khoá quản lý riêng từng cái ở bảng bên dưới.
         await api.updateProvider(companyId, suaId, {
           name: ten.trim(),
           kind,
           baseUrl: baseUrl.trim(),
           enabled: bat,
-          ...(apiKey.length > 0 ? { apiKey } : {}),
         })
         setThongBao(t('settings.providers.updated'))
       } else {
@@ -208,7 +230,12 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
           kind,
           baseUrl: baseUrl.trim(),
           enabled: bat,
-          ...(apiKey.length > 0 ? { apiKey } : {}),
+          ...(apiKey.length > 0
+            ? {
+                apiKey,
+                ...(apiKeyLabel.trim().length > 0 ? { apiKeyLabel: apiKeyLabel.trim() } : {}),
+              }
+            : {}),
         })
         setThongBao(t('settings.providers.created'))
       }
@@ -283,7 +310,9 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
                 <td>
                   {provider.apiKeyConfigured ? (
                     <>
-                      <Nhan loai="thanh-cong">{t('settings.providers.keyConfigured')}</Nhan>
+                      <Nhan loai="thanh-cong">
+                        {t('settings.providers.keys.title', { count: formatNumber(provider.keys.length) })}
+                      </Nhan>
                       {provider.apiKeyHint ? (
                         <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
                           {t('settings.providers.keyHint', { hint: provider.apiKeyHint })}
@@ -307,8 +336,22 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
                     <Nut bien="phu" nho onClick={() => napVaoBieuMau(provider)}>
                       {t('common.edit')}
                     </Nut>
+                    <Nut
+                      bien="phu"
+                      nho
+                      onClick={() => setMoProvider((hienTai) => (hienTai === provider.id ? null : provider.id))}
+                    >
+                      {t('settings.providers.keys.title', { count: formatNumber(provider.keys.length) })}
+                    </Nut>
                     <Nut bien="phu" nho onClick={() => void test(provider)} dangTai={dangTest === provider.id}>
                       {t('settings.providers.test')}
+                    </Nut>
+                    <Nut
+                      bien="nguy-hiem"
+                      nho
+                      onClick={() => void xoaProvider(provider)}
+                    >
+                      {t('settings.providers.delete')}
                     </Nut>
                   </div>
                   {ketQuaTest[provider.id] ? (
@@ -338,6 +381,12 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
         </table>
       ) : null}
 
+      {(danhSach ?? []).map((provider) =>
+        moProvider === provider.id ? (
+          <PhanKhoaProvider key={provider.id} companyId={companyId} provider={provider} onChanged={taiLai} />
+        ) : null,
+      )}
+
       <h3 className="card__tieu-de" style={{ marginTop: 18 }}>
         {suaId ? t('settings.providers.form.editTitle') : t('settings.providers.form.createTitle')}
       </h3>
@@ -351,14 +400,21 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
           options={PROVIDER_KINDS.map((item) => ({ value: item, label: NHAN_PROVIDER[item] }))}
         />
         <ONhap value={baseUrl} onChange={setBaseUrl} placeholder={t('settings.providers.form.baseUrlPlaceholder')} />
-        <ONhap
-          value={apiKey}
-          onChange={setApiKey}
-          type="password"
-          placeholder={
-            suaId ? t('settings.providers.form.apiKeyPlaceholderKeep') : t('settings.providers.form.apiKeyPlaceholder')
-          }
-        />
+        {suaId === null ? (
+          <>
+            <ONhap
+              value={apiKeyLabel}
+              onChange={setApiKeyLabel}
+              placeholder={t('settings.providers.keys.labelPlaceholder')}
+            />
+            <ONhap
+              value={apiKey}
+              onChange={setApiKey}
+              type="password"
+              placeholder={t('settings.providers.keys.keyPlaceholder')}
+            />
+          </>
+        ) : null}
       </div>
       <label className="hang" style={{ gap: 6, marginTop: 10, fontSize: 14 }}>
         <input type="checkbox" checked={bat} onChange={(event) => setBat(event.target.checked)} />
@@ -376,6 +432,391 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
         ) : null}
       </div>
     </Card>
+  )
+}
+
+/* ------------------------------------------- khoá API và fetch model */
+
+function PhanKhoaProvider({
+  companyId,
+  provider,
+  onChanged,
+}: {
+  companyId: string
+  provider: ProviderView
+  onChanged: () => void
+}): ReactNode {
+  const { t, formatNumber } = useI18n()
+  const [keyForm, setKeyForm] = useState<{
+    keyId: string | null
+    label: string
+    apiKey: string
+    priority: string
+    enabled: boolean
+  } | null>(null)
+  const [dangLuu, setDangLuu] = useState(false)
+  const [loi, setLoi] = useState<string | null>(null)
+  const [thongBao, setThongBao] = useState<string | null>(null)
+  const [dangTest, setDangTest] = useState<string | null>(null)
+  const [ketQuaTest, setKetQuaTest] = useState<Record<string, ProviderTestResponse>>({})
+  const [fetchKeyId, setFetchKeyId] = useState('')
+  const [dangFetch, setDangFetch] = useState(false)
+  const [fetchResult, setFetchResult] = useState<{
+    ok: boolean
+    message: string
+    models: readonly FetchedModelView[]
+  } | null>(null)
+  const [chon, setChon] = useState<readonly string[]>([])
+  const [dangNhap, setDangNhap] = useState(false)
+  const [dangPurge, setDangPurge] = useState(false)
+
+  function moThemKhoa(): void {
+    setKeyForm({
+      keyId: null,
+      label: '',
+      apiKey: '',
+      priority: String((provider.keys.length + 1) * 100),
+      enabled: true,
+    })
+    setLoi(null)
+    setThongBao(null)
+  }
+
+  function moSuaKhoa(key: ProviderKeyView): void {
+    setKeyForm({ keyId: key.id, label: key.label, apiKey: '', priority: String(key.priority), enabled: key.enabled })
+    setLoi(null)
+    setThongBao(null)
+  }
+
+  async function luuKhoa(): Promise<void> {
+    if (!keyForm) return
+    if (keyForm.label.trim().length === 0 || (keyForm.keyId === null && keyForm.apiKey.trim().length === 0)) {
+      setLoi(t('settings.providers.keys.needLabelAndKey'))
+      return
+    }
+    setDangLuu(true)
+    setLoi(null)
+    try {
+      if (keyForm.keyId === null) {
+        await api.createProviderKey(companyId, provider.id, {
+          label: keyForm.label.trim(),
+          apiKey: keyForm.apiKey.trim(),
+          priority: Math.round(soTuChuoi(keyForm.priority)),
+          enabled: keyForm.enabled,
+        })
+        setThongBao(t('settings.providers.keys.created'))
+      } else {
+        await api.updateProviderKey(companyId, provider.id, keyForm.keyId, {
+          label: keyForm.label.trim(),
+          priority: Math.round(soTuChuoi(keyForm.priority)),
+          enabled: keyForm.enabled,
+          ...(keyForm.apiKey.trim().length > 0 ? { apiKey: keyForm.apiKey.trim() } : {}),
+        })
+        setThongBao(t('settings.providers.keys.updated'))
+      }
+      setKeyForm(null)
+      onChanged()
+    } catch (error) {
+      setLoi(error instanceof ApiError ? error.message : t('settings.providers.keys.saveFailed'))
+    } finally {
+      setDangLuu(false)
+    }
+  }
+
+  async function xoaKhoa(key: ProviderKeyView): Promise<void> {
+    setLoi(null)
+    try {
+      await api.deleteProviderKey(companyId, provider.id, key.id)
+      setThongBao(t('settings.providers.keys.deleted'))
+      onChanged()
+    } catch (error) {
+      setLoi(error instanceof ApiError ? error.message : t('settings.providers.keys.deleteFailed'))
+    }
+  }
+
+  async function testKhoa(key: ProviderKeyView): Promise<void> {
+    setDangTest(key.id)
+    try {
+      const ketQua = await api.testProviderKey(companyId, provider.id, key.id)
+      setKetQuaTest((truoc) => ({ ...truoc, [key.id]: ketQua }))
+    } catch (error) {
+      setKetQuaTest((truoc) => ({
+        ...truoc,
+        [key.id]: {
+          ok: false,
+          message: error instanceof ApiError ? error.message : t('settings.providers.testFailed'),
+          latencyMs: 0,
+        },
+      }))
+    } finally {
+      setDangTest(null)
+    }
+  }
+
+  async function fetchModels(): Promise<void> {
+    setDangFetch(true)
+    setLoi(null)
+    try {
+      const ketQua = await api.fetchProviderModels(companyId, provider.id, fetchKeyId || undefined)
+      setFetchResult({ ok: ketQua.ok, message: ketQua.message, models: ketQua.models })
+      setChon([])
+      if (!ketQua.ok) setLoi(ketQua.message)
+    } catch (error) {
+      setLoi(error instanceof ApiError ? error.message : t('settings.providers.fetch.failed'))
+    } finally {
+      setDangFetch(false)
+    }
+  }
+
+  async function nhapModels(): Promise<void> {
+    if (!fetchResult || chon.length === 0) return
+    setDangNhap(true)
+    setLoi(null)
+    try {
+      const ketQua = await api.importProviderModels(companyId, provider.id, {
+        models: fetchResult.models
+          .filter((model) => chon.includes(model.modelId))
+          .map((model) => ({ modelId: model.modelId, label: model.label })),
+      })
+      setThongBao(
+        t('settings.providers.fetch.imported', {
+          created: formatNumber(ketQua.created.length),
+          skipped: formatNumber(ketQua.skipped.length),
+        }),
+      )
+      const added = new Set(ketQua.created.map((model) => model.modelId))
+      setFetchResult({
+        ...fetchResult,
+        models: fetchResult.models.map((model) =>
+          added.has(model.modelId) ? { ...model, alreadyAdded: true } : model,
+        ),
+      })
+      setChon([])
+      onChanged()
+    } catch (error) {
+      setLoi(error instanceof ApiError ? error.message : t('settings.providers.fetch.importFailed'))
+    } finally {
+      setDangNhap(false)
+    }
+  }
+
+  async function purgeModels(): Promise<void> {
+    if (!window.confirm(t('settings.models.purgeConfirm', { name: provider.name }))) return
+    setDangPurge(true)
+    setLoi(null)
+    try {
+      const ketQua = await api.purgeProviderModels(companyId, provider.id)
+      setThongBao(t('settings.models.purged', { count: formatNumber(ketQua.deleted) }))
+      onChanged()
+    } catch (error) {
+      setLoi(error instanceof ApiError ? error.message : t('settings.models.purgeFailed'))
+    } finally {
+      setDangPurge(false)
+    }
+  }
+
+  const selectable = (fetchResult?.models ?? []).filter((model) => !model.alreadyAdded)
+
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <h3 className="card__tieu-de">{t('settings.providers.keys.title', { count: formatNumber(provider.keys.length) })}</h3>
+      <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.providers.keys.hint')}</p>
+
+      {thongBao ? (
+        <div style={{ marginBottom: 8 }}>
+          <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
+        </div>
+      ) : null}
+      {loi ? (
+        <div style={{ marginBottom: 8 }}>
+          <ThongBao loai="loi">{loi}</ThongBao>
+        </div>
+      ) : null}
+
+      {provider.keys.length === 0 ? <Trong>{t('settings.providers.keys.empty')}</Trong> : null}
+
+      {provider.keys.length > 0 ? (
+        <table className="bang">
+          <thead>
+            <tr>
+              <th>{t('settings.providers.keys.label')}</th>
+              <th>{t('settings.providers.table.apiKey')}</th>
+              <th>{t('settings.providers.keys.priority')}</th>
+              <th>{t('settings.providers.keys.status')}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {provider.keys.map((key) => (
+              <tr key={key.id}>
+                <td>
+                  <strong>{key.label}</strong>
+                </td>
+                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{key.hint ?? ''}</td>
+                <td className="so">{formatNumber(key.priority)}</td>
+                <td>
+                  {key.enabled ? (
+                    <Nhan loai="thanh-cong">{t('settings.providers.keys.enabled')}</Nhan>
+                  ) : (
+                    <Nhan loai="mo">{t('settings.providers.keys.disabled')}</Nhan>
+                  )}
+                </td>
+                <td>
+                  <div className="hang" style={{ gap: 6 }}>
+                    <Nut bien="phu" nho onClick={() => void testKhoa(key)} dangTai={dangTest === key.id}>
+                      {t('settings.providers.keys.test')}
+                    </Nut>
+                    <Nut bien="phu" nho onClick={() => moSuaKhoa(key)}>
+                      {t('common.edit')}
+                    </Nut>
+                    <Nut bien="nguy-hiem" nho onClick={() => void xoaKhoa(key)}>
+                      {t('common.delete')}
+                    </Nut>
+                  </div>
+                  {ketQuaTest[key.id] ? (
+                    <div style={{ marginTop: 6 }}>
+                      <ThongBao loai={ketQuaTest[key.id]?.ok ? 'thanh-cong' : 'loi'}>
+                        {t('settings.providers.testResult', {
+                          message: ketQuaTest[key.id]?.message ?? '',
+                          ms: formatNumber(ketQuaTest[key.id]?.latencyMs ?? 0),
+                        })}
+                      </ThongBao>
+                    </div>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+
+      {keyForm ? (
+        <div style={{ marginTop: 12 }}>
+          <h4 className="card__tieu-de">{t('settings.providers.keys.addTitle')}</h4>
+          <div className="luoi luoi--2">
+            <ONhap
+              value={keyForm.label}
+              onChange={(value) => setKeyForm({ ...keyForm, label: value })}
+              placeholder={t('settings.providers.keys.labelPlaceholder')}
+            />
+            <ONhap
+              value={keyForm.apiKey}
+              onChange={(value) => setKeyForm({ ...keyForm, apiKey: value })}
+              type="password"
+              placeholder={
+                keyForm.keyId === null
+                  ? t('settings.providers.keys.keyPlaceholder')
+                  : t('settings.providers.keys.editPlaceholder')
+              }
+            />
+            <ONhap
+              value={keyForm.priority}
+              onChange={(value) => setKeyForm({ ...keyForm, priority: value })}
+              placeholder={t('settings.providers.keys.priorityPlaceholder')}
+            />
+          </div>
+          <label className="hang" style={{ gap: 6, marginTop: 8, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={keyForm.enabled}
+              onChange={(event) => setKeyForm({ ...keyForm, enabled: event.target.checked })}
+            />
+            {t('settings.providers.keys.enabled')}
+          </label>
+          <div className="hang" style={{ marginTop: 8 }}>
+            <Nut onClick={() => void luuKhoa()} dangTai={dangLuu}>
+              {keyForm.keyId === null ? t('settings.providers.keys.submit') : t('common.save')}
+            </Nut>
+            <Nut bien="phu" onClick={() => setKeyForm(null)}>
+              {t('settings.providers.keys.cancelEdit')}
+            </Nut>
+          </div>
+        </div>
+      ) : (
+        <div className="hang" style={{ marginTop: 10 }}>
+          <Nut bien="phu" nho onClick={moThemKhoa}>
+            {t('settings.providers.keys.addTitle')}
+          </Nut>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16, borderTop: '1px solid var(--mau-vien)', paddingTop: 12 }}>
+        <h4 className="card__tieu-de">{t('settings.providers.fetch.title')}</h4>
+        <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.providers.fetch.hint')}</p>
+        <div className="hang" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <OChon
+            value={fetchKeyId}
+            onChange={setFetchKeyId}
+            options={[
+              { value: '', label: t('settings.providers.fetch.keyLabel') },
+              ...provider.keys.map((key) => ({ value: key.id, label: key.label })),
+            ]}
+          />
+          <Nut bien="phu" nho onClick={() => void fetchModels()} dangTai={dangFetch}>
+            {t('settings.providers.fetch.action')}
+          </Nut>
+          <Nut bien="phu" nho onClick={() => void purgeModels()} dangTai={dangPurge}>
+            {t('settings.models.purge')}
+          </Nut>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)', marginTop: 4 }}>
+          {t('settings.providers.fetch.pickKeyHint')}
+        </div>
+
+        {fetchResult ? (
+          <div style={{ marginTop: 10 }}>
+            <ThongBao loai={fetchResult.ok ? 'thanh-cong' : 'loi'}>{fetchResult.message}</ThongBao>
+            {fetchResult.ok && fetchResult.models.length === 0 ? (
+              <div style={{ marginTop: 8 }}>
+                <Trong>{t('settings.providers.fetch.noModels')}</Trong>
+              </div>
+            ) : null}
+            {fetchResult.models.length > 0 ? (
+              <>
+                <div className="hang" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <Nut
+                    bien="phu"
+                    nho
+                    onClick={() => setChon(selectable.map((model) => model.modelId))}
+                  >
+                    {t('settings.providers.fetch.selectAll')}
+                  </Nut>
+                  <Nut bien="phu" nho onClick={() => setChon([])}>
+                    {t('settings.providers.fetch.clear')}
+                  </Nut>
+                  <Nut nho onClick={() => void nhapModels()} dangTai={dangNhap} disabled={chon.length === 0}>
+                    {t('settings.providers.fetch.import', { count: formatNumber(chon.length) })}
+                  </Nut>
+                </div>
+                <div className="cot" style={{ gap: 4, marginTop: 8 }}>
+                  {fetchResult.models.map((model) => (
+                    <label key={model.modelId} className="hang" style={{ gap: 8, fontSize: 13 }}>
+                      <input
+                        type="checkbox"
+                        disabled={model.alreadyAdded}
+                        checked={model.alreadyAdded || chon.includes(model.modelId)}
+                        onChange={(event) => {
+                          setChon((truoc) =>
+                            event.target.checked
+                              ? [...truoc, model.modelId]
+                              : truoc.filter((id) => id !== model.modelId),
+                          )
+                        }}
+                      />
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{model.modelId}</span>
+                      <span>{model.label}</span>
+                      {model.alreadyAdded ? (
+                        <Nhan loai="mo">{t('settings.providers.fetch.alreadyAdded')}</Nhan>
+                      ) : null}
+                    </label>
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
   )
 }
 
@@ -399,6 +840,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
   const [dangLuu, setDangLuu] = useState(false)
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
   const [thongBao, setThongBao] = useState<string | null>(null)
+  const [dangPurge, setDangPurge] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -459,6 +901,35 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     }
   }
 
+  async function xoaModel(model: ModelOptionView): Promise<void> {
+    if (!window.confirm(t('settings.models.deleteConfirm', { label: model.label }))) return
+    setLoiLuu(null)
+    setThongBao(null)
+    try {
+      await api.deleteModel(companyId, model.id)
+      setThongBao(t('settings.models.deleted'))
+      taiLai()
+    } catch (error) {
+      setLoiLuu(error instanceof ApiError ? error.message : t('settings.models.deleteFailed'))
+    }
+  }
+
+  async function xoaModelKhongDung(provider: ProviderView): Promise<void> {
+    if (!window.confirm(t('settings.models.purgeConfirm', { name: provider.name }))) return
+    setDangPurge(provider.id)
+    setLoiLuu(null)
+    setThongBao(null)
+    try {
+      const ketQua = await api.purgeProviderModels(companyId, provider.id)
+      setThongBao(t('settings.models.purged', { count: formatNumber(ketQua.deleted) }))
+      taiLai()
+    } catch (error) {
+      setLoiLuu(error instanceof ApiError ? error.message : t('settings.models.purgeFailed'))
+    } finally {
+      setDangPurge(null)
+    }
+  }
+
   return (
     <Card tieuDe={t('settings.models.title')} phu={t('settings.models.subtitle')}>
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
@@ -480,6 +951,24 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
         <Trong>{t('settings.models.empty')}</Trong>
       ) : null}
 
+      {providers && providers.length > 0 ? (
+        <div className="hang" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          {providers
+            .filter((provider) => provider.models.length > 0)
+            .map((provider) => (
+              <Nut
+                key={provider.id}
+                bien="phu"
+                nho
+                onClick={() => void xoaModelKhongDung(provider)}
+                dangTai={dangPurge === provider.id}
+              >
+                {t('settings.models.purge')} · {provider.name}
+              </Nut>
+            ))}
+        </div>
+      ) : null}
+
       {tatCaModel.length > 0 ? (
         <table className="bang">
           <thead>
@@ -489,8 +978,10 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
               <th>{t('settings.models.table.provider')}</th>
               <th>{t('settings.models.table.context')}</th>
               <th>{t('settings.models.table.tools')}</th>
+              <th>{t('settings.models.table.usage')}</th>
               <th>{t('settings.models.table.costIn')}</th>
               <th>{t('settings.models.table.costOut')}</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -509,8 +1000,24 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
                     <Nhan loai="canh-bao">{t('common.no')}</Nhan>
                   )}
                 </td>
+                <td className="so">
+                  {model.usedByAgentCount > 0
+                    ? t('settings.models.usageCount', { count: formatNumber(model.usedByAgentCount) })
+                    : t('common.none')}
+                </td>
                 <td className="so">{formatCurrencyUsd(model.costInPerMtok)}</td>
                 <td className="so">{formatCurrencyUsd(model.costOutPerMtok)}</td>
+                <td>
+                  <Nut
+                    bien="nguy-hiem"
+                    nho
+                    disabled={model.usedByAgentCount > 0}
+                    title={model.usedByAgentCount > 0 ? t('settings.models.deleteFailed') : undefined}
+                    onClick={() => void xoaModel(model)}
+                  >
+                    {t('settings.models.delete')}
+                  </Nut>
+                </td>
               </tr>
             ))}
           </tbody>

@@ -14,13 +14,13 @@ export const en_settings = {
   /* ----------------------------------------------------------- page */
   'settings.title': 'Settings',
   'settings.subtitle':
-    'Declare the providers, models, tier routes, external integrations and cost limits the team runs on.',
+    'Declare providers (URL plus multiple API keys), fetch models, choose a primary and fallback model per agent, plus external integrations and cost limits.',
   'settings.needsConfigurationHint': 'Check the provider and the API key on this screen.',
 
   /* -------------------------------------------------------- providers */
   'settings.providers.title': 'Model providers',
   'settings.providers.subtitle':
-    'Where agents send requests. The API key is write-only: sent once, encrypted by the server, and never returned in its original form.',
+    'Each URL is one provider and can have several API keys: when one fails the next is used automatically. Keys are write-only, encrypted by the server and never returned in their original form.',
   'settings.providers.empty':
     'No providers yet. Add an OpenAI-compatible provider so agents can call models.',
   'settings.providers.table.name': 'Name',
@@ -55,6 +55,52 @@ export const en_settings = {
   'settings.providers.created': 'Provider added.',
   'settings.providers.saveFailed': 'Could not save the provider.',
   'settings.providers.testFailed': 'Could not test the connection.',
+  'settings.providers.delete': 'Delete',
+  'settings.providers.deleteConfirm':
+    'Delete provider "{{name}}"? All of its keys and models will be removed; routes/presets pointing at those models go too.',
+  'settings.providers.deleted': 'Provider deleted.',
+  'settings.providers.deleteFailed': 'Could not delete the provider.',
+
+  /* --------------------------------------------------------- api key */
+  'settings.providers.keys.title': 'API keys ({{count}})',
+  'settings.providers.keys.hint':
+    'One URL can hold several keys. They are tried in order; when a key fails the next one is used automatically.',
+  'settings.providers.keys.empty': 'No keys yet. An internal gateway may not need one.',
+  'settings.providers.keys.label': 'Label',
+  'settings.providers.keys.priority': 'Order',
+  'settings.providers.keys.status': 'Status',
+  'settings.providers.keys.enabled': 'Enabled',
+  'settings.providers.keys.disabled': 'Disabled',
+  'settings.providers.keys.addTitle': 'Add API key',
+  'settings.providers.keys.labelPlaceholder': 'Label, e.g. Primary key',
+  'settings.providers.keys.keyPlaceholder': 'Paste API key',
+  'settings.providers.keys.editPlaceholder': 'New key (leave empty to keep the current one)',
+  'settings.providers.keys.priorityPlaceholder': 'Use order (lower first)',
+  'settings.providers.keys.submit': 'Add key',
+  'settings.providers.keys.needLabelAndKey': 'Enter a label and a key value.',
+  'settings.providers.keys.created': 'Key added.',
+  'settings.providers.keys.updated': 'Key updated.',
+  'settings.providers.keys.deleted': 'Key deleted.',
+  'settings.providers.keys.saveFailed': 'Could not save the key.',
+  'settings.providers.keys.deleteFailed': 'Could not delete the key.',
+  'settings.providers.keys.test': 'Test key',
+  'settings.providers.keys.cancelEdit': 'Cancel key edit',
+
+  /* ------------------------------------------------------- fetch model */
+  'settings.providers.fetch.title': 'Fetch the model list from the provider',
+  'settings.providers.fetch.hint':
+    'Calls /models with the selected key to show which models the provider offers. Nothing is saved until you pick.',
+  'settings.providers.fetch.action': 'Fetch models',
+  'settings.providers.fetch.keyLabel': 'Use key',
+  'settings.providers.fetch.selectAll': 'Select all',
+  'settings.providers.fetch.clear': 'Clear',
+  'settings.providers.fetch.import': 'Add selected models ({{count}})',
+  'settings.providers.fetch.imported': 'Added {{created}} models, skipped {{skipped}} already present.',
+  'settings.providers.fetch.noModels': 'The provider returned no models.',
+  'settings.providers.fetch.alreadyAdded': 'Present',
+  'settings.providers.fetch.failed': 'Could not fetch the model list.',
+  'settings.providers.fetch.importFailed': 'Could not add the selected models.',
+  'settings.providers.fetch.pickKeyHint': 'If the gateway needs no key, leave this as is and press Fetch models.',
 
   /* ----------------------------------------------------------- models */
   'settings.models.title': 'Models',
@@ -62,14 +108,24 @@ export const en_settings = {
     'Declare each model with its input/output price per million tokens. That price drives cost tracking and the daily cap.',
   'settings.models.emptyNoProvider':
     'No providers yet. Add a provider above before declaring models.',
-  'settings.models.empty': 'No models yet. Declare the first one with the form below.',
+  'settings.models.empty': 'No models yet. Use "Fetch models" in the provider section, or declare one manually below.',
   'settings.models.table.label': 'Label',
   'settings.models.table.modelId': 'Model ID',
   'settings.models.table.provider': 'Provider',
   'settings.models.table.context': 'Context',
   'settings.models.table.tools': 'Tools',
+  'settings.models.table.usage': 'In use',
   'settings.models.table.costIn': 'Input / 1M',
   'settings.models.table.costOut': 'Output / 1M',
+  'settings.models.usageCount': '{{count}} agents',
+  'settings.models.delete': 'Delete',
+  'settings.models.deleteConfirm': 'Delete model "{{label}}"?',
+  'settings.models.deleted': 'Model deleted.',
+  'settings.models.deleteFailed': 'Could not delete the model. Remove it from agents/routes first.',
+  'settings.models.purge': 'Delete unused models',
+  'settings.models.purgeConfirm': 'Delete every model of "{{name}}" that no agent uses?',
+  'settings.models.purged': 'Deleted {{count}} unused models.',
+  'settings.models.purgeFailed': 'Could not delete unused models.',
   'settings.models.form.title': 'Add model',
   'settings.models.form.modelIdPlaceholder': 'Model ID, e.g. deepseek-v4-flash',
   'settings.models.form.labelPlaceholder': 'Display label',
@@ -89,7 +145,7 @@ export const en_settings = {
   'settings.routes.subtitle':
     'When an agent has no pinned model, the router picks one per (agent, tier) pair. This is the fallback when the chosen model lacks capability.',
   'settings.routes.empty':
-    'No routes yet. Agents use the cheapest enabled model when neither a route nor a pinned model exists.',
+    'No routes yet. Agents only run once you pick a model in the Team screen; tier routes are an optional extra.',
   'settings.routes.table.agent': 'Agent',
   'settings.routes.table.role': 'Role',
   'settings.routes.table.tier': 'Tier',

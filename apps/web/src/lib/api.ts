@@ -9,27 +9,34 @@
 import { readLocale } from './locale-store.ts'
 import type {
   ArtifactView,
+  ClarificationAnswer,
   CompanySummary,
   ConversationDetailResponse,
   ConversationView,
   CostsResponse,
   CreateModelBody,
   CreateProviderBody,
+  CreateProviderKeyBody,
   DashboardResponse,
   DiagramResponse,
   ErrorEnvelope,
+  FetchModelsResponse,
+  ImportModelsBody,
+  ImportModelsResponse,
   IntegrationTestResponse,
   IntegrationView,
   IntegrationsResponse,
   KnowledgeResponse,
   ModelOptionView,
   ModelRouteView,
+  ProviderKeyView,
   ProviderView,
   LimitsView,
   MeResponse,
   MessageView,
   ProviderTestResponse,
   ProvidersResponse,
+  PurgeModelsResponse,
   ReindexResponse,
   ReviewTaskResponse,
   RunView,
@@ -39,6 +46,8 @@ import type {
   TaskListResponse,
   TeamMemberView,
   TeamResponse,
+  UpdateProviderBody,
+  UpdateProviderKeyBody,
   UpdateTeamMemberBody,
   UpsertIntegrationBody,
   UpsertRouteBody,
@@ -277,7 +286,7 @@ export const api = {
 
   async sendMessage(
     conversationId: string,
-    input: { content: string; autoPlan?: boolean },
+    input: { content: string; autoPlan?: boolean; answers?: ClarificationAnswer[] },
   ): Promise<SendMessageResponse> {
     return request(`/api/conversations/${conversationId}/messages`, { method: 'POST', body: input })
   },
@@ -326,16 +335,95 @@ export const api = {
     return request(`/api/companies/${companyId}/providers`, { method: 'POST', body: input })
   },
 
-  async updateProvider(companyId: string, providerId: string, patch: unknown): Promise<unknown> {
+  async updateProvider(companyId: string, providerId: string, patch: UpdateProviderBody): Promise<unknown> {
     return request(`/api/companies/${companyId}/providers/${providerId}`, { method: 'PATCH', body: patch })
   },
 
-  async testProvider(companyId: string, providerId: string): Promise<ProviderTestResponse> {
-    return request(`/api/companies/${companyId}/providers/${providerId}/test`, { method: 'POST', body: {} })
+  async deleteProvider(companyId: string, providerId: string): Promise<void> {
+    await request(`/api/companies/${companyId}/providers/${providerId}`, { method: 'DELETE' })
+  },
+
+  async testProvider(companyId: string, providerId: string, keyId?: string): Promise<ProviderTestResponse> {
+    return request(`/api/companies/${companyId}/providers/${providerId}/test`, {
+      method: 'POST',
+      body: keyId ? { keyId } : {},
+    })
+  },
+
+  /* -------------------------------------------------------------- API key */
+
+  async providerKeys(companyId: string, providerId: string): Promise<{ keys: ProviderKeyView[] }> {
+    return request(`/api/companies/${companyId}/providers/${providerId}/keys`)
+  },
+
+  async createProviderKey(
+    companyId: string,
+    providerId: string,
+    input: CreateProviderKeyBody,
+  ): Promise<{ key: ProviderKeyView }> {
+    return request(`/api/companies/${companyId}/providers/${providerId}/keys`, { method: 'POST', body: input })
+  },
+
+  async updateProviderKey(
+    companyId: string,
+    providerId: string,
+    keyId: string,
+    patch: UpdateProviderKeyBody,
+  ): Promise<{ key: ProviderKeyView }> {
+    return request(`/api/companies/${companyId}/providers/${providerId}/keys/${keyId}`, {
+      method: 'PATCH',
+      body: patch,
+    })
+  },
+
+  async deleteProviderKey(companyId: string, providerId: string, keyId: string): Promise<void> {
+    await request(`/api/companies/${companyId}/providers/${providerId}/keys/${keyId}`, { method: 'DELETE' })
+  },
+
+  async testProviderKey(companyId: string, providerId: string, keyId: string): Promise<ProviderTestResponse> {
+    return request(`/api/companies/${companyId}/providers/${providerId}/keys/${keyId}/test`, {
+      method: 'POST',
+      body: {},
+    })
+  },
+
+  /* ------------------------------------------------------------ fetch model */
+
+  async fetchProviderModels(
+    companyId: string,
+    providerId: string,
+    keyId?: string,
+  ): Promise<FetchModelsResponse> {
+    return request(`/api/companies/${companyId}/providers/${providerId}/fetch-models`, {
+      method: 'POST',
+      body: keyId ? { keyId } : {},
+    })
+  },
+
+  async importProviderModels(
+    companyId: string,
+    providerId: string,
+    input: ImportModelsBody,
+  ): Promise<ImportModelsResponse> {
+    return request(`/api/companies/${companyId}/providers/${providerId}/import-models`, {
+      method: 'POST',
+      body: input,
+    })
+  },
+
+  async purgeProviderModels(companyId: string, providerId: string): Promise<PurgeModelsResponse> {
+    return request(`/api/companies/${companyId}/providers/${providerId}/purge-models`, {
+      method: 'POST',
+      body: {},
+    })
   },
 
   async createModel(companyId: string, input: CreateModelBody): Promise<{ model: ModelOptionView }> {
     return request(`/api/companies/${companyId}/models`, { method: 'POST', body: input })
+  },
+
+  async deleteModel(companyId: string, modelId: string): Promise<void> {
+    await request(`/api/companies/${companyId}/models/${modelId}`, { method: 'DELETE' })
   },
 
   async upsertRoute(companyId: string, input: UpsertRouteBody): Promise<{ route: ModelRouteView }> {
