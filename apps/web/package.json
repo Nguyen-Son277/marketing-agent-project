@@ -9,9 +9,12 @@
     "preview": "vite preview --port 4173"
   },
   "dependencies": {
+    "@marketing-agent/i18n": "workspace:*",
     "@marketing-agent/shared": "workspace:*",
+    "i18next": "^24.2.3",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-i18next": "^15.7.4"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",

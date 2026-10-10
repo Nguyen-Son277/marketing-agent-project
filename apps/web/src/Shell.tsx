@@ -7,8 +7,11 @@
  * thêm phụ thuộc.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { MessageKey } from '@marketing-agent/i18n'
 import { useSession } from './lib/session.tsx'
+import { useI18n } from './lib/i18n.tsx'
 import { Nhan, Nut } from './components/ui.tsx'
+import { LocaleSwitcher } from './components/LocaleSwitcher.tsx'
 import { BangDieuKhien } from './screens/BangDieuKhien.tsx'
 import { TraoDoi } from './screens/TraoDoi.tsx'
 import { CongViec } from './screens/CongViec.tsx'
@@ -18,16 +21,23 @@ import { CaiDat } from './screens/CaiDat.tsx'
 import { ChiPhi } from './screens/ChiPhi.tsx'
 import { SoDoDoiAgent } from './screens/SoDoDoiAgent.tsx'
 
+/**
+ * Bảng định tuyến.
+ *
+ * `nhan` và `nhom` là KHOÁ DỊCH chứ không phải câu chữ: giữ câu chữ ở đây sẽ khiến
+ * nhãn menu không đổi được khi chuyển ngôn ngữ, và buộc phải dựng lại mảng mỗi lần
+ * đổi ngôn ngữ.
+ */
 export const ROUTES = [
-  { id: 'bang-dieu-khien', nhan: 'Bảng điều khiển', nhom: 'Làm việc', bieuTuong: '📊' },
-  { id: 'trao-doi', nhan: 'Trao đổi với Leader', nhom: 'Làm việc', bieuTuong: '💬' },
-  { id: 'cong-viec', nhan: 'Công việc', nhom: 'Làm việc', bieuTuong: '🗂️' },
-  { id: 'doi-agent', nhan: 'Đội agent', nhom: 'Cấu hình', bieuTuong: '🎯' },
-  { id: 'kho-kien-thuc', nhan: 'Kho kiến thức', nhom: 'Cấu hình', bieuTuong: '📚' },
-  { id: 'cai-dat', nhan: 'Cài đặt', nhom: 'Cấu hình', bieuTuong: '⚙️' },
-  { id: 'chi-phi', nhan: 'Chi phí', nhom: 'Theo dõi', bieuTuong: '💰' },
-  { id: 'so-do', nhan: 'Sơ đồ đội agent', nhom: 'Theo dõi', bieuTuong: '🗺️' },
-] as const
+  { id: 'bang-dieu-khien', nhan: 'nav.dashboard', nhom: 'nav.group.work', bieuTuong: '📊' },
+  { id: 'trao-doi', nhan: 'nav.chat', nhom: 'nav.group.work', bieuTuong: '💬' },
+  { id: 'cong-viec', nhan: 'nav.tasks', nhom: 'nav.group.work', bieuTuong: '🗂️' },
+  { id: 'doi-agent', nhan: 'nav.team', nhom: 'nav.group.config', bieuTuong: '🎯' },
+  { id: 'kho-kien-thuc', nhan: 'nav.knowledge', nhom: 'nav.group.config', bieuTuong: '📚' },
+  { id: 'cai-dat', nhan: 'nav.settings', nhom: 'nav.group.config', bieuTuong: '⚙️' },
+  { id: 'chi-phi', nhan: 'nav.costs', nhom: 'nav.group.monitor', bieuTuong: '💰' },
+  { id: 'so-do', nhan: 'nav.diagram', nhom: 'nav.group.monitor', bieuTuong: '🗺️' },
+] as const satisfies readonly { id: string; nhan: MessageKey; nhom: MessageKey; bieuTuong: string }[]
 
 export type RouteId = (typeof ROUTES)[number]['id']
 
@@ -56,10 +66,14 @@ export function useRoute(): [RouteId, (route: RouteId) => void] {
 
 export function Shell(): ReactNode {
   const { user, companies, company, companyId, selectCompany, signOut } = useSession()
+  const { t } = useI18n()
   const [route, navigate] = useRoute()
 
+  // Kiểu của map ghi rõ `MessageKey` cho tên nhóm: nếu để TypeScript suy từ mảng,
+  // khoá sẽ bị nới thành `string` và `t(tenNhom)` mất kiểm tra khoá.
   const nhom = useMemo(() => {
-    const map = new Map<string, (typeof ROUTES)[number][]>()
+    type Route = (typeof ROUTES)[number]
+    const map = new Map<MessageKey, Route[]>()
     for (const item of ROUTES) {
       const bucket = map.get(item.nhom) ?? []
       bucket.push(item)
@@ -93,7 +107,7 @@ export function Shell(): ReactNode {
   return (
     <div className="app">
       <header className="app__header">
-        <span className="app__brand">Đội Agent Marketing</span>
+        <span className="app__brand">{t('nav.brand')}</span>
 
         {companies.length > 0 ? (
           <select
@@ -115,15 +129,16 @@ export function Shell(): ReactNode {
         <span className="app__spacer" />
 
         <span style={{ fontSize: 13, color: 'var(--mau-chu-mo)' }}>{user?.name}</span>
+        <LocaleSwitcher compact />
         <Nut bien="phu" nho onClick={() => void signOut()}>
-          Đăng xuất
+          {t('nav.signOut')}
         </Nut>
       </header>
 
       <nav className="app__nav">
         {nhom.map(([tenNhom, items]) => (
           <div key={tenNhom}>
-            <div className="app__nav-group">{tenNhom}</div>
+            <div className="app__nav-group">{t(tenNhom)}</div>
             {items.map((item) => (
               <button
                 key={item.id}
@@ -132,7 +147,7 @@ export function Shell(): ReactNode {
                 onClick={() => navigate(item.id)}
               >
                 <span aria-hidden>{item.bieuTuong}</span>
-                {item.nhan}
+                {t(item.nhan)}
               </button>
             ))}
           </div>

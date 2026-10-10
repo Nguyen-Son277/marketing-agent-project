@@ -750,6 +750,8 @@ a {
 /* ------------------------------------------------------------------ đăng nhập */
 
 .dang-nhap {
+  /* Cần `relative` để nút chuyển ngôn ngữ neo vào góc khung này thay vì góc trang. */
+  position: relative;
   min-height: 100vh;
   display: grid;
   place-items: center;
@@ -800,4 +802,43 @@ a {
     height: auto;
     min-height: 60vh;
   }
+}
+
+/* ---------------------------------------------- nút chuyển ngôn ngữ */
+/* Hai lựa chọn nằm trong một khối để nhìn ra ngay đang ở ngôn ngữ nào, thay vì phải
+   mở menu — chỉ có hai ngôn ngữ nên hiển thị cả hai là cách ít bước nhất. */
+.locale-switcher {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--mau-vien);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--mau-phu);
+}
+
+.locale-switcher__option {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  color: var(--mau-chu-mo);
+}
+
+.locale-switcher__option:hover {
+  color: var(--mau-chinh);
+}
+
+.locale-switcher__option.is-active {
+  background: var(--mau-chinh);
+  color: #fff;
+}
+
+.dang-nhap__ngon-ngu {
+  position: absolute;
+  top: 18px;
+  right: 18px;
 }
