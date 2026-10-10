@@ -1,3 +1,4 @@
+import { vi_clarify } from './vi/clarify.ts'
 import { vi_errors } from './vi/errors.ts'
 import { vi_chat } from './vi/chat.ts'
 import { vi_tasks } from './vi/tasks.ts'
@@ -183,6 +184,7 @@ export const vi = {
   /* ------------------------------------- chuỗi riêng từng màn hình */
   // Mỗi màn hình một file để nhiều người bổ sung song song mà không xung đột.
   ...vi_errors,
+  ...vi_clarify,
   ...vi_chat,
   ...vi_tasks,
   ...vi_team,

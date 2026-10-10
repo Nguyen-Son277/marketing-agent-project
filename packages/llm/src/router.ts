@@ -78,7 +78,12 @@ export class ModelRouter {
    * cấu hình để vòng lặp dừng với thông báo rõ ràng thay vì thử lại vô ích.
    */
   escalate(agent: ResolvedAgent, currentModelId: string): ModelChoice {
-    const next = this.candidateChain(agent).find((candidate) => candidate.model.id !== currentModelId)
+    const chain = this.candidateChain(agent)
+    const index = chain.findIndex((candidate) => candidate.model.id === currentModelId)
+    // Bình thường `current` nằm trong chuỗi nên lấy phần tử kế tiếp. Trường hợp model
+    // hiện tại do capability guard thay vào (không có trong chuỗi), lấy ứng viên đầu
+    // tiên khác nó.
+    const next = index >= 0 ? chain[index + 1] : chain.find((candidate) => candidate.model.id !== currentModelId)
     if (!next) {
       const current = this.registry.findModel(currentModelId)
       throw needsConfiguration(

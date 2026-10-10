@@ -142,8 +142,35 @@ export async function tenant(
   return { ownerCookie: owner.cookie, company }
 }
 
-/** Thêm một người dùng đã đăng ký vào công ty với vai trò cho trước. */
-export async function addMember(
+/**
+ * Cấu hình provider + model cho một công ty và gán model đó cho mọi agent.
+ *
+ * Seed không còn tạo provider/model/route, và router không tự chọn model, nên test nào
+ * chạy agent thật đều phải gọi hàm này — đúng thao tác người dùng làm trong Cài đặt.
+ */
+export function configureCompanyModel(
+  ctx: RoutesTestContext,
+  companyId: string,
+): { providerId: string; modelPk: string } {
+  const provider = ctx.repos.llm.createProvider({
+    companyId,
+    name: 'Provider test',
+    kind: 'openai_compatible',
+    baseUrl: 'http://127.0.0.1:1/v1',
+  })
+  const model = ctx.repos.llm.createModel({
+    providerId: provider.id,
+    modelId: 'test-model',
+    label: 'Test model',
+    supportsTools: true,
+  })
+  for (const preset of ctx.repos.team.listPresets(companyId)) {
+    ctx.repos.team.updatePreset(companyId, preset.agentDefId, { modelFk: model.id })
+  }
+  return { providerId: provider.id, modelPk: model.id }
+}
+
+/** Thêm một người dùng đã đăng ký vào công ty với vai trò cho trước. */export async function addMember(
   ctx: RoutesTestContext,
   companyId: string,
   email: string,

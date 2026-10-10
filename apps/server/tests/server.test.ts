@@ -155,7 +155,7 @@ describe('authentication', () => {
 })
 
 describe('companies', () => {
-  it('creates a company with presets, routes and an owner membership', async () => {
+  it('creates a company with presets and an owner membership, without auto-assigning models', async () => {
     const { cookie } = await register('owner@example.com', 'Chủ sở hữu')
     const created = await client.request('POST', '/api/companies', {
       body: { name: 'Công ty Ánh Dương' },
@@ -167,11 +167,25 @@ describe('companies', () => {
     expect(body.presets).toBe(10)
     expect(body.company.slug).toBe('cong-ty-anh-duong')
 
-    // Every agent resolves to a model immediately after creation.
+    // Chưa chọn model thì agent KHÔNG được gắn model nào; đây là chủ ý để người dùng
+    // tự khai báo nhà cung cấp và chọn model trong Cài đặt.
     for (const def of repos.team.listAgentDefs()) {
       const resolved = repos.team.resolveAgent(body.company.id, def.role)
-      expect(resolved.model, `${def.role} chưa có model`).not.toBeNull()
+      expect(resolved.model, `${def.role} không được tự gắn model`).toBeNull()
     }
+
+    // Sau khi cấu hình provider + model và gán cho preset, agent resolve được bình thường.
+    const provider = repos.llm.createProvider({
+      companyId: body.company.id,
+      name: 'Provider test',
+      kind: 'openai_compatible',
+      baseUrl: 'http://127.0.0.1:1/v1',
+    })
+    const model = repos.llm.createModel({ providerId: provider.id, modelId: 'm1', label: 'Model 1' })
+    repos.team.updatePreset(body.company.id, repos.team.findAgentDefByRole('content-writer')!.id, {
+      modelFk: model.id,
+    })
+    expect(repos.team.resolveAgent(body.company.id, 'content-writer').model?.id).toBe(model.id)
   })
 
   it('lists only the companies the caller belongs to', async () => {

@@ -58,12 +58,17 @@ export function buildApp(options: BuildAppOptions): App {
   })
 
   router.get('/readyz', (ctx) => {
+    // Sẵn sàng = catalog (định nghĩa agent + kỹ năng) đã cài. KHÔNG đòi model: từ khi
+    // nhà cung cấp/model do từng công ty khai trong Cài đặt, một hệ thống mới hợp lệ
+    // vẫn chưa có model nào.
     const agentDefs = repos.team.listAgentDefs().length
+    const skills = repos.team.listSkills().length
     const models = repos.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM llm_models WHERE enabled = 1')?.n ?? 0
-    const ready = agentDefs > 0 && models > 0
+    const ready = agentDefs > 0 && skills > 0
     ctx.json(ready ? 200 : 503, {
       status: ready ? 'ready' : 'not-ready',
       agentDefs,
+      skills,
       models,
       sseClients: context.events.subscriberCount(),
     })

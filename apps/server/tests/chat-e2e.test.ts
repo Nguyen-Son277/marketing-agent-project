@@ -10,7 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ChatAdapter } from '@marketing-agent/agent-runtime'
-import { createRoutesTestContext, tenant, type RoutesTestContext } from './helpers/routes-helpers.ts'
+import { createRoutesTestContext, tenant, configureCompanyModel, type RoutesTestContext } from './helpers/routes-helpers.ts'
 import { setAgentRuntimeOverrides } from '../src/services/agent-services.ts'
 
 /** Đúng bảng mà Leader phải trình bày; header khớp yêu cầu của orchestrator. */
@@ -77,6 +77,8 @@ describe('end-to-end: gửi tin → plan → run → report', () => {
     // Chốt brief trực tiếp trong kho dữ liệu: luồng hỏi-đáp từng bước là việc của
     // test chat; ở đây ta cần brief đã đủ để đo phần plan → run → report.
     ctx.repos.work.updateConversation(conversationId, company.id, { brief: BRIEF })
+    // Router không còn tự chọn model: cấu hình provider + model như người dùng làm.
+    configureCompanyModel(ctx, company.id)
     setAgentRuntimeOverrides(ctx.repos, { adapter: scriptedAdapter() })
 
     const message = await ctx.client.request('POST', `/api/conversations/${conversationId}/messages`, {

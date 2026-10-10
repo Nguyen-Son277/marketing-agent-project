@@ -335,8 +335,69 @@ describe('runAgent — lỗi nhà cung cấp', () => {
 
     expect(result.status).toBe('failed')
     expect(result.stopReason).toBe('model_error')
-    expect(router.escalations()).toBe(1)
+    // Router được hỏi lần hai để phát hiện đã hết model mới; cùng một model quay lại
+    // thì vòng lặp dừng ngay thay vì thử lại vô hạn.
+    expect(router.escalations()).toBe(2)
     expect(result.error).toContain('hỏng hoàn toàn')
+  })
+})
+
+describe('runAgent — xoay API key của cùng một model', () => {
+  it('khoá 1 lỗi thì tự dùng khoá 2, không đổi model', async () => {
+    const key1 = scriptedAdapter([
+      { error: new AppError('provider_error', 'khoá 1 hỏng', { details: { status: 401 } }) },
+    ])
+    const key2 = scriptedAdapter([textTurn('Trả lời bằng khoá 2.')])
+    const router = fakeRouter()
+    const meter = fakeMeter()
+    let adaptersForCalls = 0
+    const deps: AgentRuntimeDeps = {
+      router,
+      adapters: {
+        adapterFor: () => {
+          throw new Error('phải dùng adaptersFor khi có nhiều khoá')
+        },
+        adaptersFor: () => {
+          adaptersForCalls += 1
+          return [key1, key2]
+        },
+      },
+      meterFactory: meter.factory,
+    }
+
+    const result = await runAgent({ agent: buildResolvedAgent(), context: testContext(), tools: [] }, deps)
+
+    expect(result.status).toBe('succeeded')
+    expect(result.output).toContain('khoá 2')
+    expect(key1.requests).toHaveLength(1)
+    expect(key2.requests).toHaveLength(1)
+    // Xoay khoá không phải là đổi model: router không được hỏi.
+    expect(router.escalations()).toBe(0)
+    expect(adaptersForCalls).toBe(1)
+  })
+
+  it('hết cả hai khoá thì mới chuyển sang model dự phòng', async () => {
+    const fatal = new AppError('provider_error', 'hết khoá', { details: { status: 401 } })
+    const key1 = scriptedAdapter([{ error: fatal }])
+    const key2 = scriptedAdapter([{ error: fatal }])
+    const router = fakeRouter()
+    const meter = fakeMeter()
+    const deps: AgentRuntimeDeps = {
+      router,
+      adapters: {
+        adapterFor: () => {
+          throw new Error('phải dùng adaptersFor khi có nhiều khoá')
+        },
+        adaptersFor: () => [key1, key2],
+      },
+      meterFactory: meter.factory,
+    }
+
+    const result = await runAgent({ agent: buildResolvedAgent(), context: testContext(), tools: [] }, deps)
+
+    // Cả hai khoá đều hỏng -> router buộc phải được hỏi để đổi model.
+    expect(router.escalations()).toBeGreaterThanOrEqual(1)
+    expect(result.status).toBe('failed')
   })
 })
 

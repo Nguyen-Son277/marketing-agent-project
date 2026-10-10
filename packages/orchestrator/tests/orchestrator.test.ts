@@ -43,6 +43,23 @@ beforeEach(() => {
   repos = createRepos({ file: ':memory:', allowWeakSecret: true })
   seedCatalog(repos)
   companyId = seedCompany(repos, { companyName: 'Orchestrator Co' }).company.id
+  // Hệ thống không tự gắn model cho agent nữa, nên test phải chọn tường minh như
+  // người dùng: tạo một provider + model rồi gán cho mọi preset của công ty.
+  const provider = repos.llm.createProvider({
+    companyId,
+    name: 'Provider test',
+    kind: 'openai_compatible',
+    baseUrl: 'http://localhost:1/v1',
+  })
+  const model = repos.llm.createModel({
+    providerId: provider.id,
+    modelId: 'test-model',
+    label: 'Test model',
+    supportsTools: true,
+  })
+  for (const preset of repos.team.listPresets(companyId)) {
+    repos.team.updatePreset(companyId, preset.agentDefId, { modelFk: model.id })
+  }
   tempRoot = '/tmp/ma-orchestrator-test'
 })
 
