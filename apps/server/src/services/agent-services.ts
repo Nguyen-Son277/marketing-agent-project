@@ -208,28 +208,41 @@ export async function toolRegistryFor(ctx: AppContext): Promise<ToolRegistry | u
 }
 
 /**
- * Adapter HTTP tối thiểu để kiểm tra một provider `openai_compatible`.
- * Không dùng SDK: một lời gọi `GET /models` là đủ để biết khoá và địa chỉ có sống.
+ * Adapter HTTP tối thiểu để kiểm tra một provider và đọc danh sách model.
+ * Không dùng SDK: một lời gọi `GET /models` là đủ để biết khoá và địa chỉ có sống,
+ * và cũng là nguồn dữ liệu cho luồng "fetch model rồi chọn".
  */
 export async function probeProvider(input: {
   baseUrl: string
   apiKey?: string
   kind: string
   timeoutMs?: number
-}): Promise<{ ok: boolean; message: string; latencyMs: number; modelsSeen?: number }> {
+}): Promise<{
+  ok: boolean
+  message: string
+  latencyMs: number
+  modelsSeen?: number
+  models?: { modelId: string; label: string }[]
+}> {
   const started = Date.now()
   const url = `${input.baseUrl.replace(/\/+$/, '')}/models`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), input.timeoutMs ?? 8_000)
   try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}),
-      },
-      signal: controller.signal,
-    })
+    // Anthropic dùng `x-api-key` + version header, không dùng Bearer. Gửi sai kiểu
+    // header khiến khoá đúng vẫn bị từ chối 401, nên nhánh này phải tách rõ.
+    const headers: Record<string, string> =
+      input.kind === 'anthropic'
+        ? {
+            Accept: 'application/json',
+            'anthropic-version': '2023-06-01',
+            ...(input.apiKey ? { 'x-api-key': input.apiKey } : {}),
+          }
+        : {
+            Accept: 'application/json',
+            ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}),
+          }
+    const response = await fetch(url, { method: 'GET', headers, signal: controller.signal })
     const latencyMs = Date.now() - started
     if (!response.ok) {
       return {
@@ -238,18 +251,30 @@ export async function probeProvider(input: {
         latencyMs,
       }
     }
-    let modelsSeen: number | undefined
+    let models: { modelId: string; label: string }[] | undefined
     try {
       const payload = (await response.json()) as { data?: unknown }
-      modelsSeen = Array.isArray(payload.data) ? payload.data.length : undefined
+      if (Array.isArray(payload.data)) {
+        models = payload.data
+          .map((item): { modelId: string; label: string } | null => {
+            if (!item || typeof item !== 'object') return null
+            const record = item as { id?: unknown; name?: unknown }
+            const modelId = typeof record.id === 'string' ? record.id : undefined
+            if (!modelId) return null
+            const label = typeof record.name === 'string' && record.name.length > 0 ? record.name : modelId
+            return { modelId, label }
+          })
+          .filter((item): item is { modelId: string; label: string } => item !== null)
+      }
     } catch {
-      modelsSeen = undefined
+      models = undefined
     }
     return {
       ok: true,
-      message: modelsSeen === undefined ? 'Kết nối thành công.' : `Kết nối thành công, thấy ${modelsSeen} model.`,
+      message:
+        models === undefined ? 'Kết nối thành công.' : `Kết nối thành công, thấy ${models.length} model.`,
       latencyMs,
-      ...(modelsSeen === undefined ? {} : { modelsSeen }),
+      ...(models === undefined ? {} : { modelsSeen: models.length, models }),
     }
   } catch (error) {
     const latencyMs = Date.now() - started

@@ -357,13 +357,12 @@ describe('runAgent — ghép nối thật với repos', () => {
       defaultTools: ['kb_search'],
     })
     const provider = repos.llm.createProvider({
-      companyId: null,
+      companyId: 'c1',
       name: 'Gateway',
       kind: 'openai_compatible',
       baseUrl: 'http://localhost:20128/v1',
-      apiKeyRef: 'TEST_KEY',
     })
-    repos.llm.createModel({
+    const model = repos.llm.createModel({
       providerId: provider.id,
       modelId: 'test-model',
       label: 'Test model',
@@ -371,7 +370,8 @@ describe('runAgent — ghép nối thật với repos', () => {
       costInPerMtok: 1,
       costOutPerMtok: 2,
     })
-    repos.team.ensurePreset('c1', def.id, { tier: 'standard' })
+    // Hệ thống không tự gắn model cho agent: test cũng phải chọn tường minh như người dùng.
+    repos.team.ensurePreset('c1', def.id, { tier: 'standard', modelFk: model.id })
     const agent = repos.team.resolveAgent('c1', 'content-writer')
 
     const adapter = scriptedAdapter([

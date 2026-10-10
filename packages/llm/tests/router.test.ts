@@ -1,8 +1,9 @@
 /**
  * Test router trên SQLite thật.
  *
- * Trọng tâm: ba quy tắc chọn model (preset → route → rẻ nhất), capability guard khi
- * model không hỗ trợ tool, và nâng tier sau lỗi. Đây là các quyết định ảnh hưởng trực
+ * Trọng tâm: KHÔNG tự gắn model (chưa cấu hình thì báo lỗi cấu hình), thứ tự ưu tiên
+ * preset → route theo tier → model dự phòng, capability guard khi model không hỗ trợ
+ * tool, và chuyển model sau lỗi nhà cung cấp. Đây là các quyết định ảnh hưởng trực
  * tiếp tới chi phí và độ đúng, nên phải khoá bằng test.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -31,11 +32,10 @@ beforeEach(() => {
     defaultTools: ['kb_search'],
   })
   const provider = repos.llm.createProvider({
-    companyId: null,
+    companyId: 'c1',
     name: 'Gateway nội bộ',
     kind: 'openai_compatible',
     baseUrl: 'http://localhost:20128/v1',
-    apiKeyRef: 'TEST_KEY',
   })
   noToolsId = repos.llm.createModel({
     providerId: provider.id,
@@ -61,6 +61,7 @@ beforeEach(() => {
     costInPerMtok: 9,
     costOutPerMtok: 9,
   }).id
+  // Không gắn model: mỗi test tự chọn tường minh như người dùng làm trong Cài đặt.
   repos.team.ensurePreset('c1', def.id, { tier: 'standard' })
   agent = repos.team.resolveAgent('c1', 'content-writer')
   router = new ModelRouter(new ModelRegistry(repos.llm), repos.llm)
@@ -71,22 +72,14 @@ afterEach(() => {
 })
 
 describe('ModelRouter.chooseForAgent', () => {
-  it('giữ model rẻ nhất khi lượt chạy không cần công cụ', () => {
-    const choice = router.chooseForAgent(agent)
-    expect(choice.model.id).toBe(noToolsId)
-    expect(choice.source).toBe('cheapest')
+  it('báo lỗi cấu hình thay vì tự chọn một model cho agent', () => {
+    expect(() => router.chooseForAgent(agent)).toThrow(AppError)
+    expect(() => router.chooseForAgent(agent)).toThrow(/chưa được chọn model/i)
   })
 
-  it('capability guard đổi sang model cùng provider có hỗ trợ tool và ghi rõ lý do', () => {
-    const choice = router.chooseForAgent(agent, { needsTools: true })
-    expect(choice.model.id).toBe(withToolsId)
-    expect(choice.source).toBe('capability_guard')
-    expect(choice.model.supportsTools).toBe(true)
-    expect(choice.reason).toContain('không hỗ trợ công cụ')
-  })
-
-  it('ưu tiên model chỉ định trong preset hơn route và model rẻ nhất', () => {
+  it('ưu tiên model chỉ định trong preset hơn route', () => {
     repos.team.updatePreset('c1', agent.agentDef.id, { modelFk: deepId })
+    repos.llm.upsertRoute({ companyId: 'c1', agentDefId: agent.agentDef.id, tier: 'standard', modelFk: withToolsId })
     const updated = repos.team.resolveAgent('c1', 'content-writer')
     const choice = router.chooseForAgent(updated)
     expect(choice.model.id).toBe(deepId)
@@ -100,6 +93,24 @@ describe('ModelRouter.chooseForAgent', () => {
     expect(choice.source).toBe('route')
   })
 
+  it('capability guard đổi sang model cùng provider có hỗ trợ tool và ghi rõ lý do', () => {
+    repos.team.updatePreset('c1', agent.agentDef.id, { modelFk: noToolsId })
+    const updated = repos.team.resolveAgent('c1', 'content-writer')
+    const choice = router.chooseForAgent(updated, { needsTools: true })
+    expect(choice.model.supportsTools).toBe(true)
+    expect(choice.source).toBe('capability_guard')
+    expect(choice.reason).toContain('không hỗ trợ công cụ')
+  })
+
+  it('capability guard ưu tiên model dự phòng người dùng đã chọn', () => {
+    repos.team.updatePreset('c1', agent.agentDef.id, { modelFk: noToolsId })
+    repos.llm.setModelFallbacks('c1', agent.agentDef.id, [deepId])
+    const updated = repos.team.resolveAgent('c1', 'content-writer')
+    const choice = router.chooseForAgent(updated, { needsTools: true })
+    expect(choice.model.id).toBe(deepId)
+    expect(choice.source).toBe('capability_guard')
+  })
+
   it('báo lỗi cấu hình khi không có model nào hỗ trợ tool mà lượt chạy cần tool', () => {
     const repos2 = createTestRepos()
     createCompany(repos2, 'c2')
@@ -110,14 +121,18 @@ describe('ModelRouter.chooseForAgent', () => {
       systemPrompt: '# Vai trò',
     })
     const provider = repos2.llm.createProvider({
-      companyId: null,
+      companyId: 'c2',
       name: 'Gateway',
       kind: 'openai_compatible',
       baseUrl: 'http://localhost:20128/v1',
-      apiKeyRef: 'TEST_KEY',
     })
-    repos2.llm.createModel({ providerId: provider.id, modelId: 'chat-only', label: 'Chat-only', supportsTools: false })
-    repos2.team.ensurePreset('c2', def.id, { tier: 'standard' })
+    const chatOnly = repos2.llm.createModel({
+      providerId: provider.id,
+      modelId: 'chat-only',
+      label: 'Chat-only',
+      supportsTools: false,
+    })
+    repos2.team.ensurePreset('c2', def.id, { tier: 'standard', modelFk: chatOnly.id })
     const localRouter = new ModelRouter(new ModelRegistry(repos2.llm), repos2.llm)
     const localAgent = repos2.team.resolveAgent('c2', 'email-crm')
 
@@ -127,29 +142,34 @@ describe('ModelRouter.chooseForAgent', () => {
 })
 
 describe('ModelRouter.escalate', () => {
-  it('nâng từ tier light lên tier mạnh hơn sau lỗi nhà cung cấp', () => {
-    repos.llm.upsertRoute({ companyId: 'c1', agentDefId: agent.agentDef.id, tier: 'light', modelFk: withToolsId })
-    repos.team.updatePreset('c1', agent.agentDef.id, { tier: 'light', modelFk: null })
+  it('chuyển lần lượt qua các model dự phòng theo thứ tự đã cấu hình', () => {
+    repos.team.updatePreset('c1', agent.agentDef.id, { modelFk: noToolsId })
+    repos.llm.setModelFallbacks('c1', agent.agentDef.id, [withToolsId, deepId])
     const updated = repos.team.resolveAgent('c1', 'content-writer')
-    const first = router.chooseForAgent(updated, { needsTools: true })
-    expect(first.model.id).toBe(withToolsId)
 
-    const escalated = router.escalate(updated, first.model.id)
-    expect(escalated.source).toBe('escalation')
-    expect(escalated.tier).toBe('standard')
-    // Không có route tier standard nên lùi về model mạnh nhất còn dùng được.
-    expect(escalated.model.id).toBe(deepId)
-    expect(escalated.reason).toContain('Nâng từ tier light')
+    const second = router.escalate(updated, noToolsId)
+    expect(second.source).toBe('escalation')
+    expect(second.model.id).toBe(withToolsId)
+
+    const third = router.escalate(updated, withToolsId)
+    expect(third.model.id).toBe(deepId)
   })
 
-  it('giữ nguyên tier deep (cao nhất) và ghi rõ không thể nâng thêm', () => {
+  it('dùng route của tier cao hơn khi đã hết model dự phòng', () => {
+    repos.llm.upsertRoute({ companyId: 'c1', agentDefId: agent.agentDef.id, tier: 'light', modelFk: withToolsId })
     repos.llm.upsertRoute({ companyId: 'c1', agentDefId: agent.agentDef.id, tier: 'deep', modelFk: deepId })
-    repos.team.updatePreset('c1', agent.agentDef.id, { tier: 'deep', modelFk: null })
+    repos.team.updatePreset('c1', agent.agentDef.id, { tier: 'light', modelFk: withToolsId })
     const updated = repos.team.resolveAgent('c1', 'content-writer')
-    const escalated = router.escalate(updated, deepId)
+
+    const escalated = router.escalate(updated, withToolsId)
     expect(escalated.model.id).toBe(deepId)
-    expect(escalated.tier).toBe('deep')
-    expect(escalated.reason).toContain('cao nhất')
+    expect(escalated.source).toBe('escalation')
+  })
+
+  it('báo lỗi cấu hình khi không còn model nào để chuyển', () => {
+    repos.team.updatePreset('c1', agent.agentDef.id, { tier: 'deep', modelFk: deepId })
+    const updated = repos.team.resolveAgent('c1', 'content-writer')
+    expect(() => router.escalate(updated, deepId)).toThrow(/Không còn model dự phòng/)
   })
 
   it('nextTier đi đúng chuỗi light → standard → deep', () => {

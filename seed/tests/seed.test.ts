@@ -3,7 +3,6 @@ import { createRepos, type Repos } from '@marketing-agent/db'
 import { AGENT_ROLES, KB_CATEGORIES } from '@marketing-agent/shared'
 import { seedCatalog, seedCompany, expectedTierMatrix } from '../src/index.ts'
 import { SKILL_SEEDS } from '../src/skills.ts'
-import { PROVIDER_SEEDS } from '../src/providers.ts'
 import { DEMO_KB_DOCUMENTS } from '../src/knowledge.ts'
 
 let repos: Repos
@@ -33,11 +32,11 @@ describe('seedCatalog', () => {
     expect(repos.team.listSkills()).toHaveLength(SKILL_SEEDS.length)
   })
 
-  it('installs the provider and its models', () => {
-    const models = repos.llm.listModels('any-company')
-    expect(models.length).toBeGreaterThanOrEqual(5)
-    expect(models.map((m) => m.modelId)).toContain('deepseek-v4-flash')
-    expect(models.map((m) => m.modelId)).toContain('deepseek-v4-pro')
+  it('không tạo sẵn provider hay model nào', () => {
+    // Nhà cung cấp, khoá API và model do người dùng khai trong Cài đặt. Seed sẵn một
+    // provider trỏ tới biến môi trường từng là nguồn lỗi thật khi `.env` còn trống.
+    expect(repos.llm.listProviders('any-company', { includeDisabled: true })).toHaveLength(0)
+    expect(repos.llm.listModels('any-company', { includeDisabled: true })).toHaveLength(0)
   })
 
   it('is idempotent: re-seeding creates no duplicates', () => {
@@ -46,9 +45,7 @@ describe('seedCatalog', () => {
     seedCatalog(repos)
     expect(repos.team.listAgentDefs()).toHaveLength(first)
     expect(repos.team.listSkills()).toHaveLength(SKILL_SEEDS.length)
-    expect(repos.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM llm_providers')?.n).toBe(
-      PROVIDER_SEEDS.length,
-    )
+    expect(repos.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM llm_providers')?.n).toBe(0)
   })
 
   it('gives every definition at least one tool', () => {
@@ -111,29 +108,14 @@ describe('seedCompany', () => {
     expect(repos.team.canReadCategory(result.company.id, writer.id, '10-brand')).toBe(true)
   })
 
-  it('resolves every agent to a model and a provider', () => {
+  it('để agent chưa có model cho tới khi người dùng chọn trong Cài đặt', () => {
     const result = seedCompany(repos, { companyName: 'Công ty Thử' })
     for (const def of repos.team.listAgentDefs()) {
       const resolved = repos.team.resolveAgent(result.company.id, def.role)
-      expect(resolved.model, `${def.role} không resolve được model`).not.toBeNull()
-      expect(resolved.provider, `${def.role} không resolve được provider`).not.toBeNull()
+      expect(resolved.model, `${def.role} không được tự gắn model`).toBeNull()
+      expect(resolved.provider).toBeNull()
       expect(resolved.toolNames.length).toBeGreaterThan(0)
     }
-  })
-
-  it('routes the leader to the pro model and the specialists to flash', () => {
-    const result = seedCompany(repos, { companyName: 'Công ty Thử' })
-    const leader = repos.team.resolveAgent(result.company.id, 'marketing-leader')
-    const social = repos.team.resolveAgent(result.company.id, 'social-media')
-    expect(leader.model?.modelId).toBe('deepseek-v4-pro')
-    expect(social.model?.modelId).toBe('deepseek-v4-flash')
-  })
-
-  it('creates exactly one tier route per role and tier', () => {
-    const result = seedCompany(repos, { companyName: 'Công ty Thử' })
-    const routes = repos.llm.listRoutes(result.company.id)
-    const keys = new Set(routes.map((r) => `${r.agentDefId}:${r.tier}`))
-    expect(keys.size).toBe(routes.length)
   })
 
   it('is idempotent: re-seeding does not duplicate presets, routes or ACLs', () => {
@@ -141,7 +123,7 @@ describe('seedCompany', () => {
     const second = seedCompany(repos, { companyName: 'Công ty Thử', withDemoKnowledge: true })
     expect(second.company.id).toBe(first.company.id)
     expect(repos.team.listPresets(first.company.id)).toHaveLength(AGENT_ROLES.length)
-    expect(repos.llm.listRoutes(first.company.id).length).toBe(first.routes)
+    expect(repos.llm.listRoutes(first.company.id)).toHaveLength(0)
     expect(second.documents).toBe(0)
     expect(repos.knowledge.listDocuments(first.company.id)).toHaveLength(DEMO_KB_DOCUMENTS.length)
   })

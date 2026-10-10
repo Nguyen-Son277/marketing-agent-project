@@ -22,7 +22,6 @@ beforeEach(() => {
     name: 'Gateway',
     kind: 'openai_compatible',
     baseUrl: 'http://localhost:20128/v1',
-    apiKeyRef: 'TEST_KEY',
   })
   model = repos.llm.createModel({
     providerId: provider.id,

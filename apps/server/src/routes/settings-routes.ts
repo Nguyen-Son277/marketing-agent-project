@@ -6,10 +6,10 @@
  * phí và tới dữ liệu gửi ra ngoài của cả công ty. Một thành viên thường đổi được
  * model hay thêm khoá API là thay đổi ngoài thẩm quyền của họ.
  *
- * Quy tắc fail closed cho tài nguyên toàn cục: provider/model được seed là của
- * TOÀN HỆ THỐNG (`company_id IS NULL`). Công ty chỉ được sửa tài nguyên do chính
- * mình tạo; sửa tài nguyên toàn cục từ route của một công ty sẽ ảnh hưởng mọi
- * công ty khác, nên bị trả 404 như thể không tồn tại.
+ * Quy tắc fail closed cho tài nguyên toàn cục: một provider `company_id IS NULL` là
+ * của toàn hệ thống. Công ty chỉ được sửa tài nguyên do chính mình tạo; sửa tài
+ * nguyên toàn cục từ route của một công ty sẽ ảnh hưởng mọi công ty khác, nên bị trả
+ * 404 như thể không tồn tại. (Từ migration 0008 không còn provider nào được seed.)
  */
 import { z } from 'zod'
 import {
@@ -45,7 +45,7 @@ import type {
 import type { LlmProviderKeyRecord, LlmProviderRecord } from '@marketing-agent/shared'
 import type { AppContext } from '../context.ts'
 import { requireManage, requireMembership } from '../http/middleware.ts'
-import type { RequestContext, Router } from '../http/router.ts'
+import type { Router } from '../http/router.ts'
 import { invalidateOrchestrators, probeProvider } from '../services/agent-services.ts'
 import { readLimitsView, saveLimits } from '../services/company-settings.ts'
 import { toIntegrationView, toModelOptionView, toModelRouteView, toProviderView } from '../services/view-mappers.ts'
@@ -593,17 +593,60 @@ function normalizeProviderBody(body: unknown): unknown {
   return record
 }
 
-function providerHint(repos: AppContext['repos'], providerId: string): string | null {
-  const row = repos.db.get<{ api_key_hint: string | null }>(
-    'SELECT api_key_hint FROM llm_providers WHERE id = ?',
-    [providerId],
-  )
-  return row?.api_key_hint ?? null
+function toProviderKeyView(key: LlmProviderKeyRecord): ProviderKeyView {
+  return { id: key.id, label: key.label, hint: key.hint, priority: key.priority, enabled: key.enabled }
+}
+
+function providerKeyViews(repos: AppContext['repos'], provider: LlmProviderRecord): ProviderKeyView[] {
+  return repos.llm.listProviderKeys(provider.id, { includeDisabled: true }).map(toProviderKeyView)
 }
 
 function providerView(repos: AppContext['repos'], companyId: string, provider: LlmProviderRecord): ProviderView {
-  const models = repos.llm.listModels(companyId, { includeDisabled: true }).filter((model) => model.providerId === provider.id)
-  return toProviderView(provider, providerHint(repos, provider.id), models, new Map([[provider.id, provider.name]]))
+  const models = repos.llm
+    .listModels(companyId, { includeDisabled: true })
+    .filter((model) => model.providerId === provider.id)
+  return toProviderView(
+    provider,
+    repos.llm.listProviderKeys(provider.id, { includeDisabled: true }),
+    models,
+    new Map([[provider.id, provider.name]]),
+    repos.llm.modelUsage(companyId),
+  )
+}
+
+/** Khoá phải thuộc đúng provider đang thao tác; khoá của provider khác coi như không có. */
+function requireOwnedKey(
+  repos: AppContext['repos'],
+  provider: LlmProviderRecord,
+  keyId: string,
+): LlmProviderKeyRecord {
+  const key = repos.llm.findProviderKey(keyId)
+  if (!key || key.providerId !== provider.id) throw notFound('Không tìm thấy khoá API')
+  return key
+}
+
+/** Giá trị khoá đã giải mã của một id, dùng cho bước kiểm tra và fetch model. */
+function resolveKeyValue(repos: AppContext['repos'], keyId: string): string {
+  const key = repos.llm.requireProviderKey(keyId)
+  const provider = repos.llm.requireProvider(key.providerId)
+  return repos.llm.resolveProviderKeys(provider).find((item) => item.id === keyId)?.apiKey ?? ''
+}
+
+/**
+ * Khoá để gọi thử khi không chỉ định: khoá đang bật có priority nhỏ nhất. Provider
+ * không có khoá nào vẫn hợp lệ (gateway nội bộ) nên trả về object rỗng.
+ */
+function resolveProbeKey(
+  repos: AppContext['repos'],
+  provider: LlmProviderRecord,
+  keyId?: string,
+): { apiKey?: string } {
+  if (keyId) {
+    const key = requireOwnedKey(repos, provider, keyId)
+    return { apiKey: resolveKeyValue(repos, key.id) }
+  }
+  const first = repos.llm.resolveProviderKeys(provider)[0]
+  return first ? { apiKey: first.apiKey } : {}
 }
 
 /** Provider phải do chính công ty tạo; provider toàn cục coi như không tồn tại. */

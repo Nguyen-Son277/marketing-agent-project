@@ -36,9 +36,12 @@ export function teamRoutes() {
               .listProviders(companyId, { includeDisabled: true })
               .map((provider) => [provider.id, provider.name]),
           )
+          const usage = repos.llm.modelUsage(companyId)
           const models = repos.llm.listModels(companyId).map((model) => ({
-            ...toModelOptionView(model),
-            providerName: providerNames.get(model.providerId) ?? '',
+            ...toModelOptionView(model, {
+              providerName: providerNames.get(model.providerId) ?? '',
+              usedByAgentCount: usage.get(model.id) ?? 0,
+            }),
           }))
           const tools = await listToolDescriptors(ctx)
 
@@ -84,6 +87,20 @@ export function teamRoutes() {
           })
           if (input.skills !== undefined) repos.team.setPresetSkills(preset.id, companyId, input.skills)
           if (input.tools !== undefined) repos.team.setPresetTools(preset.id, companyId, input.tools)
+          if (input.fallbackModelFks !== undefined) {
+            // Mọi model dự phòng phải thuộc công ty này; nếu không, một id gõ sai sẽ
+            // nằm im trong DB và chỉ lộ ra khi model chính hỏng.
+            const unique = [...new Set(input.fallbackModelFks)]
+            for (const modelFk of unique) {
+              const model = repos.llm.findModel(modelFk)
+              if (!model) throw notFound(`Không tìm thấy model dự phòng ${modelFk}`)
+              const provider = repos.llm.findProvider(model.providerId)
+              if (!provider || provider.companyId !== companyId) {
+                throw notFound(`Model dự phòng ${model.label} không thuộc công ty này`)
+              }
+            }
+            repos.llm.setModelFallbacks(companyId, def.id, unique)
+          }
           if (input.knowledge !== undefined) {
             repos.team.setKnowledgeAcl(
               companyId,

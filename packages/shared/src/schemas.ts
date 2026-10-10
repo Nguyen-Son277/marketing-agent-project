@@ -72,7 +72,7 @@ export const updateProviderSchema = z.object({
 export type UpdateProviderInput = z.infer<typeof updateProviderSchema>
 
 export const createProviderKeySchema = z.object({
-  label: z.string().trim().min(1).max(80).default('Key'),
+  label: z.string().trim().min(1, 'Cần nhãn cho khoá').max(80),
   apiKey: z.string().trim().min(1).max(500),
   /** Số nhỏ dùng trước. Khoá đầu tiên nên là 100, khoá dự phòng 200, 300, … */
   priority: z.number().int().min(0).max(10_000).default(100),
