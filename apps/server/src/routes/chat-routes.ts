@@ -60,7 +60,11 @@ export function chatRoutes() {
           const companyId = request.params.companyId!
           const input = parseOrThrow(createConversationSchema, await request.body(), 'cuộc trao đổi')
           const userId = readAuth(request)!.user.id
-          const conversation = repos.work.createConversation({ companyId, userId, title: input.title })
+          const conversation = repos.work.createConversation({
+            companyId,
+            userId,
+            title: input.title ?? 'Cuộc trao đổi mới',
+          })
           repos.accounting.audit({ companyId, userId, action: 'conversation.create', target: conversation.id })
           request.json(201, { conversation: toConversationView(conversation, 0) })
         },

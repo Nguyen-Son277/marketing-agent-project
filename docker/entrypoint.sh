@@ -23,13 +23,26 @@ require_env() {
   fi
 }
 
-# Catalog rỗng hay chưa? Đọc thẳng bằng node để không phụ thuộc công cụ ngoài.
+# Catalog rỗng hay chưa?
+#
+# Vì sao không dùng `import Database from "better-sqlite3"` trực tiếp: pnpm không
+# hoist dependency native lên node_modules gốc, nên module này chỉ phân giải được
+# TỪ TRONG package sở hữu nó. `createRequire` trỏ vào thư mục package là cách phân
+# giải đúng, và đó là lý do script phải chạy trong /app.
 catalog_trong() {
   node --input-type=module -e '
-    import Database from "better-sqlite3";
+    import { createRequire } from "node:module";
     import { existsSync } from "node:fs";
     const file = process.env.DATABASE_PATH ?? "data/marketing.db";
     if (!existsSync(file)) { console.log("empty"); process.exit(0); }
+    let Database;
+    try {
+      Database = createRequire("/app/packages/db/")("better-sqlite3");
+    } catch (error) {
+      console.error("không nạp được better-sqlite3:", error.message);
+      console.log("empty");
+      process.exit(0);
+    }
     try {
       const db = new Database(file, { readonly: true });
       const row = db.prepare("SELECT COUNT(*) AS n FROM agent_defs").get();
@@ -60,6 +73,7 @@ index_moi_cong_ty() {
   for dir in "${COMPANIES_ROOT:-/data/companies}"/*/; do
     [ -d "$dir" ] || continue
     slug="$(basename "$dir")"
+    [ -d "$dir/kb" ] || { log "bỏ qua $slug: chưa có thư mục kb"; continue; }
     log "index kho kiến thức: $slug"
     pnpm kb:index --company "$slug" --root "$dir/kb" || log "cảnh báo: index $slug thất bại, bỏ qua"
   done

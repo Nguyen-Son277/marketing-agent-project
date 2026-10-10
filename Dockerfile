@@ -48,7 +48,7 @@ COPY . .
 
 # Build giao diện (sinh apps/web/dist) rồi bỏ devDependencies của workspace web.
 RUN pnpm --filter @marketing-agent/web build \
- && pnpm prune --prod --store-dir /pnpm-store
+ && pnpm prune --prod
 
 # ------------------------------------------------------------- giai đoạn runtime
 FROM node:22-bookworm-slim AS runtime
@@ -78,7 +78,9 @@ COPY --from=builder /app/apps ./apps
 COPY --from=builder /app/seed ./seed
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN chmod +x /usr/local/bin/entrypoint.sh \
+# chmod ở đây là bắt buộc: COPY giữ nguyên mode từ build context, và bit thực thi
+# của tệp trong git không đáng tin trên mọi hệ thống checkout.
+RUN chmod 0755 /usr/local/bin/entrypoint.sh \
  && mkdir -p /data/companies \
  && chown -R node:node /app /data
 
