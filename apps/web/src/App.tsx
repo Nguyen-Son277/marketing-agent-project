@@ -6,6 +6,7 @@
  */
 import type { ReactNode } from 'react'
 import { useSession } from './lib/session.tsx'
+import { useI18n } from './lib/i18n.tsx'
 import { DangTai } from './components/ui.tsx'
 import { DangNhapScreen } from './screens/DangNhap.tsx'
 import { ChonCongTyScreen } from './screens/ChonCongTy.tsx'
@@ -13,13 +14,14 @@ import { Shell } from './Shell.tsx'
 
 export function App(): ReactNode {
   const { user, company, ready, loading } = useSession()
+  const { t } = useI18n()
 
   if (!ready || (loading && !user)) {
     return (
       <div className="dang-nhap">
         <div className="dang-nhap__hop">
-          <h1 className="dang-nhap__tieude">Đội Agent Marketing</h1>
-          <DangTai nhan="Đang kiểm tra phiên đăng nhập…" />
+          <h1 className="dang-nhap__tieude">{t('auth.title')}</h1>
+          <DangTai nhan={t('common.sessionChecking')} />
         </div>
       </div>
     )

@@ -6,6 +6,7 @@
  * có `code` đọc được, và dịch 401 thành tín hiệu "cần đăng nhập". Làm một chỗ thì
  * không có màn hình nào lỡ quên.
  */
+import { readLocale } from './locale-store.ts'
 import type {
   ArtifactView,
   CompanySummary,
@@ -47,13 +48,33 @@ export class ApiError extends Error {
   readonly status: number
   readonly code: string
   readonly details: unknown
+  /**
+   * Khoá dịch của lỗi, nếu backend cung cấp.
+   *
+   * Vì sao giữ lại: `message` đã được backend dịch theo `Accept-Language` lúc gọi, nhưng
+   * người dùng có thể đổi ngôn ngữ SAU đó. Có khoá thì giao diện dịch lại theo ngôn ngữ
+   * đang chọn, nên thông báo lỗi luôn khớp với phần còn lại của màn hình.
+   */
+  readonly messageKey: string | undefined
+  readonly messageParams: Record<string, string | number> | undefined
+  /** Câu gốc từ backend, giữ để hiển thị khi chưa có khoá hoặc chưa có bản dịch. */
+  readonly fallbackMessage: string
 
-  constructor(status: number, code: string, message: string, details?: unknown) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: unknown,
+    extras: { messageKey?: string; messageParams?: Record<string, string | number> } = {},
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.details = details
+    this.fallbackMessage = message
+    this.messageKey = extras.messageKey
+    this.messageParams = extras.messageParams
   }
 
   /** Chưa đăng nhập hoặc phiên hết hạn. */
@@ -92,13 +113,20 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | undefined)
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  // `Accept-Language` gửi theo ngôn ngữ đang chọn để backend dịch thông báo lỗi ngay
+  // trong phản hồi. Giao diện vẫn dịch lại theo `messageKey` nếu có, nên thông báo
+  // đúng ngôn ngữ kể cả khi người dùng đổi ngôn ngữ sau lúc gọi.
+  const baseHeaders = {
+    Accept: 'application/json',
+    'Accept-Language': readLocale(),
+  }
   const response = await fetch(path, {
     method: options.method ?? 'GET',
     credentials: 'same-origin',
-    headers: options.body === undefined ? { Accept: 'application/json' } : {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
+    headers:
+      options.body === undefined
+        ? baseHeaders
+        : { ...baseHeaders, 'Content-Type': 'application/json' },
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     ...(options.signal ? { signal: options.signal } : {}),
   })
@@ -126,6 +154,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       error?.code ?? 'unknown',
       error?.message ?? `Yêu cầu thất bại (HTTP ${response.status})`,
       error?.details,
+      {
+        ...(error?.messageKey ? { messageKey: error.messageKey } : {}),
+        ...(error?.messageParams ? { messageParams: error.messageParams } : {}),
+      },
     )
   }
 
@@ -222,8 +254,21 @@ export const api = {
     return request(`/api/companies/${companyId}/conversations`)
   },
 
-  async createConversation(companyId: string, title: string): Promise<{ conversation: ConversationView }> {
-    return request(`/api/companies/${companyId}/conversations`, { method: 'POST', body: { title } })
+  /**
+   * Tạo cuộc trao đổi mới.
+   *
+   * Ngôn ngữ mặc định lấy từ ngôn ngữ giao diện đang chọn, nên phiên mới đã đúng ngôn
+   * ngữ ngay mà nơi gọi không phải truyền. Truyền tường minh khi cần khác (ví dụ tạo hộ).
+   */
+  async createConversation(
+    companyId: string,
+    title: string,
+    language?: 'vi' | 'en',
+  ): Promise<{ conversation: ConversationView }> {
+    return request(`/api/companies/${companyId}/conversations`, {
+      method: 'POST',
+      body: { title, language: language ?? readLocale() },
+    })
   },
 
   async conversation(conversationId: string): Promise<ConversationDetailResponse> {

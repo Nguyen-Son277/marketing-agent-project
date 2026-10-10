@@ -409,4 +409,19 @@ CREATE TABLE app_settings (
 );
 `,
   },
+  {
+    id: '0007_conversation_language',
+    sql: `
+-- Ngôn ngữ của cuộc trao đổi, quyết định ngôn ngữ mà agent trả lời.
+--
+-- Vì sao lưu ở PHIÊN chứ không ở người dùng hay công ty: báo cáo và kế hoạch đã tạo
+-- phải giữ nguyên ngôn ngữ lúc tạo. Nếu lưu ở người dùng thì người đổi ngôn ngữ giao
+-- diện sẽ vô tình đổi ngôn ngữ của cả những báo cáo cũ khi chạy lại, và hai báo cáo
+-- trong cùng một công ty sẽ lẫn ngôn ngữ nhau.
+--
+-- Mặc định 'vi' để mọi hàng đã có giữ nguyên hành vi cũ.
+ALTER TABLE conversations ADD COLUMN language TEXT NOT NULL DEFAULT 'vi';
+CREATE INDEX idx_conversations_language ON conversations(language);
+`,
+  },
 ]

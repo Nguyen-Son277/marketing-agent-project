@@ -18,43 +18,22 @@ import {
   DEFAULT_LOCALE,
   LOCALE_CAPABILITIES,
   isLocale,
-  normalizeLocaleTag,
   vi,
   en,
   type Locale,
   type MessageKey,
   type MessageParams,
 } from '@marketing-agent/i18n'
+import { applyDocumentLang as applyLang, readLocale, writeLocale } from './locale-store.ts'
+import { ApiError } from './api.ts'
 
-/** Khoá lưu lựa chọn trong `localStorage`; có tiền tố để không đụng khoá khác. */
-const STORAGE_KEY = 'ma.locale'
-
-/**
- * Lấy ngôn ngữ ban đầu: lựa chọn đã lưu trước, rồi tới ngôn ngữ trình duyệt.
- *
- * Thứ tự này quan trọng: nếu đảo lại thì mỗi lần mở trang, trình duyệt sẽ ghi đè lựa
- * chọn người dùng đã đặt, và nút chuyển ngôn ngữ trở nên vô dụng.
- */
-function initialLocale(): Locale {
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY)
-    if (stored && isLocale(stored)) return stored
-  } catch {
-    // Trình duyệt chặn localStorage (chế độ riêng tư của một số bản) — vẫn phải chạy.
-  }
-  for (const candidate of window.navigator.languages ?? []) {
-    const normalized = normalizeLocaleTag(candidate)
-    if (normalized) return normalized
-  }
-  const single = normalizeLocaleTag(window.navigator.language ?? '')
-  return single ?? DEFAULT_LOCALE
-}
+export { applyLang as applyDocumentLang }
 
 /** Khởi tạo một instance i18next riêng cho giao diện. */
 export function createWebI18n(): I18nInstance {
   const instance = i18next.createInstance()
   void instance.use(initReactI18next).init({
-    lng: initialLocale(),
+    lng: readLocale(),
     fallbackLng: DEFAULT_LOCALE,
     resources: { vi: { translation: vi }, en: { translation: en } },
     interpolation: { escapeValue: false },
@@ -63,11 +42,6 @@ export function createWebI18n(): I18nInstance {
     debug: false,
   })
   return instance
-}
-
-/** Đặt thuộc tính `lang` của thẻ `<html>` để trình đọc màn hình và CSS biết ngôn ngữ. */
-export function applyDocumentLang(locale: Locale): void {
-  document.documentElement.lang = LOCALE_CAPABILITIES[locale].htmlLang
 }
 
 export function I18nProvider({ instance, children }: { instance: I18nInstance; children: ReactNode }) {
@@ -85,6 +59,7 @@ export function useI18n(): {
   t: (key: MessageKey, params?: MessageParams) => string
   locale: Locale
   setLocale: (locale: Locale) => void
+  translateError: (error: unknown) => string
   formatDate: (value: Date | string | number) => string
   formatDateTime: (value: Date | string | number) => string
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string
@@ -96,12 +71,11 @@ export function useI18n(): {
   const setLocale = useCallback(
     (next: Locale) => {
       void instance.changeLanguage(next)
-      applyDocumentLang(next)
-      try {
-        window.localStorage.setItem(STORAGE_KEY, next)
-      } catch {
-        // Không lưu được thì ngôn ngữ vẫn đổi cho phiên hiện tại.
-      }
+      // Ghi qua `locale-store` để `lib/api.ts` cũng thấy ngôn ngữ mới cho các yêu cầu
+      // tiếp theo — nếu chỉ đổi trong React thì header `Accept-Language` sẽ vẫn là
+      // ngôn ngữ cũ và thông báo lỗi trả về sai ngôn ngữ.
+      applyLang(next)
+      writeLocale(next)
     },
     [instance],
   )
@@ -115,6 +89,27 @@ export function useI18n(): {
       },
       locale,
       setLocale,
+      /**
+       * Dịch một lỗi bất kỳ thành câu hiển thị được, theo ngôn ngữ đang chọn.
+       *
+       * Vì sao cần hàm này thay vì dùng thẳng `error.message`: backend đã dịch theo
+       * `Accept-Language` lúc gọi, nhưng người dùng có thể đổi ngôn ngữ sau đó. Có
+       * `messageKey` thì dịch lại cho khớp màn hình; không có thì dùng câu backend trả
+       * về, và nếu khoá lạ thì vẫn có câu dự phòng — không bao giờ trắng chữ.
+       */
+      translateError: (error) => {
+        const key = error instanceof ApiError ? error.messageKey : undefined
+        if (key) {
+          const params = error instanceof ApiError ? error.messageParams : undefined
+          const translated = params ? rawT(key as never, params) : rawT(key as never)
+          if (typeof translated === 'string' && translated !== key) return translated
+        }
+        if (error instanceof ApiError && error.fallbackMessage.trim().length > 0) {
+          return error.fallbackMessage
+        }
+        if (error instanceof Error && error.message.trim().length > 0) return error.message
+        return rawT('common.unexpectedError')
+      },
       formatDate: (value) => {
         const date = value instanceof Date ? value : new Date(value)
         if (Number.isNaN(date.getTime())) return '—'

@@ -174,6 +174,11 @@ export const vi = {
   'dashboard.viewTasks': 'Xem công việc',
   'dashboard.viewTasksHint': 'Bấm “Xem công việc” để mở bảng kanban đầy đủ.',
   'dashboard.finishSetup': 'Vào mục “Cài đặt” để hoàn tất cấu hình trước khi dùng màn hình này.',
+  'dashboard.costLimits': 'Trần chi phí mỗi ngày: {{limit}} · 30 ngày qua: {{last30}}',
+  'dashboard.costUsedPercent': 'Đã dùng {{percent}}% trần ngày',
+  'dashboard.costCapReached': 'Đã chạm trần chi phí ngày. Các lượt chạy mới sẽ bị dừng cho tới khi trần được nâng ở mục “Cài đặt”.',
+  'dashboard.noActivity': 'Chưa có hoạt động nào. Hãy bắt đầu bằng một cuộc trao đổi với Leader.',
+  'dashboard.systemNotReadyTitle': 'Hệ thống chưa sẵn sàng:',
 
   /* ------------------------------------- chuỗi riêng từng màn hình */
   // Mỗi màn hình một file để nhiều người bổ sung song song mà không xung đột.

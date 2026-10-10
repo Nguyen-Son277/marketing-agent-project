@@ -8,9 +8,11 @@
  * lỗi im lặng khiến agent trả lời thiếu ngữ cảnh mà không ai biết.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { MessageKey } from '@marketing-agent/i18n'
 import type { KnowledgeDocumentView, KnowledgeResponse, ReindexResponse } from '@marketing-agent/shared'
 import { KB_CATEGORIES } from '@marketing-agent/shared'
 import { api, ApiError } from '../lib/api.ts'
+import { useI18n } from '../lib/i18n.tsx'
 import { Markdown } from '../components/Markdown.tsx'
 import {
   Card,
@@ -25,8 +27,6 @@ import {
   TieuDeTrang,
   Trang,
   Trong,
-  soNguyen,
-  thoiDiem,
 } from '../components/ui.tsx'
 
 interface BieuMau {
@@ -37,28 +37,56 @@ interface BieuMau {
   content: string
 }
 
-const BIEU_MAU_RONG: BieuMau = {
-  path: '',
-  title: '',
-  category: KB_CATEGORIES[0].code,
-  tags: '',
-  content: '# Tiêu đề\n\nNội dung…\n',
+/**
+ * Bảng tường minh mã danh mục → khoá dịch thay vì ghép `kbCategory.${code}`: khoá là
+ * union literal nên ghép chuỗi sẽ mất kiểm tra của TypeScript và lọt khoá sai tới runtime.
+ */
+const KHOA_DANH_MUC: Readonly<Record<string, MessageKey>> = {
+  '00-cong-ty': 'kbCategory.00-cong-ty',
+  '10-brand': 'kbCategory.10-brand',
+  '20-thi-truong': 'kbCategory.20-thi-truong',
+  '30-kenh': 'kbCategory.30-kenh',
+  '40-du-lieu': 'kbCategory.40-du-lieu',
+  '90-ket-qua': 'kbCategory.90-ket-qua',
+}
+
+/**
+ * Bản nháp trống. Vì sao là hàm nhận `t` chứ không phải hằng số cấp module: nội dung
+ * Markdown mẫu là câu giao diện tự viết, phải đổi theo ngôn ngữ đang chọn.
+ */
+function taoBieuMauRong(t: (key: MessageKey) => string): BieuMau {
+  return {
+    path: '',
+    title: '',
+    category: KB_CATEGORIES[0].code,
+    tags: '',
+    content: t('knowledge.sampleContent'),
+  }
+}
+
+/**
+ * Nhãn danh mục. Mã lạ ngoài danh mục chuẩn là DỮ LIỆU do backend trả về nên giữ
+ * nguyên mã, không bịa nhãn dịch cho nó.
+ */
+function nhanDanhMuc(code: string, t: (key: MessageKey) => string): string {
+  const khoa = KHOA_DANH_MUC[code]
+  return khoa ? t(khoa) : code
 }
 
 function LoiManHinh({ loi }: { loi: ApiError }): ReactNode {
+  const { t } = useI18n()
   return (
     <ThongBao loai="loi">
       {loi.message}
-      {loi.needsConfiguration ? ' Vào mục “Cài đặt” để hoàn tất cấu hình trước khi dùng màn hình này.' : null}
+      {loi.needsConfiguration ? ` ${t('knowledge.finishSetup')}` : null}
     </ThongBao>
   )
 }
 
-function nhanDanhMuc(code: string): string {
-  return KB_CATEGORIES.find((danhMuc) => danhMuc.code === code)?.label ?? code
-}
-
 export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
+  // `locale` dùng cho việc sắp xếp tên tài liệu: thứ tự chữ cái phải theo ngôn ngữ
+  // đang xem, không phải luôn luôn là tiếng Việt.
+  const { t, locale, formatNumber, formatDateTime } = useI18n()
   const [duLieu, setDuLieu] = useState<KnowledgeResponse | null>(null)
   const [dangTai, setDangTai] = useState(true)
   const [loi, setLoi] = useState<ApiError | null>(null)
@@ -67,7 +95,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   const [tuKhoa, setTuKhoa] = useState('')
   const [danhMucDangXem, setDanhMucDangXem] = useState<string>('tat-ca')
   const [chonId, setChonId] = useState<string | null>(null)
-  const [bieuMau, setBieuMau] = useState<BieuMau>(BIEU_MAU_RONG)
+  const [bieuMau, setBieuMau] = useState<BieuMau>(() => taoBieuMauRong(t))
   const [dangTaoMoi, setDangTaoMoi] = useState(false)
 
   const [dangLuu, setDangLuu] = useState(false)
@@ -89,7 +117,9 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', 'Không kết nối được máy chủ.'))
+        // Câu lỗi mạng do giao diện tự viết nên phải nằm trong catalog; lỗi từ backend
+        // thì `ApiError.message` đã được backend dịch theo ngôn ngữ gửi lên.
+        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', t('common.cannotConnectServer')))
       })
       .finally(() => {
         if (!cancelled) setDangTai(false)
@@ -97,7 +127,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     return () => {
       cancelled = true
     }
-  }, [companyId, lanThu])
+  }, [companyId, lanThu, t])
 
   const taiLai = useCallback(() => setLanThu((lan) => lan + 1), [])
 
@@ -121,19 +151,19 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     return [...nhom.entries()]
       .map(([code, danhSach]) => ({
         code,
-        label: nhanDanhMuc(code),
-        danhSach: [...danhSach].sort((a, b) => a.title.localeCompare(b.title, 'vi')),
+        label: nhanDanhMuc(code, t),
+        danhSach: [...danhSach].sort((a, b) => a.title.localeCompare(b.title, locale)),
       }))
       .sort((a, b) => a.code.localeCompare(b.code))
-  }, [duLieu, tuKhoa, danhMucDangXem])
+  }, [duLieu, tuKhoa, danhMucDangXem, t, locale])
 
   const soTaiLieuHienThi = taiLieuTheoDanhMuc.reduce((tong, nhom) => tong + nhom.danhSach.length, 0)
 
   const danhMucOptions = useMemo(() => {
     const co = new Set<string>(KB_CATEGORIES.map((danhMuc) => danhMuc.code))
     for (const danhMuc of duLieu?.categories ?? []) co.add(danhMuc.code)
-    return [...co].sort().map((code) => ({ value: code, label: `${nhanDanhMuc(code)} (${code})` }))
-  }, [duLieu])
+    return [...co].sort().map((code) => ({ value: code, label: `${nhanDanhMuc(code, t)} (${code})` }))
+  }, [duLieu, t])
 
   function chonTaiLieu(taiLieu: KnowledgeDocumentView): void {
     setChonId(taiLieu.id)
@@ -154,14 +184,14 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     setDangTaoMoi(true)
     setThongBao(null)
     setLoiLuu(null)
-    setBieuMau(BIEU_MAU_RONG)
+    setBieuMau(taoBieuMauRong(t))
   }
 
   async function luu(): Promise<void> {
     setLoiLuu(null)
     setThongBao(null)
     if (bieuMau.path.trim().length === 0 || bieuMau.title.trim().length === 0) {
-      setLoiLuu('Cần nhập đường dẫn và tiêu đề tài liệu.')
+      setLoiLuu(t('knowledge.needPathAndTitle'))
       return
     }
     setDangLuu(true)
@@ -180,30 +210,28 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
       const daLuu = ketQua.documents.find((taiLieu) => taiLieu.path === bieuMau.path.trim())
       if (daLuu) setChonId(daLuu.id)
       setDangTaoMoi(false)
-      setThongBao(
-        'Đã lưu tài liệu. Tài liệu mới chưa có vector cho tới khi bấm “Đánh index lại” — trong lúc đó chỉ tìm được theo từ khoá.',
-      )
+      setThongBao(t('knowledge.saveSuccess'))
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : 'Không lưu được tài liệu.')
+      setLoiLuu(error instanceof ApiError ? error.message : t('knowledge.saveError'))
     } finally {
       setDangLuu(false)
     }
   }
 
   async function xoa(taiLieu: KnowledgeDocumentView): Promise<void> {
-    if (!window.confirm(`Xoá tài liệu “${taiLieu.title}”? Thao tác này không hoàn tác được.`)) return
+    if (!window.confirm(t('knowledge.deleteConfirm', { title: taiLieu.title }))) return
     setLoiLuu(null)
     setThongBao(null)
     try {
       await api.deleteKnowledge(companyId, taiLieu.id)
       if (chonId === taiLieu.id) {
         setChonId(null)
-        setBieuMau(BIEU_MAU_RONG)
+        setBieuMau(taoBieuMauRong(t))
       }
-      setThongBao(`Đã xoá tài liệu “${taiLieu.title}”.`)
+      setThongBao(t('knowledge.deleteSuccess', { title: taiLieu.title }))
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : 'Không xoá được tài liệu.')
+      setLoiLuu(error instanceof ApiError ? error.message : t('knowledge.deleteError'))
     }
   }
 
@@ -216,7 +244,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
       setKetQuaReindex(ketQua)
       taiLai()
     } catch (error) {
-      setLoiReindex(error instanceof ApiError ? error.message : 'Không chạy được index.')
+      setLoiReindex(error instanceof ApiError ? error.message : t('knowledge.reindexError'))
     } finally {
       setDangReindex(false)
     }
@@ -225,8 +253,8 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   if (dangTai && !duLieu) {
     return (
       <Trang>
-        <TieuDeTrang>Kho kiến thức</TieuDeTrang>
-        <DangTai nhan="Đang tải kho kiến thức…" />
+        <TieuDeTrang>{t('nav.knowledge')}</TieuDeTrang>
+        <DangTai nhan={t('knowledge.loading')} />
       </Trang>
     )
   }
@@ -234,11 +262,11 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   if (loi && !duLieu) {
     return (
       <Trang>
-        <TieuDeTrang>Kho kiến thức</TieuDeTrang>
+        <TieuDeTrang>{t('nav.knowledge')}</TieuDeTrang>
         <LoiManHinh loi={loi} />
         <div style={{ marginTop: 12 }}>
           <Nut bien="phu" onClick={taiLai}>
-            Thử lại
+            {t('common.retry')}
           </Nut>
         </div>
       </Trang>
@@ -251,41 +279,43 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
 
   return (
     <Trang rong>
-      <TieuDeTrang moTa="Soạn và tìm tài liệu nguồn cho agent. Tài liệu có vector mới được tìm bằng ngữ nghĩa.">
-        Kho kiến thức
-      </TieuDeTrang>
+      <TieuDeTrang moTa={t('knowledge.subtitle')}>{t('nav.knowledge')}</TieuDeTrang>
 
       <div className="luoi luoi--3" style={{ marginBottom: 12 }}>
-        <OSo nhan="Tài liệu" giaTri={soNguyen(duLieu.stats.documents)} />
-        <OSo nhan="Đoạn (chunk)" giaTri={soNguyen(duLieu.stats.chunks)} moTa="Đơn vị nhỏ nhất được truy hồi" />
+        <OSo nhan={t('knowledge.documents')} giaTri={formatNumber(duLieu.stats.documents)} />
         <OSo
-          nhan="Đã có vector"
-          giaTri={`${soNguyen(duLieu.stats.embedded)}/${soNguyen(duLieu.stats.documents)}`}
+          nhan={t('knowledge.chunks')}
+          giaTri={formatNumber(duLieu.stats.chunks)}
+          moTa={t('knowledge.chunksHint')}
+        />
+        <OSo
+          nhan={t('knowledge.embedded')}
+          giaTri={`${formatNumber(duLieu.stats.embedded)}/${formatNumber(duLieu.stats.documents)}`}
           loai={duLieu.stats.embedded === duLieu.stats.documents ? 'thanh-cong' : 'canh-bao'}
-          moTa={`${Math.round(tyLeVector)}% tài liệu tìm được theo ngữ nghĩa`}
+          moTa={t('knowledge.embeddedHint', { percent: formatNumber(Math.round(tyLeVector)) })}
         />
       </div>
 
       {duLieu.stats.embedded < duLieu.stats.documents ? (
         <div style={{ marginBottom: 12 }}>
           <ThongBao loai="canh-bao">
-            Có {soNguyen(duLieu.stats.documents - duLieu.stats.embedded)} tài liệu CHƯA có vector. Những tài liệu này chỉ
-            tìm được theo từ khoá, không được xếp hạng theo ngữ nghĩa — agent có thể bỏ sót nội dung. Bấm “Đánh index
-            lại” để xử lý.
+            {t('knowledge.missingEmbeddings', {
+              n: formatNumber(duLieu.stats.documents - duLieu.stats.embedded),
+            })}
           </ThongBao>
         </div>
       ) : null}
 
       <Card
-        tieuDe="Trạng thái index"
-        phu="Index lại chỉ đọc tài liệu thay đổi. Chọn “bắt buộc” khi nghi ngờ vector cũ đã lệch."
+        tieuDe={t('knowledge.indexStatus')}
+        phu={t('knowledge.indexStatusHint')}
         hanhDong={
           <span className="hang">
             <Nut nho onClick={() => void reindex(false)} dangTai={dangReindex}>
-              Đánh index lại
+              {t('knowledge.reindex')}
             </Nut>
             <Nut bien="phu" nho onClick={() => void reindex(true)} dangTai={dangReindex}>
-              Bắt buộc index lại
+              {t('knowledge.reindexForce')}
             </Nut>
           </span>
         }
@@ -293,42 +323,44 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
         {loiReindex ? <ThongBao loai="loi">{loiReindex}</ThongBao> : null}
         {ketQuaReindex ? (
           <ThongBao loai={ketQuaReindex.errors.length > 0 ? 'canh-bao' : 'thanh-cong'}>
-            Đã index {soNguyen(ketQuaReindex.indexed)} tài liệu, bỏ qua {soNguyen(ketQuaReindex.skipped)}, tạo{' '}
-            {soNguyen(ketQuaReindex.chunks)} đoạn.
-            {ketQuaReindex.errors.length > 0 ? ` Lỗi: ${ketQuaReindex.errors.join('; ')}` : ''}
+            {t('knowledge.reindexResult', {
+              indexed: formatNumber(ketQuaReindex.indexed),
+              skipped: formatNumber(ketQuaReindex.skipped),
+              chunks: formatNumber(ketQuaReindex.chunks),
+            })}
+            {ketQuaReindex.errors.length > 0
+              ? ` ${t('knowledge.reindexErrors', { errors: ketQuaReindex.errors.join('; ') })}`
+              : ''}
           </ThongBao>
         ) : null}
         {!ketQuaReindex && !loiReindex ? (
-          <p style={{ color: 'var(--mau-chu-mo)', margin: 0 }}>
-            Tài liệu chưa có vector vẫn đọc được nội dung, nhưng tìm kiếm chỉ khớp từ khoá trong tiêu đề, đường dẫn và
-            nội dung.
-          </p>
+          <p style={{ color: 'var(--mau-chu-mo)', margin: 0 }}>{t('knowledge.vectorNote')}</p>
         ) : null}
       </Card>
 
       <div className="luoi luoi--2" style={{ alignItems: 'start' }}>
         <Card
-          tieuDe="Danh mục tài liệu"
-          phu={`${soNguyen(soTaiLieuHienThi)} tài liệu khớp bộ lọc`}
+          tieuDe={t('knowledge.documentsByCategory')}
+          phu={t('knowledge.matchCount', { n: formatNumber(soTaiLieuHienThi) })}
           hanhDong={
             <Nut nho onClick={batDauTaoMoi}>
-              Tài liệu mới
+              {t('knowledge.newDocument')}
             </Nut>
           }
         >
           <div className="cot" style={{ marginBottom: 10 }}>
-            <ONhap value={tuKhoa} onChange={setTuKhoa} placeholder="Tìm theo tiêu đề, đường dẫn, tag…" />
+            <ONhap value={tuKhoa} onChange={setTuKhoa} placeholder={t('knowledge.searchPlaceholder')} />
             <OChon
               value={danhMucDangXem}
               onChange={setDanhMucDangXem}
-              options={[{ value: 'tat-ca', label: 'Tất cả danh mục' }, ...danhMucOptions]}
+              options={[{ value: 'tat-ca', label: t('knowledge.allCategories') }, ...danhMucOptions]}
             />
           </div>
 
           {duLieu.documents.length === 0 ? (
-            <Trong>Kho kiến thức đang trống. Bấm “Tài liệu mới” để nạp tài liệu đầu tiên.</Trong>
+            <Trong>{t('knowledge.empty')}</Trong>
           ) : taiLieuTheoDanhMuc.length === 0 ? (
-            <Trong>Không có tài liệu nào khớp bộ lọc hiện tại. Thử xoá từ khoá hoặc chọn “Tất cả danh mục”.</Trong>
+            <Trong>{t('knowledge.noMatch')}</Trong>
           ) : (
             <div className="cot" style={{ gap: 14 }}>
               {taiLieuTheoDanhMuc.map((nhom) => (
@@ -350,14 +382,18 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
                         }}
                         onClick={() => chonTaiLieu(taiLieu)}
                       >
+                        {/* Tiêu đề và đường dẫn là dữ liệu tài liệu, giữ nguyên bản gốc. */}
                         <div style={{ fontWeight: 600 }}>{taiLieu.title}</div>
                         <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{taiLieu.path}</div>
                         <div className="hang" style={{ gap: 6, marginTop: 6 }}>
                           <Nhan loai={taiLieu.indexed ? 'thanh-cong' : 'canh-bao'}>
-                            {taiLieu.indexed ? 'Đã có vector' : 'Chỉ từ khoá'}
+                            {taiLieu.indexed ? t('knowledge.embedded') : t('knowledge.keywordOnly')}
                           </Nhan>
                           <span style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
-                            v{soNguyen(taiLieu.version)} · {thoiDiem(taiLieu.updatedAt)}
+                            {t('knowledge.versionLine', {
+                              version: formatNumber(taiLieu.version),
+                              time: formatDateTime(taiLieu.updatedAt),
+                            })}
                           </span>
                         </div>
                       </button>
@@ -370,15 +406,25 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
         </Card>
 
         <Card
-          tieuDe={dangTaoMoi ? 'Tài liệu mới' : chonId ? 'Sửa tài liệu' : 'Soạn tài liệu'}
-          phu="Đường dẫn là khoá nhận diện tài liệu; đổi đường dẫn sẽ tạo tài liệu mới thay vì đổi tên."
+          tieuDe={
+            dangTaoMoi
+              ? t('knowledge.newDocument')
+              : chonId
+                ? t('knowledge.editDocument')
+                : t('knowledge.composeDocument')
+          }
+          phu={t('knowledge.pathHint')}
           hanhDong={
             chonId && !dangTaoMoi ? (
-              <Nut bien="nguy-hiem" nho onClick={() => {
-                const taiLieu = duLieu.documents.find((item) => item.id === chonId)
-                if (taiLieu) void xoa(taiLieu)
-              }}>
-                Xoá
+              <Nut
+                bien="nguy-hiem"
+                nho
+                onClick={() => {
+                  const taiLieu = duLieu.documents.find((item) => item.id === chonId)
+                  if (taiLieu) void xoa(taiLieu)
+                }}
+              >
+                {t('common.delete')}
               </Nut>
             ) : null
           }
@@ -395,15 +441,17 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
           ) : null}
 
           {!chonId && !dangTaoMoi ? (
-            <Trong>Chọn một tài liệu bên trái để sửa, hoặc bấm “Tài liệu mới” để soạn tài liệu mới.</Trong>
+            <Trong>{t('knowledge.selectOrCreate')}</Trong>
           ) : (
             <div className="cot" style={{ gap: 12 }}>
               <div className="luoi luoi--2">
                 <ONhap
                   value={bieuMau.title}
                   onChange={(giaTri) => setBieuMau((truoc) => ({ ...truoc, title: giaTri }))}
-                  placeholder="Tiêu đề tài liệu"
+                  placeholder={t('knowledge.titlePlaceholder')}
                 />
+                {/* Đường dẫn ví dụ giữ nguyên: đây là dữ liệu mẫu, và đổi nó theo ngôn
+                    ngữ sẽ khiến người dùng tạo tài liệu sai thư mục danh mục. */}
                 <ONhap
                   value={bieuMau.path}
                   onChange={(giaTri) => setBieuMau((truoc) => ({ ...truoc, path: giaTri }))}
@@ -424,7 +472,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
               </div>
               <div className="luoi luoi--2" style={{ alignItems: 'start' }}>
                 <div>
-                  <div className="nhan">Nội dung Markdown</div>
+                  <div className="nhan">{t('knowledge.markdownContent')}</div>
                   <OVanBan
                     value={bieuMau.content}
                     onChange={(giaTri) => setBieuMau((truoc) => ({ ...truoc, content: giaTri }))}
@@ -432,7 +480,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
                   />
                 </div>
                 <div>
-                  <div className="nhan">Xem trước</div>
+                  <div className="nhan">{t('knowledge.preview')}</div>
                   <div
                     style={{
                       border: '1px solid var(--mau-vien)',
@@ -449,19 +497,19 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
               </div>
               <div className="hang">
                 <Nut onClick={() => void luu()} dangTai={dangLuu}>
-                  {dangTaoMoi ? 'Tạo tài liệu' : 'Lưu thay đổi'}
+                  {dangTaoMoi ? t('knowledge.createDocument') : t('knowledge.saveChanges')}
                 </Nut>
                 <Nut
                   bien="phu"
                   onClick={() => {
                     setDangTaoMoi(false)
                     setChonId(null)
-                    setBieuMau(BIEU_MAU_RONG)
+                    setBieuMau(taoBieuMauRong(t))
                     setThongBao(null)
                     setLoiLuu(null)
                   }}
                 >
-                  Bỏ nháp
+                  {t('knowledge.discardDraft')}
                 </Nut>
               </div>
             </div>

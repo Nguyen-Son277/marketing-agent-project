@@ -7,7 +7,7 @@
  * giải mã đúng một lần cho mỗi request (không cache) nên xoay khoá có hiệu lực ngay.
  */
 import type { LlmModelRecord, LlmProviderRecord, ModelTier } from '@marketing-agent/shared'
-import { needsConfiguration } from '@marketing-agent/shared'
+import { AppError, needsConfiguration } from '@marketing-agent/shared'
 import type { LlmRepo } from '@marketing-agent/db'
 import { AnthropicAdapter } from './adapters/anthropic.ts'
 import { OpenAiCompatibleAdapter } from './adapters/openai-compatible.ts'
@@ -38,7 +38,11 @@ export class ModelRegistry {
 
   requireModel(modelFk: string): LlmModelRecord {
     const model = this.llm.findModel(modelFk)
-    if (!model) throw needsConfiguration('Model chưa được cấu hình trong hệ thống')
+    if (!model) {
+      throw new AppError('needs_configuration', 'Model chưa được cấu hình trong hệ thống', {
+        messageKey: 'errors.provider.modelMissing',
+      })
+    }
     return model
   }
 

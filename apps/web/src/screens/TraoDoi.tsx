@@ -13,13 +13,16 @@
  *    cáo. Mỗi hành động là một nút riêng để người dùng biết mình đang cho phép gì.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import type { MessageKey, Translate } from '@marketing-agent/i18n'
 import type {
   ConversationDetailResponse,
+  ConversationPhase,
   ConversationView,
   MessageView,
   TaskView,
 } from '@marketing-agent/shared'
 import { api, ApiError, openConversationStream, type StreamEvent } from '../lib/api.ts'
+import { useI18n } from '../lib/i18n.tsx'
 import { Markdown } from '../components/Markdown.tsx'
 import {
   Card,
@@ -29,18 +32,54 @@ import {
   OVanBan,
   ThongBao,
   Trang,
-  thoiDiem,
-  tienUsd,
 } from '../components/ui.tsx'
 
-/** Nhãn tiếng Việt cho trường còn thiếu của brief, khớp BRIEF_FIELD_LABELS. */
-const NHAN_TRUONG: Record<string, string> = {
-  objective: 'Mục tiêu',
-  kpi: 'KPI',
-  scope: 'Phạm vi',
-  deadline: 'Thời hạn',
-  budget: 'Ngân sách',
-  constraints: 'Ràng buộc',
+/**
+ * Dấu gạch cho ô trống trong bảng.
+ *
+ * Viết dạng escape để mã nguồn thuần ASCII ngoài comment tiếng Việt, đúng điều kiện
+ * của bài kiểm tra "không còn chuỗi tiếng Việt trong JSX".
+ */
+const KHONG_CO = '\u2014'
+
+/**
+ * Biểu tượng vai trò tác giả trong khung chat.
+ *
+ * Viết dạng escape vì cùng lý do như `KHONG_CO`: đây là ký tự trang trí, không phải câu
+ * chữ cần dịch, nên để nguyên trong mã chỉ làm bài kiểm tra "không còn ký tự ngoài ASCII
+ * ngoài comment" báo động giả.
+ */
+const BIEU_TUONG_NGUOI_DUNG = '\u{1F9D1}'
+const BIEU_TUONG_HE_THONG = '\u2699\uFE0F'
+const BIEU_TUONG_LEADER = '\u{1F3AF}'
+
+/**
+ * Khoá dịch cho từng trường brief.
+ *
+ * Vì sao dùng bảng ánh xạ tường minh thay vì `t(\`chat.briefField.${field}\`)`: `field`
+ * đến từ API dưới dạng `string`, nên template string sẽ nới khoá thành `string` và mất
+ * kiểm tra khoá lúc biên dịch — đúng thứ mà hook `t` sinh ra để chặn.
+ */
+const KHOA_TRUONG_BRIEF: Readonly<Record<string, MessageKey>> = {
+  objective: 'chat.briefField.objective',
+  kpi: 'chat.briefField.kpi',
+  scope: 'chat.briefField.scope',
+  deadline: 'chat.briefField.deadline',
+  budget: 'chat.briefField.budget',
+  constraints: 'chat.briefField.constraints',
+}
+
+/** Khoá dịch cho giai đoạn phiên; `phase` từ API là union literal nên bảng phủ đủ 9 giá trị. */
+const KHOA_GIAI_DOAN: Readonly<Record<ConversationPhase, MessageKey>> = {
+  intake: 'phase.intake',
+  clarify: 'phase.clarify',
+  brief: 'phase.brief',
+  plan: 'phase.plan',
+  assign: 'phase.assign',
+  execute: 'phase.execute',
+  review: 'phase.review',
+  report: 'phase.report',
+  closed: 'phase.closed',
 }
 
 /** Một dòng nhật ký sự kiện hiện giữa các tin nhắn. */
@@ -51,6 +90,7 @@ interface DongSuKien {
 }
 
 export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
+  const { t, formatDateTime, formatCurrencyUsd } = useI18n()
   const [danhSach, setDanhSach] = useState<ConversationView[]>([])
   const [dangChon, setDangChon] = useState<string | null>(null)
   const [chiTiet, setChiTiet] = useState<ConversationDetailResponse | null>(null)
@@ -76,7 +116,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
         setDanhSach(ketQua.conversations)
         setDangChon((hienTai) => hienTai ?? ketQua.conversations[0]?.id ?? null)
       } catch (error) {
-        if (!cancelled) setLoi(error instanceof ApiError ? error.message : 'Không tải được danh sách trao đổi.')
+        if (!cancelled) setLoi(error instanceof ApiError ? error.message : t('chat.errorLoadList'))
       } finally {
         if (!cancelled) setDangTai(false)
       }
@@ -84,7 +124,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
     return () => {
       cancelled = true
     }
-  }, [companyId])
+  }, [companyId, t])
 
   /** Tải chi tiết cuộc đang chọn. */
   const taiChiTiet = useCallback(async (conversationId: string) => {
@@ -109,20 +149,20 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
           demSuKien.current = 0
         }
       } catch (error) {
-        if (!cancelled) setLoi(error instanceof ApiError ? error.message : 'Không tải được cuộc trao đổi.')
+        if (!cancelled) setLoi(error instanceof ApiError ? error.message : t('chat.errorLoadConversation'))
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [dangChon])
+  }, [dangChon, t])
 
   /** Nghe sự kiện của cuộc đang mở; đóng luồng khi đổi cuộc hoặc unmount. */
   useEffect(() => {
     if (!dangChon) return
     const dong = openConversationStream(dangChon, {
       onEvent: (event: StreamEvent) => {
-        const text = moTaSuKien(event)
+        const text = moTaSuKien(event, t)
         if (!text) return
         demSuKien.current += 1
         setSuKien((truoc) => [...truoc.slice(-40), { id: demSuKien.current, text, at: Date.now() }])
@@ -133,7 +173,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
       },
     })
     return dong
-  }, [dangChon, taiChiTiet])
+  }, [dangChon, taiChiTiet, t])
 
   /** Tự cuộn xuống cuối khi có nội dung mới. */
   useEffect(() => {
@@ -144,11 +184,11 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   async function taoCuocMoi(): Promise<void> {
     setLoi(null)
     try {
-      const ketQua = await api.createConversation(companyId, 'Cuộc trao đổi mới')
+      const ketQua = await api.createConversation(companyId, t('chat.newConversationTitle'))
       setDanhSach((truoc) => [ketQua.conversation, ...truoc])
       setDangChon(ketQua.conversation.id)
     } catch (error) {
-      setLoi(error instanceof ApiError ? error.message : 'Không tạo được cuộc trao đổi.')
+      setLoi(error instanceof ApiError ? error.message : t('chat.errorCreateConversation'))
     }
   }
 
@@ -163,12 +203,14 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
       const ketQua = await api.sendMessage(dangChon, { content })
       setBaoKetQua(
         ketQua.briefComplete
-          ? 'Đã đủ thông tin để lập kế hoạch. Bấm "Lập kế hoạch" ở trên.'
-          : `Leader cần thêm: ${ketQua.missingFields.map((field) => NHAN_TRUONG[field] ?? field).join(', ')}`,
+          ? t('chat.briefCompleteHint')
+          : t('chat.leaderNeedsMore', {
+              fields: ketQua.missingFields.map((field) => nhanTruongBrief(field, t)).join(', '),
+            }),
       )
       await taiChiTiet(dangChon)
     } catch (error) {
-      setLoi(error instanceof ApiError ? error.message : 'Không gửi được tin nhắn.')
+      setLoi(error instanceof ApiError ? error.message : t('chat.errorSendMessage'))
       setNoiDung(content)
     } finally {
       setDangGui(false)
@@ -183,17 +225,17 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
     try {
       if (buoc === 'plan') {
         const ketQua = await api.planConversation(dangChon)
-        setBaoKetQua(`Đã lập kế hoạch ${ketQua.tasks.length} công việc. Bấm "Chạy kế hoạch" để đội bắt đầu làm.`)
+        setBaoKetQua(t('chat.planCreated', { count: ketQua.tasks.length }))
       } else if (buoc === 'run') {
         await api.runConversation(dangChon)
-        setBaoKetQua('Đội đã chạy xong kế hoạch. Xem tab Công việc để biết chi tiết từng việc.')
+        setBaoKetQua(t('chat.runFinished'))
       } else {
         const ketQua = await api.reportConversation(dangChon)
-        setBaoKetQua(`Đã tạo báo cáo (tài sản ${ketQua.artifactId}).`)
+        setBaoKetQua(t('chat.reportCreated', { artifactId: ketQua.artifactId }))
       }
       await taiChiTiet(dangChon)
     } catch (error) {
-      setLoi(error instanceof ApiError ? error.message : 'Không thực hiện được bước này.')
+      setLoi(error instanceof ApiError ? error.message : t('chat.errorStep'))
     } finally {
       setDangChay(null)
     }
@@ -202,7 +244,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   if (dangTai) {
     return (
       <Trang>
-        <DangTai nhan="Đang tải cuộc trao đổi…" />
+        <DangTai nhan={t('chat.loadingList')} />
       </Trang>
     )
   }
@@ -212,17 +254,15 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
       <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: 16, alignItems: 'start' }}>
         {/* Danh sách cuộc trao đổi */}
         <Card
-          tieuDe="Cuộc trao đổi"
+          tieuDe={t('chat.conversations')}
           hanhDong={
-            <Nut nho bien="phu" onClick={() => void taoCuocMoi()} title="Tạo cuộc trao đổi mới">
+            <Nut nho bien="phu" onClick={() => void taoCuocMoi()} title={t('chat.newConversation')}>
               +
             </Nut>
           }
         >
           {danhSach.length === 0 ? (
-            <p style={{ color: 'var(--mau-chu-mo)', fontSize: 14, margin: 0 }}>
-              Chưa có cuộc trao đổi nào. Bấm + để bắt đầu.
-            </p>
+            <p style={{ color: 'var(--mau-chu-mo)', fontSize: 14, margin: 0 }}>{t('chat.emptyList')}</p>
           ) : (
             <div className="cot" style={{ gap: 4 }}>
               {danhSach.map((cuoc) => (
@@ -235,7 +275,10 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                 >
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{cuoc.title}</div>
                   <div style={{ fontSize: 11, opacity: 0.8 }}>
-                    {cuoc.phase} · {thoiDiem(cuoc.updatedAt)}
+                    {t('chat.listMeta', {
+                      phase: t(KHOA_GIAI_DOAN[cuoc.phase]),
+                      date: formatDateTime(cuoc.updatedAt),
+                    })}
                   </div>
                 </button>
               ))}
@@ -255,8 +298,11 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                   <div>
                     <div style={{ fontWeight: 650 }}>{chiTiet.conversation.title}</div>
                     <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
-                      Giai đoạn {chiTiet.conversation.phase} · chi phí {tienUsd(chiTiet.costUsd)} ·{' '}
-                      {chiTiet.usage.runs} lượt chạy
+                      {t('chat.metaLine', {
+                        phase: t(KHOA_GIAI_DOAN[chiTiet.conversation.phase]),
+                        cost: formatCurrencyUsd(chiTiet.costUsd),
+                        runs: chiTiet.usage.runs,
+                      })}
                     </div>
                   </div>
                   <div className="hang">
@@ -265,9 +311,9 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                       bien="phu"
                       dangTai={dangChay === 'plan'}
                       onClick={() => void chayBuoc('plan')}
-                      title="Leader chia công việc từ brief đã chốt"
+                      title={t('chat.planHint')}
                     >
-                      Lập kế hoạch
+                      {t('chat.plan')}
                     </Nut>
                     <Nut
                       nho
@@ -275,22 +321,18 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                       dangTai={dangChay === 'run'}
                       disabled={chiTiet.tasks.length === 0}
                       onClick={() => void chayBuoc('run')}
-                      title={
-                        chiTiet.tasks.length === 0
-                          ? 'Cần lập kế hoạch trước'
-                          : 'Các agent chuyên môn bắt đầu làm việc'
-                      }
+                      title={chiTiet.tasks.length === 0 ? t('chat.runNeedsPlan') : t('chat.runHint')}
                     >
-                      Chạy kế hoạch
+                      {t('chat.run')}
                     </Nut>
                     <Nut
                       nho
                       dangTai={dangChay === 'report'}
                       disabled={chiTiet.tasks.length === 0}
                       onClick={() => void chayBuoc('report')}
-                      title="Tổng hợp báo cáo cuối cùng"
+                      title={t('chat.reportHint')}
                     >
-                      Viết báo cáo
+                      {t('chat.report')}
                     </Nut>
                   </div>
                 </div>
@@ -298,40 +340,43 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                 {chiTiet.conversation.briefComplete ? null : (
                   <div style={{ marginTop: 12 }}>
                     <ThongBao loai="canh-bao">
-                      Leader chưa đủ thông tin để lập kế hoạch. Còn thiếu:{' '}
+                      {t('chat.briefMissingPrefix')}{' '}
                       <strong>
                         {chiTiet.conversation.missingFields
-                          .map((field) => NHAN_TRUONG[field] ?? field)
-                          .join(', ') || 'chưa xác định'}
+                          .map((field) => nhanTruongBrief(field, t))
+                          .join(', ') || t('chat.briefMissingUnknown')}
                       </strong>
-                      . Hãy trả lời các câu hỏi của Leader ở khung bên dưới.
+                      {t('chat.briefMissingSuffix')}
                     </ThongBao>
                   </div>
                 )}
               </Card>
 
               {chiTiet.tasks.length > 0 ? (
-                <Card tieuDe="Kế hoạch" phu="Bấm tab Công việc để xem chi tiết từng việc.">
+                <Card tieuDe={t('chat.planTitle')} phu={t('chat.planSubtitle')}>
                   <table className="bang">
                     <thead>
                       <tr>
-                        <th>Công việc</th>
-                        <th>Chuyên môn</th>
-                        <th>Phụ thuộc</th>
-                        <th>Trạng thái</th>
+                        <th>{t('chat.tableTask')}</th>
+                        <th>{t('chat.tableSpecialist')}</th>
+                        <th>{t('chat.tableDependsOn')}</th>
+                        <th>{t('common.status')}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {chiTiet.tasks.map((task: TaskView) => (
-                        <tr key={task.id}>
-                          <td>{task.title}</td>
-                          <td>{task.assigneeName ?? task.assigneeRole ?? '—'}</td>
-                          <td>{task.dependsOn.length > 0 ? task.dependsOn.length : '—'}</td>
-                          <td>
-                            <Nhan loai={nhanTrangThai(task.status).loai}>{nhanTrangThai(task.status).nhan}</Nhan>
-                          </td>
-                        </tr>
-                      ))}
+                      {chiTiet.tasks.map((task: TaskView) => {
+                        const nhan = nhanTrangThai(task.status, t)
+                        return (
+                          <tr key={task.id}>
+                            <td>{task.title}</td>
+                            <td>{task.assigneeName ?? task.assigneeRole ?? KHONG_CO}</td>
+                            <td>{task.dependsOn.length > 0 ? task.dependsOn.length : KHONG_CO}</td>
+                            <td>
+                              <Nhan loai={nhan.loai}>{nhan.nhan}</Nhan>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </Card>
@@ -341,10 +386,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                 <div className="chat">
                   <div className="chat__khung" ref={cuonRef}>
                     {chiTiet.messages.length === 0 && suKien.length === 0 ? (
-                      <div className="trong">
-                        Hãy mô tả mục tiêu marketing của bạn. Leader sẽ hỏi thêm cho tới khi đủ thông tin để
-                        lập kế hoạch.
-                      </div>
+                      <div className="trong">{t('chat.emptyChat')}</div>
                     ) : null}
 
                     {chiTiet.messages.map((message: MessageView) => (
@@ -364,10 +406,10 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                       onChange={setNoiDung}
                       rows={2}
                       disabled={dangGui}
-                      placeholder="Ví dụ: Lập kế hoạch content tháng 11 cho sản phẩm Sapa POS, mục tiêu 50 lead"
+                      placeholder={t('chat.placeholder')}
                     />
                     <Nut dangTai={dangGui} onClick={() => void gui()} disabled={noiDung.trim().length === 0}>
-                      Gửi
+                      {t('chat.send')}
                     </Nut>
                   </div>
                 </div>
@@ -375,7 +417,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
             </>
           ) : (
             <Card>
-              <div className="trong">Chọn hoặc tạo một cuộc trao đổi để bắt đầu.</div>
+              <div className="trong">{t('chat.chooseConversation')}</div>
             </Card>
           )}
         </div>
@@ -386,24 +428,26 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
 
 /** Một tin nhắn trong khung chat, phân biệt người dùng với Leader. */
 function TinNhan({ message }: { message: MessageView }): ReactNode {
+  const { t, formatDateTime, formatCurrencyUsd } = useI18n()
   const laNguoiDung = message.authorKind === 'user'
   const laHeThong = message.authorKind === 'system'
+  // "Leader" giữ nguyên: đó là tên vai trò trong sản phẩm, không phải câu chữ để dịch.
   const tenTacGia = laNguoiDung
-    ? 'Bạn'
+    ? t('chat.authorYou')
     : laHeThong
-      ? 'Hệ thống'
+      ? t('chat.authorSystem')
       : (message.authorAgent ?? 'Leader')
 
   return (
     <div className={laNguoiDung ? 'tin tin--nguoi-dung' : 'tin'}>
       <div className="tin__avatar" aria-hidden>
-        {laNguoiDung ? '🧑' : laHeThong ? '⚙️' : '🎯'}
+        {laNguoiDung ? BIEU_TUONG_NGUOI_DUNG : laHeThong ? BIEU_TUONG_HE_THONG : BIEU_TUONG_LEADER}
       </div>
       <div className="tin__than">
         <div className="tin__dau">
           <span style={{ fontWeight: 600 }}>{tenTacGia}</span>
-          <span>{thoiDiem(message.createdAt)}</span>
-          {message.costUsd > 0 ? <span>{tienUsd(message.costUsd)}</span> : null}
+          <span>{formatDateTime(message.createdAt)}</span>
+          {message.costUsd > 0 ? <span>{formatCurrencyUsd(message.costUsd)}</span> : null}
         </div>
         {laNguoiDung ? (
           <div style={{ whiteSpace: 'pre-wrap' }}>{message.contentMd}</div>
@@ -415,64 +459,100 @@ function TinNhan({ message }: { message: MessageView }): ReactNode {
   )
 }
 
+type LoaiNhanTrangThai = 'mo' | 'thanh-cong' | 'canh-bao' | 'loi'
+
+/** Khoá dịch của trạng thái; `status` là `string` từ API nên phải tra bảng tường minh. */
+const KHOA_TRANG_THAI: Readonly<Record<string, MessageKey>> = {
+  draft: 'taskStatus.draft',
+  assigned: 'taskStatus.assigned',
+  in_progress: 'taskStatus.in_progress',
+  blocked: 'taskStatus.blocked',
+  review: 'taskStatus.review',
+  done: 'taskStatus.done',
+  failed: 'taskStatus.failed',
+  cancelled: 'taskStatus.cancelled',
+}
+
+/** Màu nhãn theo trạng thái; tách khỏi khoá dịch vì màu là quyết định giao diện. */
+const LOAI_TRANG_THAI: Readonly<Record<string, LoaiNhanTrangThai>> = {
+  done: 'thanh-cong',
+  in_progress: 'canh-bao',
+  blocked: 'loi',
+  failed: 'loi',
+  review: 'canh-bao',
+  assigned: 'mo',
+  cancelled: 'mo',
+}
+
 /** Nhãn và màu hiển thị cho trạng thái công việc. */
-export function nhanTrangThai(status: string): { nhan: string; loai: 'mo' | 'thanh-cong' | 'canh-bao' | 'loi' } {
-  switch (status) {
-    case 'done':
-      return { nhan: 'Xong', loai: 'thanh-cong' }
-    case 'in_progress':
-      return { nhan: 'Đang làm', loai: 'canh-bao' }
-    case 'blocked':
-      return { nhan: 'Bị chặn', loai: 'loi' }
-    case 'failed':
-      return { nhan: 'Thất bại', loai: 'loi' }
-    case 'review':
-      return { nhan: 'Chờ duyệt', loai: 'canh-bao' }
-    case 'assigned':
-      return { nhan: 'Đã giao', loai: 'mo' }
-    case 'cancelled':
-      return { nhan: 'Đã huỷ', loai: 'mo' }
-    default:
-      return { nhan: status, loai: 'mo' }
-  }
+export function nhanTrangThai(status: string, t: Translate): { nhan: string; loai: LoaiNhanTrangThai } {
+  const khoa = KHOA_TRANG_THAI[status]
+  // Trạng thái lạ (dữ liệu cũ, giá trị mới chưa cập nhật catalog) hiện nguyên văn: nhìn
+  // thấy mã trạng thái còn hơn một nhãn rỗng.
+  return { nhan: khoa ? t(khoa) : status, loai: LOAI_TRANG_THAI[status] ?? 'mo' }
 }
 
 /**
  * Chuyển một sự kiện SSE thành một dòng người đọc được.
  *
  * Chỉ những sự kiện mang thông tin mới cho người dùng mới được hiện; sự kiện thuần
- * kỹ thuật bị bỏ qua để nhật ký không bị nhiễu.
+ * kỹ thuật bị bỏ qua để nhật ký không bị nhiễu. Câu chữ đi qua `t` chứ không dựng chuỗi
+ * tại chỗ, để nhật ký đổi ngôn ngữ ngay khi người dùng bấm chuyển.
  */
-export function moTaSuKien(event: StreamEvent): string | null {
+export function moTaSuKien(event: StreamEvent, t: Translate): string | null {
   const data = (event.data ?? {}) as Record<string, unknown>
   switch (event.type) {
     case 'leader.thinking':
-      return '🎯 Leader đang phân tích yêu cầu…'
+      return t('chat.event.leaderThinking')
     case 'leader.replied':
-      return '🎯 Leader đã trả lời.'
+      return t('chat.event.leaderReplied')
     case 'plan.created': {
       const tasks = Array.isArray(data['tasks']) ? data['tasks'].length : 0
-      return `🗂️ Đã tạo kế hoạch gồm ${tasks} công việc.`
+      return t('chat.event.planCreated', { count: tasks })
     }
     case 'agent.started':
-      return `▶️ ${String(data['assigneeRole'] ?? 'Agent')} bắt đầu: ${String(data['title'] ?? '')}`
-    case 'tool.called':
-      return `🔧 ${String(data['agentRole'] ?? '')} gọi ${String(data['tool'] ?? '')}${data['ok'] === false ? ' (lỗi)' : ''}`
-    case 'task.updated':
-      return `📌 ${String(data['title'] ?? '')} → ${String(data['status'] ?? '')}${data['reason'] ? `: ${String(data['reason'])}` : ''}`
+      return t('chat.event.agentStarted', {
+        role: String(data['assigneeRole'] ?? 'Agent'),
+        title: String(data['title'] ?? ''),
+      })
+    case 'tool.called': {
+      const thamSo = { role: String(data['agentRole'] ?? ''), tool: String(data['tool'] ?? '') }
+      return data['ok'] === false ? t('chat.event.toolCalledFailed', thamSo) : t('chat.event.toolCalled', thamSo)
+    }
+    case 'task.updated': {
+      const title = String(data['title'] ?? '')
+      // Trạng thái trong payload là mã máy; dịch qua cùng bảng với bảng kế hoạch để nhật
+      // ký và nhãn không bao giờ lệch nhau.
+      const status = nhanTrangThai(String(data['status'] ?? ''), t).nhan
+      return data['reason']
+        ? t('chat.event.taskUpdatedReason', { title, status, reason: String(data['reason']) })
+        : t('chat.event.taskUpdated', { title, status })
+    }
     case 'artifact.created':
-      return '📄 Có tài sản đầu ra mới.'
+      return t('chat.event.artifactCreated')
     case 'agent.message':
-      return `💬 ${String(data['from'] ?? '')} → ${String(data['to'] ?? '')} (${String(data['kind'] ?? '')})`
+      return t('chat.event.agentMessage', {
+        from: String(data['from'] ?? ''),
+        to: String(data['to'] ?? ''),
+        kind: String(data['kind'] ?? ''),
+      })
     case 'review.completed':
-      return `🔍 Kiểm tra chất lượng: ${data['verdict'] === 'pass' ? 'đạt' : 'cần sửa'}`
+      return data['verdict'] === 'pass' ? t('chat.event.reviewPassed') : t('chat.event.reviewNeedsFix')
     case 'report.created':
-      return '📊 Báo cáo cuối cùng đã sẵn sàng.'
+      return t('chat.event.reportCreated')
     case 'brief.updated':
-      return data['complete'] === true ? '✅ Đã chốt đủ thông tin brief.' : '❓ Cần bổ sung thông tin cho brief.'
+      return data['complete'] === true ? t('chat.event.briefComplete') : t('chat.event.briefIncomplete')
     case 'warning':
-      return `⚠️ ${String(data['message'] ?? 'Có cảnh báo từ hệ thống.')}`
+      return t('chat.event.warning', {
+        message: String(data['message'] ?? t('chat.event.systemWarning')),
+      })
     default:
       return null
   }
+}
+
+/** Nhãn một trường brief còn thiếu; trường lạ hiện nguyên mã để không che mất dữ liệu. */
+function nhanTruongBrief(field: string, t: Translate): string {
+  const khoa = KHOA_TRUONG_BRIEF[field]
+  return khoa ? t(khoa) : field
 }

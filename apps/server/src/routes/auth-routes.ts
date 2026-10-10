@@ -6,7 +6,7 @@
  * responses, a session cookie that is HttpOnly and Secure in production, and
  * audit records for the security-relevant actions.
  */
-import { parseOrThrow, slugify, unauthorized, createCompanySchema, loginSchema, registerSchema } from '@marketing-agent/shared'
+import { AppError, parseOrThrow, slugify, unauthorized, createCompanySchema, loginSchema, registerSchema } from '@marketing-agent/shared'
 import type { Repos } from '@marketing-agent/db'
 import { SESSION_COOKIE, requireAuthState, requireManage, requireMembership } from '../http/middleware.ts'
 import type { RequestContext, Router } from '../http/router.ts'
@@ -33,7 +33,7 @@ export function registerAuthRoutes(router: Router, repos: Repos, sessionTtlDays:
     if (!user) {
       // Same message for unknown email and wrong password: no account enumeration.
       repos.accounting.audit({ action: 'auth.login_failed', target: input.email })
-      throw unauthorized('Email hoặc mật khẩu không đúng')
+      throw new AppError('unauthorized', 'Email hoặc mật khẩu không đúng', { messageKey: 'errors.auth.invalidCredentials' })
     }
     const session = auth.createSession(user.id, sessionTtlDays)
     setSessionCookie(ctx, session.token, session.expiresAt)

@@ -110,6 +110,15 @@ export type UpdateTeamMemberInput = z.infer<typeof updateTeamMemberSchema>
 
 export const createConversationSchema = z.object({
   title: z.string().trim().min(1).max(200).default('Cuộc trao đổi mới'),
+  /**
+   * Ngôn ngữ agent dùng để trả lời trong phiên này.
+   *
+   * Vì sao TỪ CHỐI giá trị lạ thay vì âm thầm đổi thành `'vi'`: nếu im lặng sửa, người
+   * gọi tưởng đã đặt được tiếng Anh và chỉ phát hiện khi đọc báo cáo — sai lệch âm thầm
+   * khó lần ra hơn một lỗi rõ ràng. Danh sách ngôn ngữ khai báo tại đây thay vì import
+   * từ gói i18n, vì `shared` là tầng thấp không phụ thuộc gói i18n.
+   */
+  language: z.enum(['vi', 'en']).default('vi'),
 })
 export type CreateConversationInput = z.infer<typeof createConversationSchema>
 

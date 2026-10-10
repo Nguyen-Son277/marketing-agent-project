@@ -158,6 +158,9 @@ importers:
       '@marketing-agent/db':
         specifier: workspace:*
         version: link:../db
+      '@marketing-agent/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       '@marketing-agent/kb':
         specifier: workspace:*
         version: link:../kb

@@ -10,6 +10,7 @@
  * trình — thêm một cổng kiểm tra chẳng hạn — sẽ phải sửa ở tầng HTTP.
  */
 import { budgetExceeded, conflict, notFound, truncate, type AgentRole } from '@marketing-agent/shared'
+import { isLocale, type Locale } from '@marketing-agent/i18n'
 import type { Repos } from '@marketing-agent/db'
 import type { AgentRuntimeDeps } from '@marketing-agent/agent-runtime'
 import type { EmbeddingProvider } from '@marketing-agent/kb'
@@ -506,6 +507,9 @@ export class ConversationOrchestrator implements CoordinationHost {
       taskId,
       conversationId: ctx.conversationId,
       taskBrief: `${task.title}\n\n${task.briefMd}`,
+      // Ngôn ngữ lấy theo phiên CỦA VIỆC, không theo phiên đang mở: việc có thể được
+      // chạy lại từ một màn hình khác, và kết quả phải khớp ngôn ngữ của phiên đã tạo ra nó.
+      locale: this.localeOf(ctx.companyId, task.conversationId ?? ctx.conversationId),
       maxSteps: this.limits.maxStepsPerRun,
       ...(this.log ? { log: this.log } : {}),
     })
@@ -560,6 +564,7 @@ export class ConversationOrchestrator implements CoordinationHost {
     )
 
     // Lượt chạy ngắn, không giao việc: chỉ trả lời câu hỏi.
+    const locale = this.localeOf(input.companyId, input.conversationId)
     const peer = await runAgentForTask({
       repos: this.repos,
       tools: this.tools,
@@ -569,19 +574,33 @@ export class ConversationOrchestrator implements CoordinationHost {
       role: input.toRole as never,
       taskId: input.taskId,
       conversationId: input.conversationId,
-      taskBrief: [
-        `Chuyên môn ${input.fromRole} đang cần thông tin từ bạn để hoàn thành công việc của họ.`,
-        '',
-        '## Câu hỏi',
-        input.question,
-        '',
-        'Trả lời trực tiếp, ngắn gọn, kèm nguồn nếu có số liệu. Nếu bạn không có thông tin, nói rõ là không có.',
-      ].join('\n'),
+      locale: locale,
+      // Prompt hỏi giữa các agent cũng phải theo ngôn ngữ phiên: câu trả lời của agent
+      // này được ghi vào lịch sử và hiển thị cho người dùng, nên không thể là ngôn ngữ khác.
+      taskBrief: (locale === 'en'
+        ? [
+            `The ${input.fromRole} specialism needs information from you to finish their task.`,
+            '',
+            '## Question',
+            input.question,
+            '',
+            'Answer directly and briefly, citing sources for any figures. If you do not have the information, say so plainly.',
+          ]
+        : [
+            `Chuyên môn ${input.fromRole} đang cần thông tin từ bạn để hoàn thành công việc của họ.`,
+            '',
+            '## Câu hỏi',
+            input.question,
+            '',
+            'Trả lời trực tiếp, ngắn gọn, kèm nguồn nếu có số liệu. Nếu bạn không có thông tin, nói rõ là không có.',
+          ]
+      ).join('\n'),
       maxSteps: 3,
       ...(this.log ? { log: this.log } : {}),
     })
 
-    const answer = peer.run.output.trim() || 'Không có thông tin để trả lời.'
+    const answer =
+      peer.run.output.trim() || (locale === 'en' ? 'No information available to answer.' : 'Không có thông tin để trả lời.')
     this.repos.work.addAgentMessage({
       companyId: input.companyId,
       fromAgent: input.toRole,
@@ -699,11 +718,29 @@ export class ConversationOrchestrator implements CoordinationHost {
       role: 'marketing-leader',
       taskId: null,
       conversationId,
+      locale: this.localeOf(companyId, conversationId),
       maxSteps: 1,
       taskBrief: [BRIEF_EXTRACTION_INSTRUCTION, '', '## Hội thoại', truncate(text, 6_000)].join('\n'),
       ...(this.log ? { log: this.log } : {}),
     })
     return result.run.output
+  }
+
+  /**
+   * Ngôn ngữ hiệu lực của một cuộc trao đổi, dùng cho MỌI lượt chạy agent trong phiên.
+   *
+   * Vì sao tra ở đây thay vì mang `locale` xuyên suốt các hàm: ngôn ngữ là thuộc tính
+   * của phiên, và mọi lượt chạy trong một phiên đều phải dùng cùng một ngôn ngữ. Tra
+   * một chỗ duy nhất khiến không thể có chuyện hai agent trong cùng phiên trả lời khác
+   * ngôn ngữ nhau do một đường gọi bị quên truyền tham số.
+   *
+   * `undefined` nghĩa là phiên không rõ (ví dụ chạy việc không thuộc phiên nào): khi đó
+   * dùng mặc định tiếng Việt như hành vi trước đây.
+   */
+  private localeOf(companyId: string, conversationId: string | null): Locale {
+    if (!conversationId) return 'vi'
+    const conversation = this.repos.work.findConversation(conversationId, companyId)
+    return conversation && isLocale(conversation.language) ? conversation.language : 'vi'
   }
 
   /** Một lượt chạy của Leader với vai trò điều hành. */
@@ -771,6 +808,7 @@ export class ConversationOrchestrator implements CoordinationHost {
       role: 'marketing-leader',
       taskId: null,
       conversationId,
+      locale: this.localeOf(companyId, conversationId),
       maxSteps: mode === 'create-plan' ? 6 : 4,
       taskBrief: [
         instruction,

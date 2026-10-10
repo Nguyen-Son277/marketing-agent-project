@@ -8,9 +8,11 @@
  * cảnh báo đó được đặt ngay cạnh nút lưu.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { MessageKey } from '@marketing-agent/i18n'
 import type { ModelTier, TeamMemberView, TeamResponse } from '@marketing-agent/shared'
 import { KB_CATEGORIES, MODEL_TIERS } from '@marketing-agent/shared'
 import { api, ApiError } from '../lib/api.ts'
+import { useI18n } from '../lib/i18n.tsx'
 import {
   Card,
   DangTai,
@@ -22,14 +24,34 @@ import {
   TieuDeTrang,
   Trang,
   Trong,
-  soNguyen,
 } from '../components/ui.tsx'
 
-const NHAN_TIER: Readonly<Record<ModelTier, string>> = {
-  light: 'Nhẹ (light)',
-  standard: 'Chuẩn (standard)',
-  deep: 'Sâu (deep)',
+/**
+ * Tier giữ KHOÁ DỊCH chứ không giữ câu chữ: nếu giữ câu chữ thì bảng chọn tier không
+ * đổi được khi chuyển ngôn ngữ, và bảng tra phải dựng lại mỗi lần ngôn ngữ thay đổi.
+ */
+const KHOA_TIER: Readonly<Record<ModelTier, MessageKey>> = {
+  light: 'modelTier.light',
+  standard: 'modelTier.standard',
+  deep: 'modelTier.deep',
 }
+
+/**
+ * Bảng tường minh mã danh mục → khoá dịch, thay vì ghép `kbCategory.${code}`: kiểu khoá
+ * là union literal nên ghép chuỗi sẽ mất kiểm tra của TypeScript và lọt khoá sai tới
+ * runtime, đúng lúc chỉ hiện ra mã thô cho người dùng.
+ */
+const KHOA_DANH_MUC: Readonly<Record<string, MessageKey>> = {
+  '00-cong-ty': 'kbCategory.00-cong-ty',
+  '10-brand': 'kbCategory.10-brand',
+  '20-thi-truong': 'kbCategory.20-thi-truong',
+  '30-kenh': 'kbCategory.30-kenh',
+  '40-du-lieu': 'kbCategory.40-du-lieu',
+  '90-ket-qua': 'kbCategory.90-ket-qua',
+}
+
+/** Dấu tích trên nút kỹ năng/tool đã chọn, viết dạng mã thoát để mã nguồn thuần ASCII. */
+const DAU_TICH = '\u2713 '
 
 interface QuyenKienThuc {
   readonly category: string
@@ -48,17 +70,24 @@ interface BanNhap {
 }
 
 function LoiManHinh({ loi }: { loi: ApiError }): ReactNode {
+  const { t } = useI18n()
   return (
     <ThongBao loai="loi">
       {loi.message}
-      {loi.needsConfiguration ? ' Vào mục “Cài đặt” để hoàn tất cấu hình trước khi dùng màn hình này.' : null}
+      {loi.needsConfiguration ? ` ${t('team.finishSetup')}` : null}
     </ThongBao>
   )
 }
 
-/** Nhãn hiển thị của một danh mục kiến thức, chấp nhận cả mã lạ ngoài danh mục chuẩn. */
-function nhanDanhMuc(code: string): string {
-  return KB_CATEGORIES.find((danhMuc) => danhMuc.code === code)?.label ?? code
+/**
+ * Nhãn của một danh mục kiến thức.
+ *
+ * Vì sao mã lạ giữ nguyên: danh mục ngoài danh mục chuẩn do backend trả về là DỮ LIỆU
+ * của công ty, dịch ở client sẽ khiến cùng một tài liệu mang hai cái tên.
+ */
+function nhanDanhMuc(code: string, t: (key: MessageKey) => string): string {
+  const khoa = KHOA_DANH_MUC[code]
+  return khoa ? t(khoa) : code
 }
 
 /** Danh sách quyền kiến thức đầy đủ: mọi danh mục chuẩn, cộng danh mục lạ nếu server có. */
@@ -89,6 +118,9 @@ function taoBanNhap(team: TeamResponse): Record<string, BanNhap> {
 }
 
 export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
+  // `formatNumber` thay cho hàm định dạng cứng `vi-VN`: số phải đổi dấu phân cách theo
+  // ngôn ngữ đang chọn, không phải theo ngôn ngữ gốc của dự án.
+  const { t, formatNumber } = useI18n()
   const [duLieu, setDuLieu] = useState<TeamResponse | null>(null)
   const [banNhap, setBanNhap] = useState<Record<string, BanNhap>>({})
   const [dangTai, setDangTai] = useState(true)
@@ -112,7 +144,9 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', 'Không kết nối được máy chủ.'))
+        // Câu lỗi mạng do giao diện tự viết nên phải nằm trong catalog; lỗi từ backend
+        // thì `ApiError.message` đã được backend dịch theo ngôn ngữ gửi lên.
+        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', t('common.cannotConnectServer')))
       })
       .finally(() => {
         if (!cancelled) setDangTai(false)
@@ -120,7 +154,7 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
     return () => {
       cancelled = true
     }
-  }, [companyId, lanThu])
+  }, [companyId, lanThu, t])
 
   const taiLai = useCallback(() => setLanThu((lan) => lan + 1), [])
 
@@ -194,11 +228,11 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
           ? { ...truoc, members: truoc.members.map((item) => (item.role === member.role ? ketQua.member : item)) }
           : truoc,
       )
-      setThongBao((truoc) => ({ ...truoc, [member.role]: `Đã lưu cấu hình cho ${member.displayName}.` }))
+      setThongBao((truoc) => ({ ...truoc, [member.role]: t('team.saveSuccess', { name: member.displayName }) }))
     } catch (error) {
       setLoiLuu((truoc) => ({
         ...truoc,
-        [member.role]: error instanceof ApiError ? error.message : 'Không lưu được cấu hình.',
+        [member.role]: error instanceof ApiError ? error.message : t('team.saveError'),
       }))
     } finally {
       setDangLuu(null)
@@ -208,8 +242,8 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
   if (dangTai && !duLieu) {
     return (
       <Trang>
-        <TieuDeTrang>Đội agent</TieuDeTrang>
-        <DangTai nhan="Đang tải cấu hình đội…" />
+        <TieuDeTrang>{t('nav.team')}</TieuDeTrang>
+        <DangTai nhan={t('team.loading')} />
       </Trang>
     )
   }
@@ -217,11 +251,11 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
   if (loi && !duLieu) {
     return (
       <Trang>
-        <TieuDeTrang>Đội agent</TieuDeTrang>
+        <TieuDeTrang>{t('nav.team')}</TieuDeTrang>
         <LoiManHinh loi={loi} />
         <div style={{ marginTop: 12 }}>
           <Nut bien="phu" onClick={taiLai}>
-            Thử lại
+            {t('common.retry')}
           </Nut>
         </div>
       </Trang>
@@ -232,27 +266,36 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
 
   return (
     <Trang rong>
-      <TieuDeTrang moTa="Bật/tắt agent, chọn model, gán kỹ năng, tool và quyền đọc/ghi kho kiến thức. Mỗi agent lưu riêng.">
-        Đội agent
-      </TieuDeTrang>
+      <TieuDeTrang moTa={t('team.subtitle')}>{t('nav.team')}</TieuDeTrang>
 
       <div className="luoi luoi--3" style={{ marginBottom: 16 }}>
-        <OSo nhan="Agent đang bật" giaTri={`${soNguyen(tongQuan.bat)}/${soNguyen(tongQuan.tong)}`} />
-        <OSo nhan="Kỹ năng khả dụng" giaTri={soNguyen(duLieu.availableSkills.length)} moTa="Hệ thống biết" />
-        <OSo nhan="Tool khả dụng" giaTri={soNguyen(duLieu.availableTools.length)} moTa="Trong bản triển khai này" />
         <OSo
-          nhan="Cần phê duyệt"
-          giaTri={soNguyen(duLieu.availableTools.filter((tool) => tool.requiresApproval).length)}
+          nhan={t('team.enabledAgents')}
+          giaTri={`${formatNumber(tongQuan.bat)}/${formatNumber(tongQuan.tong)}`}
+        />
+        <OSo
+          nhan={t('team.availableSkills')}
+          giaTri={formatNumber(duLieu.availableSkills.length)}
+          moTa={t('team.availableSkillsHint')}
+        />
+        <OSo
+          nhan={t('team.availableTools')}
+          giaTri={formatNumber(duLieu.availableTools.length)}
+          moTa={t('team.availableToolsHint')}
+        />
+        <OSo
+          nhan={t('team.needsApproval')}
+          giaTri={formatNumber(duLieu.availableTools.filter((tool) => tool.requiresApproval).length)}
           loai="canh-bao"
-          moTa="Tool không tự chạy khi chưa được duyệt"
+          moTa={t('team.needsApprovalHint')}
         />
       </div>
 
       {tongQuan.thieuKyNang.length > 0 ? (
         <div style={{ marginBottom: 12 }}>
           <ThongBao loai="canh-bao">
-            <strong>Agent không có kỹ năng nào:</strong> {tongQuan.thieuKyNang.join(', ')}. Agent không có kỹ năng sẽ
-            không nhận được phương pháp làm việc nào; hãy gán ít nhất một kỹ năng.
+            <strong>{t('team.noSkillsTitle')}</strong>{' '}
+            {t('team.noSkillsBody', { members: tongQuan.thieuKyNang.join(', ') })}
           </ThongBao>
         </div>
       ) : null}
@@ -260,15 +303,13 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
       {tongQuan.khongDocDuoc.length > 0 ? (
         <div style={{ marginBottom: 12 }}>
           <ThongBao loai="canh-bao">
-            <strong>Agent không đọc được danh mục kiến thức nào:</strong> {tongQuan.khongDocDuoc.join(', ')}. Các agent
-            này sẽ bị lọc sạch kết quả tìm kiếm kho kiến thức; hãy cấp quyền đọc tối thiểu một danh mục.
+            <strong>{t('team.noCategoriesTitle')}</strong>{' '}
+            {t('team.noCategoriesBody', { members: tongQuan.khongDocDuoc.join(', ') })}
           </ThongBao>
         </div>
       ) : null}
 
-      {duLieu.members.length === 0 ? (
-        <Trong>Chưa có agent nào trong công ty này. Hãy kiểm tra lại bước khởi tạo công ty.</Trong>
-      ) : null}
+      {duLieu.members.length === 0 ? <Trong>{t('team.empty')}</Trong> : null}
 
       {duLieu.members.map((member) => {
         const nhap = banNhap[member.role]
@@ -284,7 +325,7 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
                 {member.displayName}
                 {member.isLeader ? <Nhan loai="chinh">Leader</Nhan> : null}
                 <Nhan loai="mo">{member.role}</Nhan>
-                {member.requireApproval ? <Nhan loai="canh-bao">Cần phê duyệt</Nhan> : null}
+                {member.requireApproval ? <Nhan loai="canh-bao">{t('team.needsApproval')}</Nhan> : null}
               </span>
             }
             phu={member.description}
@@ -296,25 +337,35 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
                     checked={nhap.enabled}
                     onChange={(event) => capNhat(member.role, { enabled: event.target.checked })}
                   />
-                  Đang bật
+                  {t('team.enabled')}
                 </label>
                 <Nut bien="phu" nho onClick={() => setMoRong((truoc) => ({ ...truoc, [member.role]: !mo }))}>
-                  {mo ? 'Thu gọn' : 'Cấu hình'}
+                  {mo ? t('team.collapse') : t('team.configure')}
                 </Nut>
                 <Nut nho onClick={() => void luu(member)} dangTai={dangLuu === member.role}>
-                  Lưu
+                  {t('common.save')}
                 </Nut>
               </span>
             }
           >
             <div className="hang" style={{ marginBottom: 8 }}>
-              <Nhan loai="mo">Tier hiện tại: {NHAN_TIER[member.tier]}</Nhan>
-              <Nhan loai="mo">Model: {member.modelLabel ?? 'mặc định theo tier'}</Nhan>
-              <Nhan loai="mo">Nhà cung cấp: {member.providerName ?? '—'}</Nhan>
-              <Nhan loai={soKyNang === 0 ? 'canh-bao' : 'mo'}>{soNguyen(soKyNang)} kỹ năng</Nhan>
-              <Nhan loai={nhap.tools.length === 0 ? 'canh-bao' : 'mo'}>{soNguyen(nhap.tools.length)} tool</Nhan>
-              <Nhan loai={soDocDuoc === 0 ? 'canh-bao' : 'mo'}>{soNguyen(soDocDuoc)} danh mục đọc được</Nhan>
-              <Nhan loai="mo">Ngân sách ngữ cảnh: {soNguyen(member.contextBudgetTokens)} token</Nhan>
+              <Nhan loai="mo">{t('team.currentTier', { tier: t(KHOA_TIER[member.tier]) })}</Nhan>
+              <Nhan loai="mo">
+                {t('team.modelLabel', { model: member.modelLabel ?? t('team.defaultByTier') })}
+              </Nhan>
+              <Nhan loai="mo">
+                {t('team.providerLabel', { provider: member.providerName ?? t('team.noValue') })}
+              </Nhan>
+              <Nhan loai={soKyNang === 0 ? 'canh-bao' : 'mo'}>
+                {t('team.skillCount', { n: formatNumber(soKyNang) })}
+              </Nhan>
+              <Nhan loai={nhap.tools.length === 0 ? 'canh-bao' : 'mo'}>
+                {t('team.toolCount', { n: formatNumber(nhap.tools.length) })}
+              </Nhan>
+              <Nhan loai={soDocDuoc === 0 ? 'canh-bao' : 'mo'}>
+                {t('team.readableCategories', { n: formatNumber(soDocDuoc) })}
+              </Nhan>
+              <Nhan loai="mo">{t('team.contextBudget', { n: formatNumber(member.contextBudgetTokens) })}</Nhan>
             </div>
 
             {thongBao[member.role] ? (
@@ -330,12 +381,12 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
 
             {soKyNang === 0 ? (
               <div style={{ marginBottom: 8 }}>
-                <ThongBao loai="canh-bao">Agent này chưa được gán kỹ năng nào.</ThongBao>
+                <ThongBao loai="canh-bao">{t('team.memberNoSkills')}</ThongBao>
               </div>
             ) : null}
             {soDocDuoc === 0 ? (
               <div style={{ marginBottom: 8 }}>
-                <ThongBao loai="canh-bao">Agent này không đọc được danh mục kiến thức nào.</ThongBao>
+                <ThongBao loai="canh-bao">{t('team.memberNoCategories')}</ThongBao>
               </div>
             ) : null}
 
@@ -348,15 +399,18 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
                       value={nhap.modelFk}
                       onChange={(giaTri) => capNhat(member.role, { modelFk: giaTri })}
                       options={[
-                        { value: '', label: '— Dùng model mặc định của tier —' },
+                        { value: '', label: t('team.useTierDefault') },
                         ...duLieu.models.map((model) => ({
+                          // `label`/`providerName` là tên model và nhà cung cấp do backend
+                          // trả về — dữ liệu, không dịch ở client; chỉ dấu phân cách là
+                          // chuỗi giao diện nên nằm trong catalog.
                           value: model.id,
-                          label: `${model.label} · ${model.providerName}`,
+                          label: t('team.modelOption', { model: model.label, provider: model.providerName }),
                         })),
                       ]}
                     />
                     <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)', marginBottom: 0 }}>
-                      Model không hỗ trợ tool-call sẽ bị router tự động đổi sang model khác cùng tier.
+                      {t('team.modelHint')}
                     </p>
                   </div>
                   <div>
@@ -367,16 +421,16 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
                         const tier = MODEL_TIERS.find((item) => item === giaTri)
                         if (tier) capNhat(member.role, { tier })
                       }}
-                      options={MODEL_TIERS.map((tier) => ({ value: tier, label: NHAN_TIER[tier] }))}
+                      options={MODEL_TIERS.map((tier) => ({ value: tier, label: t(KHOA_TIER[tier]) }))}
                     />
                     <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)', marginBottom: 0 }}>
-                      Tier quyết định model dự phòng khi agent không gán model cứng.
+                      {t('team.tierHint')}
                     </p>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="card__tieu-de">Kỹ năng ({soNguyen(soKyNang)})</h3>
+                  <h3 className="card__tieu-de">{t('team.skillsHeading', { n: formatNumber(soKyNang) })}</h3>
                   <div className="hang">
                     {duLieu.availableSkills.map((kyNang) => {
                       const chon = nhap.skills.includes(kyNang.name)
@@ -388,7 +442,7 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
                           onClick={() => doiKyNang(member.role, kyNang.name)}
                           title={kyNang.description}
                         >
-                          {chon ? '✓ ' : '+ '}
+                          {chon ? DAU_TICH : '+ '}
                           {kyNang.name}
                         </Nut>
                       )
@@ -397,7 +451,7 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
                 </div>
 
                 <div>
-                  <h3 className="card__tieu-de">Tool ({soNguyen(nhap.tools.length)})</h3>
+                  <h3 className="card__tieu-de">{t('team.toolsHeading', { n: formatNumber(nhap.tools.length) })}</h3>
                   <div className="hang">
                     {duLieu.availableTools.map((tool) => {
                       const chon = nhap.tools.includes(tool.name)
@@ -409,34 +463,32 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
                           onClick={() => doiTool(member.role, tool.name)}
                           title={tool.description}
                         >
-                          {chon ? '✓ ' : '+ '}
+                          {chon ? DAU_TICH : '+ '}
                           {tool.name}
-                          {tool.requiresApproval ? ' · cần duyệt' : ''}
+                          {tool.requiresApproval ? t('team.toolApprovalMark') : ''}
                         </Nut>
                       )
                     })}
                   </div>
-                  <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
-                    Các tool ghi ra kênh ngoài (đăng bài, gửi email, chạy quảng cáo) đều đánh dấu “cần duyệt”: agent chỉ
-                    tạo bản nháp, con người duyệt ở màn “Công việc” rồi mới thực thi.
-                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('team.toolNote')}</p>
                 </div>
 
                 <div>
-                  <h3 className="card__tieu-de">Ma trận phân quyền kiến thức</h3>
+                  <h3 className="card__tieu-de">{t('team.permissionMatrix')}</h3>
                   <table className="bang">
                     <thead>
                       <tr>
-                        <th>Danh mục</th>
-                        <th style={{ width: 90 }}>Đọc</th>
-                        <th style={{ width: 90 }}>Ghi</th>
+                        <th>{t('team.category')}</th>
+                        <th style={{ width: 90 }}>{t('team.read')}</th>
+                        <th style={{ width: 90 }}>{t('team.write')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {nhap.knowledge.map((quyen) => (
                         <tr key={quyen.category}>
                           <td>
-                            {nhanDanhMuc(quyen.category)} <span style={{ color: 'var(--mau-chu-mo)' }}>({quyen.category})</span>
+                            {nhanDanhMuc(quyen.category, t)}{' '}
+                            <span style={{ color: 'var(--mau-chu-mo)' }}>({quyen.category})</span>
                           </td>
                           <td>
                             <input
@@ -460,10 +512,7 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
                       ))}
                     </tbody>
                   </table>
-                  <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
-                    Quyền đọc được lọc TRƯỚC khi xếp hạng tìm kiếm: agent thiếu quyền sẽ không nhận được mẩu kiến thức
-                    nào từ danh mục đó.
-                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('team.matrixHint')}</p>
                 </div>
               </div>
             ) : null}

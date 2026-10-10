@@ -1,6 +1,6 @@
 /** Màn hình đăng nhập và đăng ký. */
 import { useState, type ReactNode } from 'react'
-import { api, ApiError } from '../lib/api.ts'
+import { api } from '../lib/api.ts'
 import { useSession } from '../lib/session.tsx'
 import { useI18n } from '../lib/i18n.tsx'
 import { LocaleSwitcher } from '../components/LocaleSwitcher.tsx'
@@ -8,7 +8,7 @@ import { Nut, ONhap, ThongBao, Truong } from '../components/ui.tsx'
 
 export function DangNhapScreen(): ReactNode {
   const { signIn } = useSession()
-  const { t } = useI18n()
+  const { t, translateError } = useI18n()
   const [cheDo, setCheDo] = useState<'dang-nhap' | 'dang-ky'>('dang-nhap')
   const [email, setEmail] = useState('')
   const [matKhau, setMatKhau] = useState('')
@@ -38,9 +38,9 @@ export function DangNhapScreen(): ReactNode {
           : await api.login({ email: email.trim(), password: matKhau })
       signIn(ketQua.user, ketQua.companies)
     } catch (error) {
-      // `ApiError.message` đã được backend dịch theo ngôn ngữ gửi lên; nếu chưa dịch
-      // được thì đây là lỗi mạng, và câu đó cũng nằm trong catalog.
-      setLoi(error instanceof ApiError ? error.message : t('common.cannotConnectServer'))
+      // `translateError` ưu tiên `messageKey` để lỗi khớp ngôn ngữ giao diện đang chọn,
+      // kể cả khi người dùng vừa đổi ngôn ngữ sau lúc gọi API.
+      setLoi(translateError(error))
     } finally {
       setDangGui(false)
     }

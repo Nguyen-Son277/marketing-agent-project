@@ -25,6 +25,7 @@ interface ConversationRow {
   title: string
   phase: ConversationPhase
   brief_json: string | null
+  language: string
   created_at: string
   updated_at: string
 }
@@ -92,6 +93,7 @@ const toConversation = (row: ConversationRow): ConversationRecord => ({
   title: row.title,
   phase: row.phase,
   briefJson: row.brief_json,
+  language: row.language,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 })
@@ -157,13 +159,26 @@ export class WorkRepo {
 
   /* -------------------------------------------------------- conversations */
 
-  createConversation(input: { companyId: string; userId: string; title: string }): ConversationRecord {
+  createConversation(input: {
+    companyId: string
+    userId: string
+    title: string
+    /** Ngôn ngữ agent trả lời; mặc định tiếng Việt để giữ hành vi cũ. */
+    language?: string
+  }): ConversationRecord {
     const id = newId()
     const now = nowIso()
     this.db.run(
-      `INSERT INTO conversations (id, company_id, user_id, title, phase, brief_json, created_at, updated_at)
-       VALUES (@id, @companyId, @userId, @title, 'intake', NULL, @now, @now)`,
-      { id, companyId: input.companyId, userId: input.userId, title: input.title, now },
+      `INSERT INTO conversations (id, company_id, user_id, title, phase, brief_json, language, created_at, updated_at)
+       VALUES (@id, @companyId, @userId, @title, 'intake', NULL, @language, @now, @now)`,
+      {
+        id,
+        companyId: input.companyId,
+        userId: input.userId,
+        title: input.title,
+        language: input.language ?? 'vi',
+        now,
+      },
     )
     return this.requireConversation(id, input.companyId)
   }

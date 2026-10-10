@@ -34,12 +34,26 @@ export interface AppErrorOptions {
   /** Non-sensitive diagnostic detail; never include secrets or raw API keys. */
   readonly details?: unknown
   readonly cause?: unknown
+  /**
+   * Khoá dịch cho thông báo này, ví dụ `errors.auth.invalidCredentials`.
+   *
+   * Vì sao vừa có `message` vừa có `messageKey`: `message` là câu tiếng Việt mặc định
+   * nên mọi chỗ chưa kịp gắn khoá vẫn hiển thị được, không bao giờ trắng chữ. Khi có
+   * khoá, tầng biên HTTP dịch lại theo ngôn ngữ của yêu cầu, và trả khoá về cho trình
+   * duyệt để nó dịch theo ngôn ngữ giao diện. Nhờ vậy không phải sửa toàn bộ call site
+   * cùng lúc.
+   */
+  readonly messageKey?: string
+  /** Tham số nội suy cho `messageKey`, ví dụ `{ limit: 20 }`. */
+  readonly messageParams?: Record<string, string | number>
 }
 
 export class AppError extends Error {
   readonly code: AppErrorCode
   readonly status: number
   readonly details: unknown
+  readonly messageKey: string | undefined
+  readonly messageParams: Record<string, string | number> | undefined
 
   constructor(code: AppErrorCode, message: string, options: AppErrorOptions = {}) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause })
@@ -47,7 +61,29 @@ export class AppError extends Error {
     this.code = code
     this.status = STATUS_BY_CODE[code]
     this.details = options.details
+    this.messageKey = options.messageKey
+    this.messageParams = options.messageParams
   }
+}
+
+/**
+ * Tạo `AppError` có khoá dịch, kèm câu tiếng Việt làm mặc định.
+ *
+ * Vì sao tham số thứ ba là `key` mà không phải `message`: bắt buộc nơi gọi phải nghĩ
+ * tới bản dịch ngay khi tạo lỗi. Nếu để `message` trước thì rất dễ thêm lỗi mới mà
+ * quên khoá, và lỗi đó sẽ mãi chỉ có tiếng Việt.
+ */
+export function appError(
+  code: AppErrorCode,
+  key: string,
+  options: AppErrorOptions & { readonly message: string },
+): AppError {
+  return new AppError(code, options.message, {
+    messageKey: key,
+    ...(options.messageParams ? { messageParams: options.messageParams } : {}),
+    ...(options.details === undefined ? {} : { details: options.details }),
+    ...(options.cause === undefined ? {} : { cause: options.cause }),
+  })
 }
 
 export const unauthorized = (m = 'Cần đăng nhập') => new AppError('unauthorized', m)

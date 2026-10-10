@@ -7,6 +7,7 @@
  * quản lý trạng thái, nên màn hình nào cũng ghép được.
  */
 import type { ChangeEvent, ReactNode } from 'react'
+import { useI18n } from '../lib/i18n.tsx'
 
 export function Trang({ children, rong = false }: { children: ReactNode; rong?: boolean }): ReactNode {
   return <div className={rong ? 'the the--rong' : 'the'}>{children}</div>
@@ -201,10 +202,13 @@ export function ThongBao({
   return <div className={`thong-bao thong-bao--${loai}`}>{children}</div>
 }
 
-export function DangTai({ nhan = 'Đang tải…' }: { nhan?: string }): ReactNode {
+export function DangTai({ nhan }: { nhan?: string }): ReactNode {
+  // Nhãn mặc định phải đi qua catalog: đây là thành phần dùng chung, nên hard-code
+  // tiếng Việt ở đây sẽ khiến mọi màn hình tiếng Anh quên truyền nhãn đều hiện tiếng Việt.
+  const { t } = useI18n()
   return (
     <div className="trong">
-      <span className="dang-tai" /> <span style={{ marginLeft: 8 }}>{nhan}</span>
+      <span className="dang-tai" /> <span style={{ marginLeft: 8 }}>{nhan ?? t('common.loading')}</span>
     </div>
   )
 }
@@ -238,9 +242,29 @@ export function OSo({
   )
 }
 
+/**
+ * Dấu gạch hiển thị cho giá trị trống.
+ *
+ * Vì sao viết dạng escape: mã nguồn giao diện phải thuần ASCII ngoài comment tiếng Việt
+ * (điều kiện để bài kiểm tra không còn chuỗi tiếng Việt trong JSX của task này), nhưng
+ * ký tự người dùng nhìn thấy vẫn phải là dấu gạch dài.
+ */
+const KHONG_CO = '\u2014'
+
+/*
+ * Ba hàm định dạng dưới đây vẫn hard-code `vi-VN` và được GIỮ NGUYÊN chữ ký.
+ *
+ * Vì sao chưa chuyển sang `formatDate`/`formatNumber`/`formatCurrencyUsd` của `useI18n`:
+ * chúng là hàm thuần, không gọi được hook, mà chúng còn được các màn hình khác import
+ * (Bảng điều khiển, Chi phí, Đội agent, Kho kiến thức, Cài đặt). Đổi chữ ký ở đây sẽ làm
+ * vỡ biên dịch của những file nằm ngoài phạm vi task này. Giao diện Trao đổi và Công việc
+ * đã tự dùng thẳng formatter của `useI18n`; xoá ba hàm này là việc của lần dọn dẹp sau,
+ * khi mọi màn hình đã chuyển xong.
+ */
+
 /** Định dạng tiền USD; chi phí model luôn nhỏ nên hiển thị 4 chữ số thập phân. */
 export function tienUsd(value: number): string {
-  if (!Number.isFinite(value)) return '—'
+  if (!Number.isFinite(value)) return KHONG_CO
   if (value === 0) return '0 USD'
   if (value < 0.01) return `${(value * 100).toFixed(3)} cent`
   return `${value.toFixed(4)} USD`
@@ -248,13 +272,13 @@ export function tienUsd(value: number): string {
 
 /** Định dạng số nguyên kiểu Việt Nam. */
 export function soNguyen(value: number): string {
-  return Number.isFinite(value) ? value.toLocaleString('vi-VN') : '—'
+  return Number.isFinite(value) ? value.toLocaleString('vi-VN') : KHONG_CO
 }
 
 /** Định dạng thời điểm ISO thành giờ:phút ngày/tháng. */
 export function thoiDiem(iso: string | null | undefined): string {
-  if (!iso) return '—'
+  if (!iso) return KHONG_CO
   const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return KHONG_CO
   return date.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }

@@ -64,6 +64,8 @@ export function chatRoutes() {
             companyId,
             userId,
             title: input.title ?? 'Cuộc trao đổi mới',
+            // Ngôn ngữ do client gửi (đã được schema kiểm tra là 'vi' hoặc 'en').
+            language: input.language,
           })
           repos.accounting.audit({ companyId, userId, action: 'conversation.create', target: conversation.id })
           request.json(201, { conversation: toConversationView(conversation, 0) })

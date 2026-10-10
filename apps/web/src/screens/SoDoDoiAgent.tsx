@@ -8,32 +8,47 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { AgentRole, DiagramNode, DiagramResponse } from '@marketing-agent/shared'
+import type { MessageKey } from '@marketing-agent/i18n'
 import { api, ApiError } from '../lib/api.ts'
+import { useI18n } from '../lib/i18n.tsx'
 import { Card, DangTai, Nhan, Nut, ThongBao, Trang, TieuDeTrang } from '../components/ui.tsx'
 
-/** Nhãn lớp và thứ tự hiển thị, khớp `layer` trong hợp đồng API. */
-const LOP: readonly { id: DiagramNode['layer']; nhan: string; moTa: string }[] = [
-  { id: 'leader', nhan: 'Lớp điều hành', moTa: 'Điểm chạm duy nhất với bạn; chia việc, kiểm tra, báo cáo.' },
-  { id: 'research', nhan: 'Lớp nghiên cứu & chiến lược', moTa: 'Tạo dữ liệu nền trước khi làm nội dung.' },
-  { id: 'content', nhan: 'Lớp nội dung & sáng tạo', moTa: 'Biến chiến lược thành nội dung và đặc tả hình ảnh.' },
-  { id: 'channel', nhan: 'Lớp kênh & thực thi', moTa: 'Đưa nội dung ra kênh và vận hành quảng cáo.' },
-  { id: 'measure', nhan: 'Lớp đo lường & chăm sóc', moTa: 'Đo kết quả và giữ quan hệ với khách hàng.' },
+/**
+ * Nhãn lớp và thứ tự hiển thị, khớp `layer` trong hợp đồng API.
+ *
+ * `nhan`/`moTa` là KHOÁ DỊCH chứ không phải câu chữ, cùng lý do như `ROUTES` ở
+ * `Shell.tsx`: giữ câu chữ ở đây thì đổi ngôn ngữ không đổi được nhãn.
+ */
+const LOP: readonly { id: DiagramNode['layer']; nhan: MessageKey; moTa: MessageKey }[] = [
+  { id: 'leader', nhan: 'diagram.layer.leader.label', moTa: 'diagram.layer.leader.description' },
+  { id: 'research', nhan: 'diagram.layer.research.label', moTa: 'diagram.layer.research.description' },
+  { id: 'content', nhan: 'diagram.layer.content.label', moTa: 'diagram.layer.content.description' },
+  { id: 'channel', nhan: 'diagram.layer.channel.label', moTa: 'diagram.layer.channel.description' },
+  { id: 'measure', nhan: 'diagram.layer.measure.label', moTa: 'diagram.layer.measure.description' },
 ]
 
-const NHAN_VAI_TRO: Record<string, string> = {
-  'marketing-leader': 'Trưởng phòng Marketing',
-  'market-research': 'Nghiên cứu thị trường',
-  'content-writer': 'Viết nội dung',
-  'seo-technical': 'SEO kỹ thuật',
-  'social-media': 'Social Media',
-  'paid-media': 'Quảng cáo trả phí',
-  'email-crm': 'Email & CRM',
-  'design-video': 'Thiết kế & Video',
-  analytics: 'Phân tích & Báo cáo',
-  'community-care': 'Chăm sóc cộng đồng',
+/**
+ * Bản dịch cho MÃ vai trò do backend trả về.
+ *
+ * Vì sao vẫn cần: tên agent người dùng đặt (`node.label`) là dữ liệu và không dịch,
+ * nhưng khi agent chưa được đặt tên riêng thì mã vai trò là thứ duy nhất để hiển thị —
+ * để nguyên mã tiếng Anh sẽ khó đọc với người dùng tiếng Việt ở đúng màn giải thích đội.
+ */
+const NHAN_VAI_TRO: Readonly<Record<string, MessageKey>> = {
+  'marketing-leader': 'diagram.role.marketingLeader',
+  'market-research': 'diagram.role.marketResearch',
+  'content-writer': 'diagram.role.contentWriter',
+  'seo-technical': 'diagram.role.seoTechnical',
+  'social-media': 'diagram.role.socialMedia',
+  'paid-media': 'diagram.role.paidMedia',
+  'email-crm': 'diagram.role.emailCrm',
+  'design-video': 'diagram.role.designVideo',
+  analytics: 'diagram.role.analytics',
+  'community-care': 'diagram.role.communityCare',
 }
 
 export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
+  const { t, formatNumber } = useI18n()
   const [duLieu, setDuLieu] = useState<DiagramResponse | null>(null)
   const [loi, setLoi] = useState<string | null>(null)
   const [dangTai, setDangTai] = useState(true)
@@ -47,7 +62,7 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
         const ketQua = await api.diagram(companyId)
         if (!cancelled) setDuLieu(ketQua)
       } catch (error) {
-        if (!cancelled) setLoi(error instanceof ApiError ? error.message : 'Không tải được sơ đồ đội agent.')
+        if (!cancelled) setLoi(error instanceof ApiError ? error.message : t('diagram.loadFailed'))
       } finally {
         if (!cancelled) setDangTai(false)
       }
@@ -70,7 +85,7 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
   if (dangTai) {
     return (
       <Trang>
-        <DangTai nhan="Đang tải sơ đồ đội agent…" />
+        <DangTai nhan={t('diagram.loading')} />
       </Trang>
     )
   }
@@ -85,31 +100,38 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
 
   if (!duLieu) return null
 
+  // Vai trò là mã backend: catalog chỉ dịch mã đã biết, còn lại hiện nguyên mã để sơ đồ
+  // không mất tên khi hợp đồng thêm vai trò mới mà giao diện chưa cập nhật.
+  const nhanVaiTro = (role: string): string => {
+    const khoa = NHAN_VAI_TRO[role]
+    return khoa ? t(khoa) : role
+  }
+
   return (
     <Trang rong>
       <TieuDeTrang
-        moTa={`${soAgentBat}/${duLieu.nodes.length} agent đang bật. Sơ đồ lấy dữ liệu sống từ cấu hình công ty — đổi trong màn Đội agent thì sơ đồ đổi theo.`}
+        moTa={t('diagram.subtitle', { enabled: formatNumber(soAgentBat), total: formatNumber(duLieu.nodes.length) })}
       >
-        Sơ đồ đội agent
+        {t('diagram.title')}
       </TieuDeTrang>
 
       <div className="hang" style={{ marginBottom: 16 }}>
         <Nut bien={cheDo === 'so-do' ? 'chinh' : 'phu'} nho onClick={() => setCheDo('so-do')}>
-          Đội agent
+          {t('diagram.tab.team')}
         </Nut>
         <Nut bien={cheDo === 'luong' ? 'chinh' : 'phu'} nho onClick={() => setCheDo('luong')}>
-          Luồng hoạt động
+          {t('diagram.tab.flow')}
         </Nut>
       </div>
 
       {cheDo === 'so-do' ? (
         <>
-          <Card tieuDe="Cấu trúc đội" phu="Mỗi agent chỉ đọc được những danh mục tri thức được cấp dưới đây.">
+          <Card tieuDe={t('diagram.structure.title')} phu={t('diagram.structure.subtitle')}>
             <div className="so-do">
               {theoLop.map((lop) => (
                 <div key={lop.id} className="so-do__lop">
-                  <div className="so-do__nhan-lop">{lop.nhan}</div>
-                  <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)', marginBottom: 8 }}>{lop.moTa}</div>
+                  <div className="so-do__nhan-lop">{t(lop.nhan)}</div>
+                  <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)', marginBottom: 8 }}>{t(lop.moTa)}</div>
                   <div className="luoi luoi--3">
                     {lop.nut.map((node) => (
                       <NutAgent key={node.id} node={node} />
@@ -120,10 +142,7 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
             </div>
           </Card>
 
-          <Card
-            tieuDe="Phân quyền tri thức"
-            phu="Ô trống nghĩa là agent KHÔNG truy xuất được nội dung trong danh mục đó. Bộ truy xuất lọc theo quyền trước khi xếp hạng, nên không có cách nào lọt qua."
-          >
+          <Card tieuDe={t('diagram.permissions.title')} phu={t('diagram.permissions.subtitle')}>
             <table className="bang">
               <thead>
                 <tr>
@@ -148,11 +167,11 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
                       return (
                         <td key={category.code} style={{ textAlign: 'center' }}>
                           {ghi ? (
-                            <Nhan loai="canh-bao">ghi</Nhan>
+                            <Nhan loai="canh-bao">{t('diagram.permissions.write')}</Nhan>
                           ) : doc ? (
-                            <Nhan loai="thanh-cong">đọc</Nhan>
+                            <Nhan loai="thanh-cong">{t('diagram.permissions.read')}</Nhan>
                           ) : (
-                            <span style={{ color: 'var(--mau-vien)' }}>–</span>
+                            <span style={{ color: 'var(--mau-vien)' }}>{t('diagram.permissions.none')}</span>
                           )}
                         </td>
                       )
@@ -165,7 +184,7 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
         </>
       ) : (
         <>
-          <Card tieuDe="Một yêu cầu chạy qua những bước nào" phu="Đây là đường đi thật của hệ thống, không phải mô tả lý thuyết.">
+          <Card tieuDe={t('diagram.flow.title')} phu={t('diagram.flow.subtitle')}>
             <div className="luong">
               {duLieu.workflow.map((buoc, index) => (
                 <div key={buoc.id} className="luong__buoc">
@@ -179,13 +198,13 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
             </div>
           </Card>
 
-          <Card tieuDe="Quan hệ trong đội" phu="Leader giao việc xuống chuyên môn; chuyên môn bàn giao ngược lại; hỏi ngang hàng giới hạn 3 vòng.">
+          <Card tieuDe={t('diagram.edges.title')} phu={t('diagram.edges.subtitle')}>
             <table className="bang">
               <thead>
                 <tr>
-                  <th>Từ</th>
-                  <th>Đến</th>
-                  <th>Loại quan hệ</th>
+                  <th>{t('diagram.edges.from')}</th>
+                  <th>{t('diagram.edges.to')}</th>
+                  <th>{t('diagram.edges.kind')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -193,10 +212,14 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
                   .filter((edge) => edge.kind === 'delegates' || edge.kind === 'hands_off' || edge.kind === 'peer')
                   .map((edge, index) => (
                     <tr key={`${edge.from}-${edge.to}-${edge.kind}-${index}`}>
-                      <td>{NHAN_VAI_TRO[edge.from] ?? edge.from}</td>
-                      <td>{NHAN_VAI_TRO[edge.to] ?? edge.to}</td>
+                      <td>{nhanVaiTro(edge.from)}</td>
+                      <td>{nhanVaiTro(edge.to)}</td>
                       <td>
-                        {edge.kind === 'delegates' ? 'Giao việc' : edge.kind === 'hands_off' ? 'Bàn giao kết quả' : 'Hỏi ngang hàng'}
+                        {edge.kind === 'delegates'
+                          ? t('diagram.edges.delegates')
+                          : edge.kind === 'hands_off'
+                            ? t('diagram.edges.handsOff')
+                            : t('diagram.edges.peer')}
                       </td>
                     </tr>
                   ))}
@@ -211,42 +234,49 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
 
 /** Một nút agent trong sơ đồ, kèm model, kỹ năng và tool. */
 function NutAgent({ node }: { node: DiagramNode }): ReactNode {
+  const { t, formatNumber } = useI18n()
   const laLeader = node.layer === 'leader'
   const lopNut = ['so-do__nut', laLeader ? 'so-do__nut--leader' : '', node.enabled ? '' : 'so-do__nut--tat']
     .filter(Boolean)
     .join(' ')
-  const tenHienThi = NHAN_VAI_TRO[node.role] ?? node.label
+  // Tên agent do người dùng đặt là dữ liệu nên không dịch; chỉ khi chưa có tên riêng
+  // mới rơi về bản dịch của mã vai trò.
+  const khoaVaiTro = NHAN_VAI_TRO[node.role]
+  const tenHienThi = khoaVaiTro ? t(khoaVaiTro) : node.label
 
   return (
     <div className={lopNut}>
       <div className="hang" style={{ justifyContent: 'space-between' }}>
         <span className="so-do__ten">
-          {laLeader ? '🎯 ' : ''}
+          {laLeader ? `${t('diagram.agent.leaderMark')} ` : ''}
           {tenHienThi}
         </span>
-        {node.enabled ? null : <Nhan loai="mo">tắt</Nhan>}
+        {node.enabled ? null : <Nhan loai="mo">{t('diagram.agent.disabled')}</Nhan>}
       </div>
       <div className="so-do__meta">{node.role}</div>
       <div className="so-do__meta">
-        Model: {node.modelLabel ?? 'chưa gán'} · tier {node.tier}
+        {t('diagram.agent.model', {
+          model: node.modelLabel ?? t('diagram.agent.modelUnassigned'),
+          tier: t(`modelTier.${node.tier}`),
+        })}
       </div>
       {node.skills.length > 0 ? (
         <div className="so-do__meta" title={node.skills.join(', ')}>
-          Kỹ năng: {node.skills.length}
+          {t('diagram.agent.skills', { count: formatNumber(node.skills.length) })}
         </div>
       ) : (
         <div className="so-do__meta" style={{ color: 'var(--mau-canh-bao)' }}>
-          ⚠️ Chưa có kỹ năng nào
+          {t('diagram.agent.noSkills')}
         </div>
       )}
       {node.tools.length > 0 ? (
         <div className="so-do__meta" title={node.tools.join(', ')}>
-          Công cụ: {node.tools.length}
+          {t('diagram.agent.tools', { count: formatNumber(node.tools.length) })}
         </div>
       ) : null}
       {node.knowledgeRead.length === 0 ? (
         <div className="so-do__meta" style={{ color: 'var(--mau-loi)' }}>
-          ⚠️ Không đọc được danh mục tri thức nào
+          {t('diagram.agent.noKnowledge')}
         </div>
       ) : null}
     </div>

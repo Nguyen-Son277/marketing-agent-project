@@ -226,6 +226,7 @@ export function toConversationView(conversation: ConversationRecord, costUsd: nu
   return {
     id: conversation.id,
     title: conversation.title,
+    language: conversation.language,
     phase: conversation.phase,
     briefComplete: state.briefComplete,
     missingFields: state.missingFields,

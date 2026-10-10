@@ -173,6 +173,11 @@ export const en = {
   'dashboard.viewTasks': 'View tasks',
   'dashboard.viewTasksHint': 'Press “View tasks” to open the full kanban board.',
   'dashboard.finishSetup': 'Open “Settings” to finish configuration before using this screen.',
+  'dashboard.costLimits': 'Daily cost cap: {{limit}} · last 30 days: {{last30}}',
+  'dashboard.costUsedPercent': '{{percent}}% of the daily cap used',
+  'dashboard.costCapReached': 'The daily cost cap was reached. New runs stop until the cap is raised in “Settings”.',
+  'dashboard.noActivity': 'No activity yet. Start with a conversation with the Leader.',
+  'dashboard.systemNotReadyTitle': 'System is not ready:',
 
   /* ------------------------------------------- per-screen namespaces */
   ...en_errors,

@@ -5,7 +5,7 @@
  * parameters can be raised later without invalidating existing accounts.
  */
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
-import { sha256, unauthorized, validation } from '@marketing-agent/shared'
+import { AppError, sha256, unauthorized, validation } from '@marketing-agent/shared'
 
 const N = 16_384
 const R = 8
@@ -61,5 +61,5 @@ export function assertPasswordStrength(password: string): void {
 }
 
 export function invalidCredentials(): never {
-  throw unauthorized('Email hoặc mật khẩu không đúng')
+  throw new AppError('unauthorized', 'Email hoặc mật khẩu không đúng', { messageKey: 'errors.auth.invalidCredentials' })
 }

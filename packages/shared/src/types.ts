@@ -230,6 +230,13 @@ export interface ConversationRecord {
   readonly title: string
   readonly phase: ConversationPhase
   readonly briefJson: string | null
+  /**
+   * Ngôn ngữ agent dùng để trả lời trong phiên này (`'vi'` hoặc `'en'`).
+   *
+   * Gắn ở phiên để báo cáo cũ giữ nguyên ngôn ngữ lúc tạo; xem migration
+   * `0007_conversation_language` để biết vì sao không gắn ở người dùng.
+   */
+  readonly language: string
   readonly createdAt: string
   readonly updatedAt: string
 }

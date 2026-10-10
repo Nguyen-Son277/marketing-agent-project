@@ -20,7 +20,9 @@ import type {
   ProviderView,
 } from '@marketing-agent/shared'
 import { INTEGRATION_KINDS, MODEL_TIERS, PROVIDER_KINDS } from '@marketing-agent/shared'
+import type { MessageKey } from '@marketing-agent/i18n'
 import { api, ApiError } from '../lib/api.ts'
+import { useI18n } from '../lib/i18n.tsx'
 import {
   Card,
   DangTai,
@@ -32,31 +34,38 @@ import {
   TieuDeTrang,
   Trang,
   Trong,
-  soNguyen,
-  thoiDiem,
-  tienUsd,
 } from '../components/ui.tsx'
 
+// Tên giao thức là danh từ riêng của nhà cung cấp nên không dịch, vì thế giữ thẳng
+// ở đây thay vì đưa vào catalog.
 const NHAN_PROVIDER: Readonly<Record<ProviderKind, string>> = {
   openai_compatible: 'OpenAI-compatible',
   anthropic: 'Anthropic',
 }
 
-const NHAN_INTEGRATION: Readonly<Record<IntegrationKind, string>> = {
-  firecrawl: 'Firecrawl (cào nội dung web)',
-  'google-search-console': 'Google Search Console',
-  'google-analytics': 'Google Analytics',
-  'google-sheets': 'Google Sheets',
-  meta: 'Meta (Facebook / Instagram)',
-  linkedin: 'LinkedIn',
-  'google-ads': 'Google Ads',
-  'email-smtp': 'Email SMTP',
+/**
+ * Nhãn kênh là KHOÁ DỊCH (trừ tên riêng giữ nguyên ở cả hai ngôn ngữ).
+ *
+ * Vì sao gom cả tên riêng vào catalog: bảng ánh xạ chỉ giữ một kiểu duy nhất, nên
+ * không có nhánh nào vô tình hiển thị mã kênh thô khi thiếu bản dịch.
+ */
+const NHAN_INTEGRATION: Readonly<Record<IntegrationKind, MessageKey>> = {
+  firecrawl: 'settings.integrationKind.firecrawl',
+  'google-search-console': 'settings.integrationKind.googleSearchConsole',
+  'google-analytics': 'settings.integrationKind.googleAnalytics',
+  'google-sheets': 'settings.integrationKind.googleSheets',
+  meta: 'settings.integrationKind.meta',
+  linkedin: 'settings.integrationKind.linkedin',
+  'google-ads': 'settings.integrationKind.googleAds',
+  'email-smtp': 'settings.integrationKind.emailSmtp',
 }
 
-const NHAN_TIER: Readonly<Record<ModelTier, string>> = {
-  light: 'Nhẹ (light)',
-  standard: 'Chuẩn (standard)',
-  deep: 'Sâu (deep)',
+// Mức năng lực đã có sẵn khoá `modelTier.*` dùng chung với màn Đội agent; tạo khoá
+// riêng ở đây sẽ khiến hai màn gọi cùng một mức bằng hai câu chữ khác nhau.
+const NHAN_TIER: Readonly<Record<ModelTier, MessageKey>> = {
+  light: 'modelTier.light',
+  standard: 'modelTier.standard',
+  deep: 'modelTier.deep',
 }
 
 function laProviderKind(giaTri: string): giaTri is ProviderKind {
@@ -78,24 +87,26 @@ function soTuChuoi(giaTri: string): number {
 }
 
 function LoiManHinh({ loi }: { loi: ApiError }): ReactNode {
+  const { t } = useI18n()
   return (
     <ThongBao loai="loi">
       {loi.message}
-      {loi.needsConfiguration ? ' Kiểm tra lại nhà cung cấp và API key ngay tại màn hình này.' : null}
+      {loi.needsConfiguration ? ` ${t('settings.needsConfigurationHint')}` : null}
     </ThongBao>
   )
 }
 
 /** Khối trạng thái tải/lỗi dùng chung cho từng nhóm cấu hình. */
 function TrangThai({ dangTai, loi, taiLai }: { dangTai: boolean; loi: ApiError | null; taiLai: () => void }): ReactNode {
-  if (dangTai) return <DangTai />
+  const { t } = useI18n()
+  if (dangTai) return <DangTai nhan={t('common.loading')} />
   if (loi) {
     return (
       <div>
         <LoiManHinh loi={loi} />
         <div style={{ marginTop: 10 }}>
           <Nut bien="phu" nho onClick={taiLai}>
-            Thử lại
+            {t('common.retry')}
           </Nut>
         </div>
       </div>
@@ -107,6 +118,7 @@ function TrangThai({ dangTai, loi, taiLai }: { dangTai: boolean; loi: ApiError |
 /* ------------------------------------------------------------ nhà cung cấp */
 
 function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
+  const { t, formatNumber } = useI18n()
   const [danhSach, setDanhSach] = useState<readonly ProviderView[] | null>(null)
   const [dangTai, setDangTai] = useState(true)
   const [loi, setLoi] = useState<ApiError | null>(null)
@@ -138,7 +150,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', 'Không kết nối được máy chủ.'))
+        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', t('common.cannotConnectServer')))
       })
       .finally(() => {
         if (!cancelled) setDangTai(false)
@@ -176,7 +188,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     setLoiLuu(null)
     setThongBao(null)
     if (ten.trim().length === 0 || baseUrl.trim().length === 0) {
-      setLoiLuu('Cần nhập tên nhà cung cấp và base URL.')
+      setLoiLuu(t('settings.providers.needNameAndBaseUrl'))
       return
     }
     setDangLuu(true)
@@ -189,7 +201,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
           enabled: bat,
           ...(apiKey.length > 0 ? { apiKey } : {}),
         })
-        setThongBao('Đã cập nhật nhà cung cấp.')
+        setThongBao(t('settings.providers.updated'))
       } else {
         await api.createProvider(companyId, {
           name: ten.trim(),
@@ -198,12 +210,12 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
           enabled: bat,
           ...(apiKey.length > 0 ? { apiKey } : {}),
         })
-        setThongBao('Đã thêm nhà cung cấp.')
+        setThongBao(t('settings.providers.created'))
       }
       xoaBieuMau()
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : 'Không lưu được nhà cung cấp.')
+      setLoiLuu(error instanceof ApiError ? error.message : t('settings.providers.saveFailed'))
     } finally {
       setDangLuu(false)
     }
@@ -218,7 +230,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     } catch (error) {
       setLoiTest((truoc) => ({
         ...truoc,
-        [provider.id]: error instanceof ApiError ? error.message : 'Không kiểm tra được kết nối.',
+        [provider.id]: error instanceof ApiError ? error.message : t('settings.providers.testFailed'),
       }))
     } finally {
       setDangTest(null)
@@ -226,10 +238,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
   }
 
   return (
-    <Card
-      tieuDe="Nhà cung cấp model"
-      phu="Nơi agent gửi yêu cầu tới. API key là chỉ-ghi: gửi lên một lần, server mã hoá, và không bao giờ trả lại giá trị gốc."
-    >
+    <Card tieuDe={t('settings.providers.title')} phu={t('settings.providers.subtitle')}>
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
       {thongBao ? (
@@ -243,20 +252,18 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
         </div>
       ) : null}
 
-      {danhSach && danhSach.length === 0 ? (
-        <Trong>Chưa có nhà cung cấp nào. Thêm một nhà cung cấp OpenAI-compatible để agent gọi được model.</Trong>
-      ) : null}
+      {danhSach && danhSach.length === 0 ? <Trong>{t('settings.providers.empty')}</Trong> : null}
 
       {danhSach && danhSach.length > 0 ? (
         <table className="bang">
           <thead>
             <tr>
-              <th>Tên</th>
-              <th>Loại</th>
-              <th>Base URL</th>
-              <th>API key</th>
-              <th>Model</th>
-              <th>Trạng thái</th>
+              <th>{t('settings.providers.table.name')}</th>
+              <th>{t('settings.providers.table.kind')}</th>
+              <th>{t('settings.providers.table.baseUrl')}</th>
+              <th>{t('settings.providers.table.apiKey')}</th>
+              <th>{t('settings.providers.table.models')}</th>
+              <th>{t('settings.providers.table.status')}</th>
               <th />
             </tr>
           </thead>
@@ -265,39 +272,56 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
               <tr key={provider.id}>
                 <td>
                   <strong>{provider.name}</strong>
-                  {provider.isGlobal ? <div><Nhan loai="mo">Dùng chung toàn hệ thống</Nhan></div> : null}
+                  {provider.isGlobal ? (
+                    <div>
+                      <Nhan loai="mo">{t('settings.providers.global')}</Nhan>
+                    </div>
+                  ) : null}
                 </td>
                 <td>{NHAN_PROVIDER[provider.kind]}</td>
                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{provider.baseUrl}</td>
                 <td>
                   {provider.apiKeyConfigured ? (
                     <>
-                      <Nhan loai="thanh-cong">Đã cấu hình</Nhan>
+                      <Nhan loai="thanh-cong">{t('settings.providers.keyConfigured')}</Nhan>
                       {provider.apiKeyHint ? (
-                        <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>Gợi ý: {provider.apiKeyHint}</div>
+                        <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
+                          {t('settings.providers.keyHint', { hint: provider.apiKeyHint })}
+                        </div>
                       ) : null}
                     </>
                   ) : (
-                    <Nhan loai="canh-bao">Chưa có khoá</Nhan>
+                    <Nhan loai="canh-bao">{t('settings.providers.keyMissing')}</Nhan>
                   )}
                 </td>
-                <td className="so">{soNguyen(provider.models.length)}</td>
-                <td>{provider.enabled ? <Nhan loai="thanh-cong">Đang bật</Nhan> : <Nhan loai="mo">Đã tắt</Nhan>}</td>
+                <td className="so">{formatNumber(provider.models.length)}</td>
+                <td>
+                  {provider.enabled ? (
+                    <Nhan loai="thanh-cong">{t('settings.providers.enabled')}</Nhan>
+                  ) : (
+                    <Nhan loai="mo">{t('settings.providers.disabled')}</Nhan>
+                  )}
+                </td>
                 <td>
                   <div className="hang" style={{ gap: 6 }}>
                     <Nut bien="phu" nho onClick={() => napVaoBieuMau(provider)}>
-                      Sửa
+                      {t('common.edit')}
                     </Nut>
                     <Nut bien="phu" nho onClick={() => void test(provider)} dangTai={dangTest === provider.id}>
-                      Kiểm tra
+                      {t('settings.providers.test')}
                     </Nut>
                   </div>
                   {ketQuaTest[provider.id] ? (
                     <div style={{ marginTop: 6 }}>
                       <ThongBao loai={ketQuaTest[provider.id]?.ok ? 'thanh-cong' : 'loi'}>
-                        {ketQuaTest[provider.id]?.message} · {soNguyen(ketQuaTest[provider.id]?.latencyMs ?? 0)} ms
+                        {t('settings.providers.testResult', {
+                          message: ketQuaTest[provider.id]?.message ?? '',
+                          ms: formatNumber(ketQuaTest[provider.id]?.latencyMs ?? 0),
+                        })}
                         {ketQuaTest[provider.id]?.modelsSeen !== undefined
-                          ? ` · thấy ${soNguyen(ketQuaTest[provider.id]?.modelsSeen ?? 0)} model`
+                          ? ` ${t('settings.providers.testModelsSeen', {
+                              count: formatNumber(ketQuaTest[provider.id]?.modelsSeen ?? 0),
+                            })}`
                           : ''}
                       </ThongBao>
                     </div>
@@ -315,10 +339,10 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
       ) : null}
 
       <h3 className="card__tieu-de" style={{ marginTop: 18 }}>
-        {suaId ? 'Sửa nhà cung cấp' : 'Thêm nhà cung cấp'}
+        {suaId ? t('settings.providers.form.editTitle') : t('settings.providers.form.createTitle')}
       </h3>
       <div className="luoi luoi--2">
-        <ONhap value={ten} onChange={setTen} placeholder="Tên, ví dụ: Gateway nội bộ" />
+        <ONhap value={ten} onChange={setTen} placeholder={t('settings.providers.form.namePlaceholder')} />
         <OChon
           value={kind}
           onChange={(giaTri) => {
@@ -326,29 +350,28 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
           }}
           options={PROVIDER_KINDS.map((item) => ({ value: item, label: NHAN_PROVIDER[item] }))}
         />
-        <ONhap value={baseUrl} onChange={setBaseUrl} placeholder="http://localhost:20128/v1" />
+        <ONhap value={baseUrl} onChange={setBaseUrl} placeholder={t('settings.providers.form.baseUrlPlaceholder')} />
         <ONhap
           value={apiKey}
           onChange={setApiKey}
           type="password"
-          placeholder={suaId ? 'Để trống nếu giữ khoá cũ' : 'Dán API key'}
+          placeholder={
+            suaId ? t('settings.providers.form.apiKeyPlaceholderKeep') : t('settings.providers.form.apiKeyPlaceholder')
+          }
         />
       </div>
       <label className="hang" style={{ gap: 6, marginTop: 10, fontSize: 14 }}>
         <input type="checkbox" checked={bat} onChange={(event) => setBat(event.target.checked)} />
-        Bật nhà cung cấp này
+        {t('settings.providers.form.enable')}
       </label>
-      <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
-        Khoá đã lưu không hiển thị lại dưới bất kỳ hình thức nào. Muốn đổi khoá thì dán khoá mới; để trống nghĩa là giữ
-        nguyên khoá cũ.
-      </p>
+      <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.providers.form.keyNote')}</p>
       <div className="hang">
         <Nut onClick={() => void luu()} dangTai={dangLuu}>
-          {suaId ? 'Lưu thay đổi' : 'Thêm nhà cung cấp'}
+          {suaId ? t('settings.providers.form.submitEdit') : t('settings.providers.form.submitCreate')}
         </Nut>
         {suaId ? (
           <Nut bien="phu" onClick={xoaBieuMau}>
-            Huỷ sửa
+            {t('settings.providers.form.cancelEdit')}
           </Nut>
         ) : null}
       </div>
@@ -359,6 +382,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
 /* ------------------------------------------------------------------ model */
 
 function PhanModel({ companyId }: { companyId: string }): ReactNode {
+  const { t, formatNumber, formatCurrencyUsd } = useI18n()
   const [providers, setProviders] = useState<readonly ProviderView[] | null>(null)
   const [dangTai, setDangTai] = useState(true)
   const [loi, setLoi] = useState<ApiError | null>(null)
@@ -389,7 +413,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', 'Không kết nối được máy chủ.'))
+        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', t('common.cannotConnectServer')))
       })
       .finally(() => {
         if (!cancelled) setDangTai(false)
@@ -410,7 +434,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     setLoiLuu(null)
     setThongBao(null)
     if (providerId.length === 0 || modelId.trim().length === 0 || label.trim().length === 0) {
-      setLoiLuu('Cần chọn nhà cung cấp và nhập mã model cùng nhãn hiển thị.')
+      setLoiLuu(t('settings.models.needFields'))
       return
     }
     setDangLuu(true)
@@ -426,20 +450,17 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
       })
       setModelId('')
       setLabel('')
-      setThongBao('Đã thêm model.')
+      setThongBao(t('settings.models.created'))
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : 'Không lưu được model.')
+      setLoiLuu(error instanceof ApiError ? error.message : t('settings.models.saveFailed'))
     } finally {
       setDangLuu(false)
     }
   }
 
   return (
-    <Card
-      tieuDe="Model"
-      phu="Khai báo model kèm giá vào/ra mỗi triệu token. Giá này là cơ sở để tính chi phí và so với trần ngày."
-    >
+    <Card tieuDe={t('settings.models.title')} phu={t('settings.models.subtitle')}>
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
       {thongBao ? (
@@ -453,25 +474,23 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
         </div>
       ) : null}
 
-      {providers && providers.length === 0 ? (
-        <Trong>Chưa có nhà cung cấp nào. Thêm nhà cung cấp ở mục trên trước khi khai báo model.</Trong>
-      ) : null}
+      {providers && providers.length === 0 ? <Trong>{t('settings.models.emptyNoProvider')}</Trong> : null}
 
       {providers && providers.length > 0 && tatCaModel.length === 0 ? (
-        <Trong>Chưa có model nào. Khai báo model đầu tiên bằng biểu mẫu bên dưới.</Trong>
+        <Trong>{t('settings.models.empty')}</Trong>
       ) : null}
 
       {tatCaModel.length > 0 ? (
         <table className="bang">
           <thead>
             <tr>
-              <th>Nhãn</th>
-              <th>Mã model</th>
-              <th>Nhà cung cấp</th>
-              <th>Ngữ cảnh</th>
-              <th>Tool</th>
-              <th>Giá vào / 1M</th>
-              <th>Giá ra / 1M</th>
+              <th>{t('settings.models.table.label')}</th>
+              <th>{t('settings.models.table.modelId')}</th>
+              <th>{t('settings.models.table.provider')}</th>
+              <th>{t('settings.models.table.context')}</th>
+              <th>{t('settings.models.table.tools')}</th>
+              <th>{t('settings.models.table.costIn')}</th>
+              <th>{t('settings.models.table.costOut')}</th>
             </tr>
           </thead>
           <tbody>
@@ -482,10 +501,16 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
                 </td>
                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{model.modelId}</td>
                 <td>{model.providerName}</td>
-                <td className="so">{soNguyen(model.contextWindow)}</td>
-                <td>{model.supportsTools ? <Nhan loai="thanh-cong">Có</Nhan> : <Nhan loai="canh-bao">Không</Nhan>}</td>
-                <td className="so">{model.costInPerMtok.toFixed(4)} USD</td>
-                <td className="so">{model.costOutPerMtok.toFixed(4)} USD</td>
+                <td className="so">{formatNumber(model.contextWindow)}</td>
+                <td>
+                  {model.supportsTools ? (
+                    <Nhan loai="thanh-cong">{t('common.yes')}</Nhan>
+                  ) : (
+                    <Nhan loai="canh-bao">{t('common.no')}</Nhan>
+                  )}
+                </td>
+                <td className="so">{formatCurrencyUsd(model.costInPerMtok)}</td>
+                <td className="so">{formatCurrencyUsd(model.costOutPerMtok)}</td>
               </tr>
             ))}
           </tbody>
@@ -493,7 +518,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
       ) : null}
 
       <h3 className="card__tieu-de" style={{ marginTop: 18 }}>
-        Thêm model
+        {t('settings.models.form.title')}
       </h3>
       <div className="luoi luoi--2">
         <OChon
@@ -501,22 +526,24 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
           onChange={setProviderId}
           options={(providers ?? []).map((provider) => ({ value: provider.id, label: provider.name }))}
         />
-        <ONhap value={modelId} onChange={setModelId} placeholder="Mã model, ví dụ: deepseek-v4-flash" />
-        <ONhap value={label} onChange={setLabel} placeholder="Nhãn hiển thị" />
-        <ONhap value={contextWindow} onChange={setContextWindow} placeholder="Cửa sổ ngữ cảnh (token)" />
-        <ONhap value={costIn} onChange={setCostIn} placeholder="Giá vào mỗi triệu token (USD)" />
-        <ONhap value={costOut} onChange={setCostOut} placeholder="Giá ra mỗi triệu token (USD)" />
+        <ONhap value={modelId} onChange={setModelId} placeholder={t('settings.models.form.modelIdPlaceholder')} />
+        <ONhap value={label} onChange={setLabel} placeholder={t('settings.models.form.labelPlaceholder')} />
+        <ONhap
+          value={contextWindow}
+          onChange={setContextWindow}
+          placeholder={t('settings.models.form.contextPlaceholder')}
+        />
+        <ONhap value={costIn} onChange={setCostIn} placeholder={t('settings.models.form.costInPlaceholder')} />
+        <ONhap value={costOut} onChange={setCostOut} placeholder={t('settings.models.form.costOutPlaceholder')} />
       </div>
       <label className="hang" style={{ gap: 6, marginTop: 10, fontSize: 14 }}>
         <input type="checkbox" checked={hoTroTool} onChange={(event) => setHoTroTool(event.target.checked)} />
-        Model hỗ trợ gọi tool
+        {t('settings.models.form.supportsTools')}
       </label>
-      <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
-        Model không hỗ trợ tool sẽ bị router đổi sang model khác cùng mức năng lực, nên hãy đánh dấu chính xác.
-      </p>
+      <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.models.form.toolsNote')}</p>
       <div className="hang">
         <Nut onClick={() => void luu()} dangTai={dangLuu} disabled={providers !== null && providers.length === 0}>
-          Thêm model
+          {t('settings.models.form.submit')}
         </Nut>
       </div>
     </Card>
@@ -526,6 +553,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
 /* ------------------------------------------------------- route theo tier */
 
 function PhanRoute({ companyId }: { companyId: string }): ReactNode {
+  const { t, formatNumber } = useI18n()
   const [routes, setRoutes] = useState<readonly ModelRouteView[] | null>(null)
   const [models, setModels] = useState<readonly ModelOptionView[]>([])
   const [agents, setAgents] = useState<readonly { id: string; label: string }[]>([])
@@ -557,7 +585,7 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', 'Không kết nối được máy chủ.'))
+        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', t('common.cannotConnectServer')))
       })
       .finally(() => {
         if (!cancelled) setDangTai(false)
@@ -579,26 +607,23 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
     setLoiLuu(null)
     setThongBao(null)
     if (agentDefId.length === 0 || modelFk.length === 0) {
-      setLoiLuu('Cần chọn agent và model.')
+      setLoiLuu(t('settings.routes.needAgentAndModel'))
       return
     }
     setDangLuu(true)
     try {
       await api.upsertRoute(companyId, { agentDefId, tier, modelFk })
-      setThongBao(`Đã gán model cho mức ${NHAN_TIER[tier]}.`)
+      setThongBao(t('settings.routes.assigned', { tier: t(NHAN_TIER[tier]) }))
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : 'Không lưu được route.')
+      setLoiLuu(error instanceof ApiError ? error.message : t('settings.routes.saveFailed'))
     } finally {
       setDangLuu(false)
     }
   }
 
   return (
-    <Card
-      tieuDe="Route theo mức năng lực"
-      phu="Khi agent không gán model cứng, router chọn model theo cặp (agent, tier). Đây là cơ chế dự phòng khi model đã chọn thiếu năng lực."
-    >
+    <Card tieuDe={t('settings.routes.title')} phu={t('settings.routes.subtitle')}>
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
       {thongBao ? (
@@ -612,19 +637,17 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
         </div>
       ) : null}
 
-      {routes && routes.length === 0 ? (
-        <Trong>Chưa có route nào. Agent sẽ dùng model rẻ nhất còn bật nếu không có route lẫn model gán cứng.</Trong>
-      ) : null}
+      {routes && routes.length === 0 ? <Trong>{t('settings.routes.empty')}</Trong> : null}
 
       {routes && routes.length > 0 ? (
         <table className="bang">
           <thead>
             <tr>
-              <th>Agent</th>
-              <th>Vai trò</th>
-              <th>Mức</th>
-              <th>Model</th>
-              <th>Ưu tiên</th>
+              <th>{t('settings.routes.table.agent')}</th>
+              <th>{t('settings.routes.table.role')}</th>
+              <th>{t('settings.routes.table.tier')}</th>
+              <th>{t('settings.routes.table.model')}</th>
+              <th>{t('settings.routes.table.priority')}</th>
             </tr>
           </thead>
           <tbody>
@@ -633,10 +656,10 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
                 <td>{nhanAgent.get(route.agentDefId) ?? route.agentDefId}</td>
                 <td>{route.role}</td>
                 <td>
-                  <Nhan loai="mo">{NHAN_TIER[route.tier]}</Nhan>
+                  <Nhan loai="mo">{t(NHAN_TIER[route.tier])}</Nhan>
                 </td>
                 <td>{route.modelLabel}</td>
-                <td className="so">{soNguyen(route.priority)}</td>
+                <td className="so">{formatNumber(route.priority)}</td>
               </tr>
             ))}
           </tbody>
@@ -644,7 +667,7 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
       ) : null}
 
       <h3 className="card__tieu-de" style={{ marginTop: 18 }}>
-        Gán route
+        {t('settings.routes.form.title')}
       </h3>
       <div className="luoi luoi--3">
         <OChon value={agentDefId} onChange={setAgentDefId} options={agents.map((agent) => ({ value: agent.id, label: agent.label }))} />
@@ -653,12 +676,15 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
           onChange={(giaTri) => {
             if (laTier(giaTri)) setTier(giaTri)
           }}
-          options={MODEL_TIERS.map((item) => ({ value: item, label: NHAN_TIER[item] }))}
+          options={MODEL_TIERS.map((item) => ({ value: item, label: t(NHAN_TIER[item]) }))}
         />
         <OChon
           value={modelFk}
           onChange={setModelFk}
-          options={models.map((model) => ({ value: model.id, label: `${model.label} · ${model.providerName}` }))}
+          options={models.map((model) => ({
+            value: model.id,
+            label: t('settings.routes.modelOption', { label: model.label, provider: model.providerName }),
+          }))}
         />
       </div>
       <div className="hang" style={{ marginTop: 10 }}>
@@ -667,7 +693,7 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
           dangTai={dangLuu}
           disabled={agents.length === 0 || models.length === 0}
         >
-          Lưu route
+          {t('settings.routes.form.submit')}
         </Nut>
       </div>
     </Card>
@@ -677,6 +703,7 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
 /* ----------------------------------------------------------- kết nối ngoài */
 
 function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
+  const { t, formatNumber, formatDateTime } = useI18n()
   const [danhSach, setDanhSach] = useState<readonly IntegrationView[] | null>(null)
   const [dangTai, setDangTai] = useState(true)
   const [loi, setLoi] = useState<ApiError | null>(null)
@@ -705,7 +732,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', 'Không kết nối được máy chủ.'))
+        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', t('common.cannotConnectServer')))
       })
       .finally(() => {
         if (!cancelled) setDangTai(false)
@@ -721,28 +748,28 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
     setLoiLuu(null)
     setThongBao(null)
     if (ten.trim().length === 0) {
-      setLoiLuu('Cần nhập tên kết nối.')
+      setLoiLuu(t('settings.integrations.needName'))
       return
     }
     let config: Record<string, unknown>
     try {
       const parsed: unknown = JSON.parse(configJson)
       if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        setLoiLuu('Phần cấu hình phải là một đối tượng JSON, ví dụ {"apiKey": "..."}.')
+        setLoiLuu(t('settings.integrations.configMustBeObject'))
         return
       }
       config = parsed as Record<string, unknown>
     } catch {
-      setLoiLuu('Cấu hình không phải JSON hợp lệ.')
+      setLoiLuu(t('settings.integrations.configInvalidJson'))
       return
     }
     setDangLuu(true)
     try {
       await api.upsertIntegration(companyId, { kind, name: ten.trim(), config })
-      setThongBao('Đã lưu kết nối. Bí mật trong cấu hình được mã hoá và không hiển thị lại.')
+      setThongBao(t('settings.integrations.saved'))
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : 'Không lưu được kết nối.')
+      setLoiLuu(error instanceof ApiError ? error.message : t('settings.integrations.saveFailed'))
     } finally {
       setDangLuu(false)
     }
@@ -757,7 +784,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
     } catch (error) {
       setLoiTest((truoc) => ({
         ...truoc,
-        [integration.id]: error instanceof ApiError ? error.message : 'Không kiểm tra được kết nối.',
+        [integration.id]: error instanceof ApiError ? error.message : t('settings.integrations.testFailed'),
       }))
     } finally {
       setDangTest(null)
@@ -765,10 +792,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   }
 
   return (
-    <Card
-      tieuDe="Kết nối ngoài"
-      phu="Cấu hình để agent đọc dữ liệu kênh và tạo bản nháp. Cấu hình là chỉ-ghi, không hiển thị lại sau khi lưu."
-    >
+    <Card tieuDe={t('settings.integrations.title')} phu={t('settings.integrations.subtitle')}>
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
       {thongBao ? (
@@ -782,43 +806,50 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
         </div>
       ) : null}
 
-      {danhSach && danhSach.length === 0 ? (
-        <Trong>Chưa có kết nối nào. Thêm kết nối bằng biểu mẫu bên dưới khi cần agent chạm ra bên ngoài.</Trong>
-      ) : null}
+      {danhSach && danhSach.length === 0 ? <Trong>{t('settings.integrations.empty')}</Trong> : null}
 
       {danhSach && danhSach.length > 0 ? (
         <table className="bang">
           <thead>
             <tr>
-              <th>Loại</th>
-              <th>Tên</th>
-              <th>Trạng thái</th>
-              <th>Cấu hình</th>
-              <th>Kiểm tra gần nhất</th>
+              <th>{t('settings.integrations.table.kind')}</th>
+              <th>{t('settings.integrations.table.name')}</th>
+              <th>{t('settings.integrations.table.status')}</th>
+              <th>{t('settings.integrations.table.config')}</th>
+              <th>{t('settings.integrations.table.lastCheck')}</th>
               <th />
             </tr>
           </thead>
           <tbody>
             {danhSach.map((integration) => (
               <tr key={integration.id}>
-                <td>{NHAN_INTEGRATION[integration.kind]}</td>
+                <td>{t(NHAN_INTEGRATION[integration.kind])}</td>
                 <td>{integration.name}</td>
                 <td>
                   <Nhan loai={integration.status === 'ok' || integration.status === 'connected' ? 'thanh-cong' : 'mo'}>
                     {integration.status}
                   </Nhan>
                 </td>
-                <td>{integration.configured ? <Nhan loai="thanh-cong">Đã cấu hình</Nhan> : <Nhan loai="canh-bao">Thiếu cấu hình</Nhan>}</td>
-                <td>{thoiDiem(integration.lastCheckAt)}</td>
+                <td>
+                  {integration.configured ? (
+                    <Nhan loai="thanh-cong">{t('settings.integrations.configured')}</Nhan>
+                  ) : (
+                    <Nhan loai="canh-bao">{t('settings.integrations.missingConfig')}</Nhan>
+                  )}
+                </td>
+                <td>{formatDateTime(integration.lastCheckAt ?? '')}</td>
                 <td>
                   <Nut bien="phu" nho onClick={() => void test(integration)} dangTai={dangTest === integration.id}>
-                    Kiểm tra
+                    {t('settings.integrations.test')}
                   </Nut>
                   {ketQuaTest[integration.id] ? (
                     <div style={{ marginTop: 6 }}>
                       <ThongBao loai={ketQuaTest[integration.id]?.ok ? 'thanh-cong' : 'loi'}>
-                        {ketQuaTest[integration.id]?.message} · {ketQuaTest[integration.id]?.status} ·{' '}
-                        {soNguyen(ketQuaTest[integration.id]?.latencyMs ?? 0)} ms
+                        {t('settings.integrations.testResult', {
+                          message: ketQuaTest[integration.id]?.message ?? '',
+                          status: ketQuaTest[integration.id]?.status ?? '',
+                          ms: formatNumber(ketQuaTest[integration.id]?.latencyMs ?? 0),
+                        })}
                       </ThongBao>
                     </div>
                   ) : null}
@@ -835,7 +866,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
       ) : null}
 
       <h3 className="card__tieu-de" style={{ marginTop: 18 }}>
-        Thêm / cập nhật kết nối
+        {t('settings.integrations.form.title')}
       </h3>
       <div className="luoi luoi--2">
         <OChon
@@ -843,26 +874,24 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
           onChange={(giaTri) => {
             if (laIntegrationKind(giaTri)) setKind(giaTri)
           }}
-          options={INTEGRATION_KINDS.map((item) => ({ value: item, label: NHAN_INTEGRATION[item] }))}
+          options={INTEGRATION_KINDS.map((item) => ({ value: item, label: t(NHAN_INTEGRATION[item]) }))}
         />
-        <ONhap value={ten} onChange={setTen} placeholder="Tên gợi nhớ, ví dụ: Firecrawl chính" />
+        <ONhap value={ten} onChange={setTen} placeholder={t('settings.integrations.form.namePlaceholder')} />
       </div>
       <div style={{ marginTop: 12 }}>
-        <div className="nhan">Cấu hình (JSON)</div>
+        <div className="nhan">{t('settings.integrations.form.configLabel')}</div>
         <textarea
           className="o-van-ban"
           value={configJson}
           rows={5}
           onChange={(event) => setConfigJson(event.target.value)}
-          placeholder={'{\n  "apiKey": "…"\n}'}
+          placeholder={t('settings.integrations.form.configPlaceholder')}
         />
-        <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
-          Giá trị bí mật nằm trong JSON này sẽ được mã hoá trước khi lưu và không bao giờ trả về giao diện.
-        </div>
+        <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.integrations.form.configNote')}</div>
       </div>
       <div className="hang" style={{ marginTop: 10 }}>
         <Nut onClick={() => void luu()} dangTai={dangLuu}>
-          Lưu kết nối
+          {t('settings.integrations.form.submit')}
         </Nut>
       </div>
     </Card>
@@ -872,6 +901,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
 /* -------------------------------------------------------------- giới hạn */
 
 function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
+  const { t, formatCurrencyUsd } = useI18n()
   const [duLieu, setDuLieu] = useState<{
     dailyCostUsd: string
     taskCostUsd: string
@@ -909,7 +939,7 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', 'Không kết nối được máy chủ.'))
+        setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', t('common.cannotConnectServer')))
       })
       .finally(() => {
         if (!cancelled) setDangTai(false)
@@ -936,9 +966,9 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
         maxParallelTasks: Math.round(soTuChuoi(duLieu.maxParallelTasks)),
       })
       setUsedTodayUsd(ketQua.usedTodayUsd)
-      setThongBao('Đã lưu giới hạn.')
+      setThongBao(t('settings.limits.saved'))
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : 'Không lưu được giới hạn.')
+      setLoiLuu(error instanceof ApiError ? error.message : t('settings.limits.saveFailed'))
     } finally {
       setDangLuu(false)
     }
@@ -949,20 +979,20 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
   const phanTram = Math.max(0, Math.min(100, tyLe))
 
   return (
-    <Card
-      tieuDe="Giới hạn"
-      phu="Trần chi phí và số vòng lặp. Vượt trần thì lượt chạy bị dừng thay vì chạy tiếp và tiêu thêm tiền."
-    >
+    <Card tieuDe={t('settings.limits.title')} phu={t('settings.limits.subtitle')}>
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
       {duLieu ? (
         <>
           <div className="hang" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
             <span>
-              Đã dùng 24 giờ qua: <strong className="so">{tienUsd(usedTodayUsd)}</strong> / trần{' '}
-              <strong className="so">{tienUsd(tran)}</strong>
+              {t('settings.limits.used24hPrefix')}{' '}
+              <strong className="so">{formatCurrencyUsd(usedTodayUsd)}</strong> {t('settings.limits.limitPrefix')}{' '}
+              <strong className="so">{formatCurrencyUsd(tran)}</strong>
             </span>
-            <span style={{ fontSize: 13, color: 'var(--mau-chu-mo)' }}>{tran > 0 ? `${Math.round(tyLe)}%` : 'Chưa đặt trần'}</span>
+            <span style={{ fontSize: 13, color: 'var(--mau-chu-mo)' }}>
+              {tran > 0 ? `${Math.round(tyLe)}%` : t('settings.limits.noCap')}
+            </span>
           </div>
           <div style={{ height: 8, borderRadius: 999, background: 'var(--mau-vien)', overflow: 'hidden' }}>
             <div
@@ -989,37 +1019,37 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
 
           <div className="luoi luoi--3" style={{ marginTop: 14 }}>
             <div>
-              <div className="nhan">Trần chi phí ngày (USD)</div>
+              <div className="nhan">{t('settings.limits.dailyCost')}</div>
               <ONhap value={duLieu.dailyCostUsd} onChange={(v) => setDuLieu({ ...duLieu, dailyCostUsd: v })} />
             </div>
             <div>
-              <div className="nhan">Trần chi phí mỗi việc (USD)</div>
+              <div className="nhan">{t('settings.limits.taskCost')}</div>
               <ONhap value={duLieu.taskCostUsd} onChange={(v) => setDuLieu({ ...duLieu, taskCostUsd: v })} />
             </div>
             <div>
-              <div className="nhan">Số bước tối đa mỗi lượt chạy</div>
+              <div className="nhan">{t('settings.limits.maxSteps')}</div>
               <ONhap value={duLieu.maxStepsPerRun} onChange={(v) => setDuLieu({ ...duLieu, maxStepsPerRun: v })} />
             </div>
             <div>
-              <div className="nhan">Số vòng trao đổi giữa agent</div>
+              <div className="nhan">{t('settings.limits.maxPeerRounds')}</div>
               <ONhap value={duLieu.maxPeerRounds} onChange={(v) => setDuLieu({ ...duLieu, maxPeerRounds: v })} />
             </div>
             <div>
-              <div className="nhan">Số lần sửa tối đa mỗi việc</div>
+              <div className="nhan">{t('settings.limits.maxRevisions')}</div>
               <ONhap
                 value={duLieu.maxRevisionsPerTask}
                 onChange={(v) => setDuLieu({ ...duLieu, maxRevisionsPerTask: v })}
               />
             </div>
             <div>
-              <div className="nhan">Số việc chạy song song</div>
+              <div className="nhan">{t('settings.limits.maxParallel')}</div>
               <ONhap value={duLieu.maxParallelTasks} onChange={(v) => setDuLieu({ ...duLieu, maxParallelTasks: v })} />
             </div>
           </div>
 
           <div className="hang" style={{ marginTop: 12 }}>
             <Nut onClick={() => void luu()} dangTai={dangLuu}>
-              Lưu giới hạn
+              {t('settings.limits.submit')}
             </Nut>
           </div>
         </>
@@ -1029,11 +1059,10 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
 }
 
 export function CaiDat({ companyId }: { companyId: string }): ReactNode {
+  const { t } = useI18n()
   return (
     <Trang rong>
-      <TieuDeTrang moTa="Khai báo nhà cung cấp, model, route theo mức năng lực, kết nối ngoài và giới hạn chi phí.">
-        Cài đặt
-      </TieuDeTrang>
+      <TieuDeTrang moTa={t('settings.subtitle')}>{t('settings.title')}</TieuDeTrang>
 
       <PhanNhaCungCap companyId={companyId} />
       <PhanModel companyId={companyId} />

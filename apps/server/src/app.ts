@@ -10,6 +10,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { AppError, isAppError, toAppError } from '@marketing-agent/shared'
+import { resolveLocale, translator } from '@marketing-agent/i18n'
 import type { Repos } from '@marketing-agent/db'
 import type { AppContext } from './context.ts'
 import { createRequestContext, Router, runChain, type Handler, type HttpMethod, type Middleware } from './http/router.ts'
@@ -95,14 +96,33 @@ export function buildApp(options: BuildAppOptions): App {
 
         // Known path, wrong method: answer 405 with an Allow header.
         if (url.pathname.startsWith('/api/')) {
+          const locale = resolveLocale({ acceptLanguage: req.headers['accept-language'] })
+          const t = translator(locale)
           const allowed = router.allowedMethods(url.pathname)
           if (allowed.length > 0) {
             res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8', Allow: allowed.join(', ') })
-            res.end(JSON.stringify({ error: { code: 'method_not_allowed', message: 'Phương thức không được hỗ trợ', allowed } }))
+            res.end(
+              JSON.stringify({
+                error: {
+                  code: 'method_not_allowed',
+                  message: t('errors.generic.methodNotAllowed'),
+                  messageKey: 'errors.generic.methodNotAllowed',
+                  allowed,
+                },
+              }),
+            )
             return
           }
           res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ error: { code: 'not_found', message: 'Không tìm thấy đường dẫn API' } }))
+          res.end(
+            JSON.stringify({
+              error: {
+                code: 'not_found',
+                message: t('errors.generic.endpointNotFound'),
+                messageKey: 'errors.generic.endpointNotFound',
+              },
+            }),
+          )
           return
         }
 
@@ -118,14 +138,30 @@ export function buildApp(options: BuildAppOptions): App {
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
         res.end('Không tìm thấy')
       } catch (error) {
-        sendError(res, error, context.config.isProduction, url.pathname)
+        sendError(res, error, context.config.isProduction, url.pathname, req.headers['accept-language'])
       }
     },
   }
 }
 
-/** One JSON error envelope for every failure mode. */
-export function sendError(res: ServerResponse, error: unknown, isProduction: boolean, path: string): void {
+/**
+ * Phong bì JSON lỗi duy nhất cho mọi kiểu hỏng.
+ *
+ * Vì sao dịch ở ĐÂY mà không dịch ở nơi ném lỗi: lỗi được ném từ những tầng không biết
+ * gì về yêu cầu HTTP (`db`, `kb`, `llm`), nên chúng không thể biết ngôn ngữ của người
+ * dùng. Đây là điểm duy nhất vừa biết ngôn ngữ của yêu cầu vừa biết nội dung lỗi.
+ *
+ * `messageKey` và `messageParams` được trả kèm để trình duyệt dịch lại theo ngôn ngữ
+ * giao diện đang chọn — cần thiết vì người dùng có thể đổi ngôn ngữ sau khi đã tải
+ * trang, còn `Accept-Language` chỉ được gửi lúc gọi API.
+ */
+export function sendError(
+  res: ServerResponse,
+  error: unknown,
+  isProduction: boolean,
+  path: string,
+  acceptLanguage?: string | undefined,
+): void {
   if (res.headersSent) {
     // Headers are out (typically a stream): the only correct move is to close.
     res.end()
@@ -136,12 +172,26 @@ export function sendError(res: ServerResponse, error: unknown, isProduction: boo
     console.error(`[error] ${path}:`, error)
   }
   const exposeDetails = !isProduction && appError.status < 500
+
+  // Chỉ dịch khi lỗi CÓ khoá và khoá đó tồn tại trong catalog. Khoá lạ (ví dụ gõ sai)
+  // không được làm hỏng phản hồi: khi đó giữ nguyên câu mặc định.
+  let message = appError.message
+  if (appError.messageKey) {
+    const t = translator(resolveLocale({ acceptLanguage }))
+    const translated = t(appError.messageKey as never, appError.messageParams)
+    // i18next trả về chính khoá khi thiếu bản dịch; nhận ra điều đó để không trả khoá
+    // thô cho người dùng.
+    if (translated && translated !== appError.messageKey) message = translated
+  }
+
   res.writeHead(appError.status, { 'Content-Type': 'application/json; charset=utf-8' })
   res.end(
     JSON.stringify({
       error: {
         code: appError.code,
-        message: appError.message,
+        message,
+        ...(appError.messageKey ? { messageKey: appError.messageKey } : {}),
+        ...(appError.messageParams ? { messageParams: appError.messageParams } : {}),
         ...(exposeDetails && appError.details !== undefined ? { details: appError.details } : {}),
       },
     }),

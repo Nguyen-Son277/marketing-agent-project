@@ -8,7 +8,7 @@
  * mãi một model hỏng. Mọi quyết định đều kèm `reason` tiếng Việt để hiển thị/log.
  */
 import type { LlmModelRecord, LlmProviderRecord, ModelRouteRecord, ModelTier, ResolvedAgent } from '@marketing-agent/shared'
-import { MODEL_TIERS, needsConfiguration } from '@marketing-agent/shared'
+import { AppError, MODEL_TIERS, needsConfiguration } from '@marketing-agent/shared'
 import type { LlmRepo } from '@marketing-agent/db'
 import type { ModelRegistry } from './registry.ts'
 
@@ -82,7 +82,10 @@ export class ModelRouter {
     }
 
     if (!chosen) {
-      throw needsConfiguration(`Công ty chưa có model LLM nào khả dụng cho agent ${agent.role}`)
+      throw new AppError('needs_configuration', `Công ty chưa có model LLM nào khả dụng cho agent ${agent.role}`, {
+        messageKey: 'errors.provider.noModelForAgent',
+        messageParams: { role: agent.role },
+      })
     }
 
     return this.guardTools(agent, chosen, agent.preset.tier, source, reason, needsTools)

@@ -32,7 +32,16 @@ import type {
 export interface ErrorEnvelope {
   readonly error: {
     readonly code: string
+    /** Đã dịch theo `Accept-Language` của yêu cầu. */
     readonly message: string
+    /**
+     * Khoá dịch, để trình duyệt dịch lại theo ngôn ngữ giao diện đang chọn.
+     *
+     * Vì sao cần cả hai: `Accept-Language` chỉ được gửi lúc gọi API, còn người dùng có
+     * thể đổi ngôn ngữ sau đó mà không gọi lại. Có khoá thì giao diện dịch được ngay.
+     */
+    readonly messageKey?: string
+    readonly messageParams?: Record<string, string | number>
     readonly details?: unknown
   }
 }
@@ -195,6 +204,8 @@ export interface ReindexResponse {
 export interface ConversationView {
   readonly id: string
   readonly title: string
+  /** Ngôn ngữ agent trả lời trong phiên này (`'vi'` hoặc `'en'`). */
+  readonly language: string
   readonly phase: ConversationPhase
   readonly briefComplete: boolean
   readonly missingFields: readonly string[]
