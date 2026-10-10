@@ -89,23 +89,6 @@ export const vi_settings = {
   'settings.providers.keys.test': 'Thử khoá',
   'settings.providers.keys.cancelEdit': 'Huỷ sửa khoá',
 
-  /* ------------------------------------------------------- fetch model */
-  'settings.providers.fetch.title': 'Lấy danh sách model từ nhà cung cấp',
-  'settings.providers.fetch.hint':
-    'Gọi /models bằng khoá đã chọn để xem nhà cung cấp có những model nào. Chưa lưu gì cho tới khi bạn chọn.',
-  'settings.providers.fetch.action': 'Fetch model',
-  'settings.providers.fetch.keyLabel': 'Dùng khoá',
-  'settings.providers.fetch.selectAll': 'Chọn tất cả',
-  'settings.providers.fetch.clear': 'Bỏ chọn',
-  'settings.providers.fetch.import': 'Thêm model đã chọn ({{count}})',
-  'settings.providers.fetch.imported': 'Đã thêm {{created}} model, bỏ qua {{skipped}} model đã có.',
-  'settings.providers.fetch.noModels': 'Nhà cung cấp không trả về model nào.',
-  'settings.providers.fetch.alreadyAdded': 'Đã có',
-  'settings.providers.fetch.failed': 'Không lấy được danh sách model.',
-  'settings.providers.fetch.importFailed': 'Không thêm được model đã chọn.',
-  'settings.providers.fetch.pickKeyHint':
-    'Nếu gateway không cần khoá, hãy để nguyên và bấm Fetch model.',
-
   /* ------------------------------------------------------- model */
   'settings.models.title': 'Model',
   'settings.models.subtitle':
@@ -230,8 +213,8 @@ export const vi_settings = {
   'settings.limits.saveFailed': 'Không lưu được giới hạn.',
 
   /* --------------------------- hộp thoại lấy model (đặt ở mục Model) */
-  // Khoá riêng, KHÔNG dùng lại `settings.providers.fetch.*`: khối fetch cũ nằm trong bảng
-  // khoá của nhà cung cấp sẽ được gỡ, còn hộp thoại này là nơi duy nhất còn lại.
+  // Một bộ khoá duy nhất cho việc lấy model. Bộ khoá cũ `settings.providers.fetch.*` đã
+  // được xoá cùng với khối fetch nằm trong bảng khoá của nhà cung cấp.
   'settings.models.fetch.open': 'Lấy danh sách model',
   'settings.models.fetch.title': 'Lấy danh sách model từ nhà cung cấp',
   'settings.models.fetch.hint':

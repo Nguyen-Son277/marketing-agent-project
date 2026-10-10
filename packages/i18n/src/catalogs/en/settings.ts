@@ -87,22 +87,6 @@ export const en_settings = {
   'settings.providers.keys.test': 'Test key',
   'settings.providers.keys.cancelEdit': 'Cancel key edit',
 
-  /* ------------------------------------------------------- fetch model */
-  'settings.providers.fetch.title': 'Fetch the model list from the provider',
-  'settings.providers.fetch.hint':
-    'Calls /models with the selected key to show which models the provider offers. Nothing is saved until you pick.',
-  'settings.providers.fetch.action': 'Fetch models',
-  'settings.providers.fetch.keyLabel': 'Use key',
-  'settings.providers.fetch.selectAll': 'Select all',
-  'settings.providers.fetch.clear': 'Clear',
-  'settings.providers.fetch.import': 'Add selected models ({{count}})',
-  'settings.providers.fetch.imported': 'Added {{created}} models, skipped {{skipped}} already present.',
-  'settings.providers.fetch.noModels': 'The provider returned no models.',
-  'settings.providers.fetch.alreadyAdded': 'Present',
-  'settings.providers.fetch.failed': 'Could not fetch the model list.',
-  'settings.providers.fetch.importFailed': 'Could not add the selected models.',
-  'settings.providers.fetch.pickKeyHint': 'If the gateway needs no key, leave this as is and press Fetch models.',
-
   /* ----------------------------------------------------------- models */
   'settings.models.title': 'Models',
   'settings.models.subtitle':
@@ -221,8 +205,8 @@ export const en_settings = {
   'settings.limits.saveFailed': 'Could not save the limits.',
 
   /* -------------------------------- fetch-model dialog (Models section) */
-  // Dedicated keys rather than `settings.providers.fetch.*`: the old fetch block inside a
-  // provider key table is being removed, and this dialog is the only place left.
+  // One set of keys for fetching models. The older `settings.providers.fetch.*` set was
+  // deleted together with the fetch block that used to live inside a provider key table.
   'settings.models.fetch.open': 'Fetch the model list',
   'settings.models.fetch.title': 'Fetch the model list from the provider',
   'settings.models.fetch.hint':

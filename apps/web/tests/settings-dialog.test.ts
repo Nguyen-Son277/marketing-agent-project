@@ -81,3 +81,25 @@ describe('bố cục mục Nhà cung cấp', () => {
     expect(phanNhaCungCap).toMatch(/xuLyDong|onDong/)
   })
 })
+
+describe('catalog không còn khoá chết', () => {
+  /**
+   * Vì sao kiểm cả catalog: khi khối fetch model cũ trong bảng khoá bị thay bằng hộp thoại,
+   * 13 khoá `settings.providers.fetch.*` trở nên không còn nơi dùng. Khoá chết không gây lỗi
+   * biên dịch (union khoá chỉ lớn hơn), nên chúng nằm lại rất lâu và làm người sửa sau tưởng
+   * còn hai nơi làm cùng một việc.
+   */
+  const vi = doc('../../../packages/i18n/src/catalogs/vi/settings.ts')
+  const en = doc('../../../packages/i18n/src/catalogs/en/settings.ts')
+
+  it('không còn khoá settings.providers.fetch.*', () => {
+    // Chỉ còn lại trong comment giải thích; khẳng định không có khai báo khoá thật.
+    expect(vi).not.toMatch(/^\s*'settings\.providers\.fetch\./m)
+    expect(en).not.toMatch(/^\s*'settings\.providers\.fetch\./m)
+  })
+
+  it('có đúng một bộ khoá cho việc lấy model', () => {
+    expect(vi).toMatch(/'settings\.models\.fetch\.open'/)
+    expect(en).toMatch(/'settings\.models\.fetch\.open'/)
+  })
+})
