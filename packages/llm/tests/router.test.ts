@@ -28,7 +28,7 @@ beforeEach(() => {
     description: 'Viết nội dung marketing',
     systemPrompt: '# Vai trò',
     defaultSkills: [],
-    defaultTools: ['kb.search'],
+    defaultTools: ['kb_search'],
   })
   const provider = repos.llm.createProvider({
     companyId: null,

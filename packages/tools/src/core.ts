@@ -64,7 +64,7 @@ export function createCoreTools(repos: Repos, options: CoreToolOptions) {
   }
 
   const filesRead = defineTool({
-    name: 'files.read',
+    name: 'files_read',
     description:
       'Đọc một file trong vùng làm việc của công ty (báo cáo cũ, dữ liệu, ghi chú). Dùng đường dẫn tương đối, ví dụ "reports/2026-10/seo-audit.md".',
     parameters: {
@@ -86,7 +86,7 @@ export function createCoreTools(repos: Repos, options: CoreToolOptions) {
         throw toolError(`Không tìm thấy file "${requireStringArg(args, 'path')}" trong vùng làm việc`)
       }
       if (stat.isDirectory()) {
-        throw toolError('Đường dẫn trỏ tới thư mục. Dùng files.list để liệt kê nội dung.')
+        throw toolError('Đường dẫn trỏ tới thư mục. Dùng files_list để liệt kê nội dung.')
       }
       if (stat.size > maxReadBytes) {
         throw toolError(`File quá lớn (${stat.size} byte > giới hạn ${maxReadBytes} byte)`)
@@ -101,7 +101,7 @@ export function createCoreTools(repos: Repos, options: CoreToolOptions) {
   })
 
   const filesWrite = defineTool({
-    name: 'files.write',
+    name: 'files_write',
     description:
       'Ghi file vào vùng làm việc của công ty để lưu kết quả và dùng lại về sau. Dùng đường dẫn tương đối có ý nghĩa, ví dụ "reports/2026-10/content-plan.md".',
     parameters: {
@@ -134,7 +134,7 @@ export function createCoreTools(repos: Repos, options: CoreToolOptions) {
   })
 
   const filesList = defineTool({
-    name: 'files.list',
+    name: 'files_list',
     description: 'Liệt kê file trong vùng làm việc của công ty để biết đã có những tài liệu gì.',
     parameters: {
       type: 'object',
@@ -169,7 +169,7 @@ export function createCoreTools(repos: Repos, options: CoreToolOptions) {
   })
 
   const artifactPublish = defineTool({
-    name: 'artifact.publish',
+    name: 'artifact_publish',
     description:
       'Công bố một tài sản đầu ra (báo cáo, kế hoạch, lịch nội dung, bảng số liệu) để Leader và người dùng xem. Đây là cách bàn giao kết quả chính thức.',
     parameters: {

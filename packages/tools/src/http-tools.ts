@@ -4,7 +4,7 @@
  * Two safeguards are non-negotiable here because the arguments come from a
  * language model: an outbound request must stay inside an operator-controlled
  * host allowlist, and every response is size- and time-bounded. Without the
- * allowlist, `http.fetch` is a server-side request forgery primitive pointed at
+ * allowlist, `http_fetch` is a server-side request forgery primitive pointed at
  * the deployment's own network.
  */
 import { toolError, truncate, type ToolContext, type ToolResult } from '@marketing-agent/shared'
@@ -53,7 +53,7 @@ export function isBlockedHost(hostname: string): boolean {
  *
  * Private and link-local hosts are refused **unconditionally** — an allowlist
  * entry naming one must not re-open it, or a single misconfigured operator entry
- * would turn `http.fetch` into a request-forgery primitive against the
+ * would turn `http_fetch` into a request-forgery primitive against the
  * deployment's own network.
  */
 export function isHostAllowed(url: URL, allowedHosts: readonly string[] | undefined): boolean {
@@ -96,7 +96,7 @@ export function createHttpTools(options: HttpToolOptions = {}) {
   const allowedHosts = options.allowedHosts
 
   const httpFetch = defineTool({
-    name: 'http.fetch',
+    name: 'http_fetch',
     description:
       'Tải nội dung một URL công khai và trả về văn bản đã lược bỏ HTML. Dùng để kiểm tra trang, robots.txt, sitemap hoặc API công khai. Không truy cập được địa chỉ nội bộ.',
     parameters: {
@@ -191,7 +191,7 @@ export function createResearchTools(store: IntegrationStore, options: HttpToolOp
   }
 
   const webSearch = defineTool({
-    name: 'web.search',
+    name: 'web_search',
     description:
       'Tìm kiếm web và trả về danh sách kết quả kèm tiêu đề, URL và trích đoạn. Dùng để nghiên cứu thị trường, đối thủ, xu hướng. Mọi kết quả phải được ghi lại kèm URL và ngày truy cập.',
     parameters: {
@@ -232,7 +232,7 @@ export function createResearchTools(store: IntegrationStore, options: HttpToolOp
   })
 
   const webScrape = defineTool({
-    name: 'web.scrape',
+    name: 'web_scrape',
     description:
       'Lấy nội dung một trang web dưới dạng markdown sạch (đã xử lý JavaScript). Dùng để đọc chi tiết trang sản phẩm, bài viết, trang giá của đối thủ.',
     parameters: {
@@ -266,7 +266,7 @@ export function createResearchTools(store: IntegrationStore, options: HttpToolOp
   })
 
   const competitorWatch = defineTool({
-    name: 'competitor.watch',
+    name: 'competitor_watch',
     description:
       'Lấy nội dung một trang đối thủ (thường là trang giá hoặc trang sản phẩm) để so sánh theo thời gian. Trả về bản tóm tắt có cấu trúc; lần chạy sau có thể đối chiếu với ghi chú đã lưu trong kho kiến thức.',
     parameters: {

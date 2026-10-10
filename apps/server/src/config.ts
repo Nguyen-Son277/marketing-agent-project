@@ -15,6 +15,15 @@ export interface ServerConfig {
   readonly databasePath: string
   /** Absolute directory holding per-company knowledge bases. */
   readonly companiesRoot: string
+  /**
+   * Root of the per-company KNOWLEDGE BASE, one directory per company slug
+   * (`<kbRoot>/<slug>/kb`).
+   *
+   * Separate from `companiesRoot` on purpose: the KB is curated Markdown owned by
+   * people and read by `pnpm kb:index`, while `companiesRoot` holds files agents
+   * produce. Defaults to `data/companies` so it matches what the kb CLI uses.
+   */
+  readonly kbRoot: string
   /** Built SPA directory to serve in production; undefined disables static serving. */
   readonly webDist: string | undefined
   /** Days a login session stays valid. */
@@ -100,7 +109,8 @@ export function loadConfig(overrides: Partial<ServerConfig> = {}): ServerConfig 
     port: overrides.port ?? numberFromEnv('PORT', 3000, { min: 0, max: 65_535 }),
     appSecret: overrides.appSecret ?? requireString('APP_SECRET', 16),
     databasePath: overrides.databasePath ?? optionalString('DATABASE_PATH') ?? 'data/marketing.db',
-    companiesRoot: overrides.companiesRoot ?? resolve(optionalString('COMPANIES_ROOT') ?? 'data/companies'),
+    companiesRoot: overrides.companiesRoot ?? resolve(optionalString('COMPANIES_ROOT') ?? 'data/company-files'),
+    kbRoot: overrides.kbRoot ?? resolve(optionalString('KB_ROOT') ?? 'data/companies'),
     webDist: overrides.webDist ?? resolveWebDist(),
     sessionTtlDays: overrides.sessionTtlDays ?? numberFromEnv('SESSION_TTL_DAYS', 30, { min: 1, max: 365 }),
     isProduction: overrides.isProduction ?? production,

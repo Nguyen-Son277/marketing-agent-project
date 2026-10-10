@@ -180,10 +180,10 @@ describe('core file tools', () => {
     const company = seedCompany(repos, { companyName: 'Path Co' }).company
     const { registry } = buildToolRegistry({ repos, coreOptions: { companiesRoot: root } })
     const result = await registry.execute(
-      'files.read',
+      'files_read',
       { path: '../../etc/passwd' },
       makeContext({ companyId: company.id }),
-      ['files.read'],
+      ['files_read'],
     )
     expect(result.isError).toBe(true)
     expect(result.content).toContain('vùng làm việc')
@@ -306,20 +306,20 @@ describe('buildToolRegistry', () => {
       integrations: true,
     })
     const names = registry.list().map((t) => t.name)
-    expect(names).toContain('files.write')
-    expect(names).toContain('artifact.publish')
-    expect(names).toContain('http.fetch')
-    expect(names).toContain('web.search')
-    expect(names).toContain('gsc.query')
-    expect(names).toContain('ga4.report')
-    expect(names).toContain('meta.publish')
-    expect(names).toContain('linkedin.publish')
+    expect(names).toContain('files_write')
+    expect(names).toContain('artifact_publish')
+    expect(names).toContain('http_fetch')
+    expect(names).toContain('web_search')
+    expect(names).toContain('gsc_query')
+    expect(names).toContain('ga4_report')
+    expect(names).toContain('meta_publish')
+    expect(names).toContain('linkedin_publish')
     expect(company.id).toBeTruthy()
   })
 
   it('marks outward-facing publishing tools as needing approval', () => {
     const { registry } = buildToolRegistry({ repos, coreOptions: { companiesRoot: root } })
-    const publishing = registry.list().filter((t) => t.name === 'meta.publish' || t.name === 'linkedin.publish')
+    const publishing = registry.list().filter((t) => t.name === 'meta_publish' || t.name === 'linkedin_publish')
     expect(publishing).toHaveLength(2)
     for (const tool of publishing) expect(tool.requiresApproval).toBe(true)
   })
@@ -336,8 +336,8 @@ describe('buildToolRegistry', () => {
     // The writer's preset grants exactly these; the registry must not widen it.
     // `kb.*` tools live in packages/kb and are injected at composition time, so
     // they are absent from a registry built without `extraTools`.
-    expect(granted).toEqual(['artifact.publish', 'files.write'].sort())
-    for (const kbTool of ['kb.read', 'kb.search']) {
+    expect(granted).toEqual(['artifact_publish', 'files_write'].sort())
+    for (const kbTool of ['kb_read', 'kb_search']) {
       expect(writer.toolNames).toContain(kbTool)
       expect(granted).not.toContain(kbTool)
     }
@@ -347,12 +347,14 @@ describe('buildToolRegistry', () => {
     // Knowledge tools come from packages/kb and coordination tools from the
     // orchestrator host, so a registry built here legitimately lacks both.
     const externallyProvided = new Set([
-      'kb.search',
-      'kb.read',
-      'kb.write',
-      'task.create',
-      'task.assign',
-      'agent.ask',
+      'kb_search',
+      'kb_read',
+      'kb_write',
+      'task_create',
+      'task_assign',
+      'agent_ask',
+      'agent_escalate',
+      'blocker_report',
     ])
     const known = new Set(listToolNames({ repos, coreOptions: { companiesRoot: root } }))
     const missing: string[] = []
@@ -371,10 +373,10 @@ describe('integration gating', () => {
     const company = seedCompany(repos, { companyName: 'No Integrations' }).company
     const { registry } = buildToolRegistry({ repos, coreOptions: { companiesRoot: root } })
     const result = await registry.execute(
-      'gsc.query',
+      'gsc_query',
       {},
       makeContext({ companyId: company.id, agentRole: 'seo-technical' }),
-      ['gsc.query'],
+      ['gsc_query'],
     )
     expect(result.isError).toBe(true)
     expect(result.content).toMatch(/Chưa kết nối|Cài đặt/)
@@ -384,10 +386,10 @@ describe('integration gating', () => {
     const company = seedCompany(repos, { companyName: 'No Meta' }).company
     const { registry } = buildToolRegistry({ repos, coreOptions: { companiesRoot: root } })
     const result = await registry.execute(
-      'meta.publish',
+      'meta_publish',
       { message: 'Xin chào', published: true },
       makeContext({ companyId: company.id, agentRole: 'social-media' }),
-      ['meta.publish'],
+      ['meta_publish'],
     )
     expect(result.isError).toBe(true)
     expect(result.content).toMatch(/Chưa kết nối/)

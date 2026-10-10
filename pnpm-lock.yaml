@@ -27,12 +27,27 @@ importers:
 
   apps/server:
     dependencies:
+      '@marketing-agent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
       '@marketing-agent/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@marketing-agent/kb':
+        specifier: workspace:*
+        version: link:../../packages/kb
+      '@marketing-agent/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
+      '@marketing-agent/orchestrator':
+        specifier: workspace:*
+        version: link:../../packages/orchestrator
       '@marketing-agent/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@marketing-agent/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       zod:
         specifier: ^3.24.2
         version: 3.25.76

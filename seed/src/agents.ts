@@ -50,7 +50,11 @@ export const AGENT_DEF_SEEDS: readonly AgentDefSeed[] = [
     tier: 'deep',
     isLeader: true,
     defaultSkills: ['brief-intake', 'task-decomposition', 'quality-review', 'report-writing'],
-    defaultTools: ['kb.search', 'kb.read', 'artifact.publish', 'task.create', 'task.assign', 'agent.ask'],
+    // Cố ý KHÔNG cấp `task_create`/`task_assign`: orchestrator sở hữu việc tạo task và
+    // đọc kế hoạch từ BẢNG Markdown mà Leader trình bày. Nếu Leader cũng có quyền tạo
+    // task, nó sẽ gọi công cụ thay vì trả về bảng, và bước lập kế hoạch nhận câu trả
+    // lời rỗng — đã gặp thật khi chạy với gateway. Một chủ sở hữu cho mỗi hành động.
+    defaultTools: ['kb_search', 'kb_read', 'artifact_publish', 'agent_ask', 'blocker_report',],
     knowledgeRead: ['*'],
     knowledgeWrite: ['90-ket-qua'],
     basePrompt: `
@@ -86,7 +90,7 @@ ${HANDOFF_RULES}
     description: 'Nghiên cứu thị trường, đối thủ, khách hàng mục tiêu và xu hướng; đề xuất định vị có bằng chứng.',
     tier: 'standard',
     defaultSkills: ['market-research', 'competitor-analysis', 'persona-building'],
-    defaultTools: ['kb.search', 'kb.read', 'kb.write', 'web.search', 'web.scrape', 'competitor.watch', 'artifact.publish'],
+    defaultTools: ['kb_search', 'kb_read', 'kb_write', 'web_search', 'web_scrape', 'competitor_watch', 'artifact_publish', 'agent_ask', 'agent_escalate',],
     knowledgeRead: ['00-cong-ty', '20-thi-truong', '30-kenh'],
     knowledgeWrite: ['20-thi-truong'],
     basePrompt: `
@@ -120,7 +124,7 @@ Kết thúc bằng "Hàm ý cho chúng ta" 3–5 gạch đầu dòng.
     description: 'Viết bài SEO, nội dung mạng xã hội, email và landing copy đúng brand voice.',
     tier: 'standard',
     defaultSkills: ['copywriting', 'seo-writing', 'brand-voice'],
-    defaultTools: ['kb.search', 'kb.read', 'files.write', 'artifact.publish'],
+    defaultTools: ['kb_search', 'kb_read', 'files_write', 'artifact_publish', 'agent_ask', 'agent_escalate',],
     knowledgeRead: ['00-cong-ty', '10-brand', '20-thi-truong', '30-kenh'],
     knowledgeWrite: [],
     basePrompt: `
@@ -154,7 +158,7 @@ Trả về Markdown: tiêu đề, nội dung hoàn chỉnh, sau đó bảng \`Ti
     description: 'Audit kỹ thuật SEO, nghiên cứu từ khoá, cluster nội dung và brief chuẩn SEO.',
     tier: 'standard',
     defaultSkills: ['keyword-research', 'technical-seo-audit', 'seo-writing'],
-    defaultTools: ['kb.search', 'kb.read', 'kb.write', 'gsc.query', 'gsc.inspectUrl', 'web.search', 'http.fetch', 'artifact.publish'],
+    defaultTools: ['kb_search', 'kb_read', 'kb_write', 'gsc_query', 'gsc_inspect_url', 'web_search', 'http_fetch', 'artifact_publish', 'agent_ask', 'agent_escalate',],
     knowledgeRead: ['00-cong-ty', '30-kenh', '40-du-lieu', '90-ket-qua'],
     knowledgeWrite: ['30-kenh'],
     basePrompt: `
@@ -162,7 +166,7 @@ Trả về Markdown: tiêu đề, nội dung hoàn chỉnh, sau đó bảng \`Ti
 Bạn đảm bảo website được công cụ tìm kiếm thu thập, hiểu và xếp hạng đúng, và biến dữ liệu tìm kiếm thành kế hoạch nội dung.
 
 ## Nhiệm vụ
-1. Khi có Google Search Console: dùng \`gsc.query\` để lấy dữ liệu thật (impressions, clicks, CTR, vị trí) làm nền cho mọi khuyến nghị. Nếu chưa kết nối, nêu rõ và đề nghị kết nối.
+1. Khi có Google Search Console: dùng \`gsc_query\` để lấy dữ liệu thật (impressions, clicks, CTR, vị trí) làm nền cho mọi khuyến nghị. Nếu chưa kết nối, nêu rõ và đề nghị kết nối.
 2. Audit kỹ thuật theo checklist: index/robots, canonical, sitemap, tốc độ, cấu trúc heading, dữ liệu có cấu trúc, liên kết nội bộ, lỗi 404/redirect.
 3. Nghiên cứu từ khoá thành cluster: một trang trụ + các trang vệ tinh, kèm ý định tìm kiếm.
 4. Viết brief SEO cho người viết: từ khoá chính/phụ, độ dài, cấu trúc H2/H3, thực thể cần đề cập, liên kết nội bộ.
@@ -188,7 +192,7 @@ Cluster: bảng \`Trang | Từ khoá chính | Từ khoá phụ | Ý định | Gh
     description: 'Xây lịch nội dung, viết caption, hashtag và brief hình ảnh cho các nền tảng xã hội.',
     tier: 'standard',
     defaultSkills: ['content-calendar', 'social-copywriting', 'brand-voice'],
-    defaultTools: ['kb.search', 'kb.read', 'files.write', 'meta.publish', 'linkedin.publish', 'meta.insights', 'artifact.publish'],
+    defaultTools: ['kb_search', 'kb_read', 'files_write', 'meta_publish', 'linkedin_publish', 'meta_insights', 'artifact_publish', 'agent_ask', 'agent_escalate',],
     knowledgeRead: ['00-cong-ty', '10-brand', '20-thi-truong', '30-kenh'],
     knowledgeWrite: ['30-kenh'],
     basePrompt: `
@@ -222,7 +226,7 @@ Lịch: bảng \`Ngày | Kênh | Định dạng | Chủ đề | Caption | Visual
     description: 'Thiết kế cấu trúc chiến dịch, nhóm đối tượng, ngân sách và kế hoạch A/B; tối ưu CPL/ROAS.',
     tier: 'deep',
     defaultSkills: ['campaign-structure', 'audience-targeting', 'budget-optimization'],
-    defaultTools: ['kb.search', 'kb.read', 'kb.write', 'meta.insights', 'ga4.report', 'ads.meta', 'ads.google', 'artifact.publish'],
+    defaultTools: ['kb_search', 'kb_read', 'kb_write', 'meta_insights', 'ga4_report', 'ads_meta', 'ads_google', 'artifact_publish', 'agent_ask', 'agent_escalate',],
     knowledgeRead: ['00-cong-ty', '20-thi-truong', '30-kenh', '40-du-lieu'],
     knowledgeWrite: ['30-kenh'],
     basePrompt: `
@@ -234,7 +238,7 @@ Bạn phân bổ ngân sách quảng cáo để đạt KPI với chi phí thấp
 2. Thiết kế cấu trúc: chiến dịch → nhóm quảng cáo (theo đối tượng) → mẫu quảng cáo; đặt tên nhất quán.
 3. Đề xuất phân bổ ngân sách theo giả thuyết, kèm điều kiện dừng/giảm khi kém hiệu quả.
 4. Lập kế hoạch thử nghiệm A/B: một biến số mỗi lần, cỡ mẫu tối thiểu, tiêu chí thắng.
-5. Đọc kết quả từ \`meta.insights\`/\`ga4.report\` để tối ưu; nêu rõ khi chưa có dữ liệu.
+5. Đọc kết quả từ \`meta_insights\`/\`ga4_report\` để tối ưu; nêu rõ khi chưa có dữ liệu.
 
 ## Ranh giới
 - KHÔNG tự tăng ngân sách hoặc tạo chiến dịch thật khi chưa được phê duyệt rõ ràng.
@@ -256,7 +260,7 @@ Cấu trúc: bảng \`Chiến dịch | Nhóm đối tượng | Mẫu | Ngân sá
     description: 'Xây chuỗi nurture, phân nhóm khách hàng, automation và thử nghiệm tiêu đề email.',
     tier: 'standard',
     defaultSkills: ['email-sequence', 'crm-segmentation', 'copywriting'],
-    defaultTools: ['kb.search', 'kb.read', 'email.send', 'sheets.write', 'artifact.publish'],
+    defaultTools: ['kb_search', 'kb_read', 'email_send', 'sheets_write', 'artifact_publish', 'agent_ask', 'agent_escalate',],
     knowledgeRead: ['00-cong-ty', '10-brand', '40-du-lieu'],
     knowledgeWrite: [],
     basePrompt: `
@@ -268,7 +272,7 @@ Bạn giữ chân và nuôi dưỡng khách hàng bằng chuỗi email đúng ng
 2. Thiết kế chuỗi: số email, khoảng cách thời gian, mục tiêu từng email, điều kiện dừng khi khách hành động.
 3. Viết nội dung từng email: tiêu đề (kèm 3 phương án), preview text, thân, CTA đơn nhất.
 4. Nêu rõ yêu cầu dữ liệu cần có để cá nhân hoá.
-5. Gửi email chỉ khi được phê duyệt và \`email.send\` đã được cấu hình; mặc định chỉ tạo bản nháp.
+5. Gửi email chỉ khi được phê duyệt và \`email_send\` đã được cấu hình; mặc định chỉ tạo bản nháp.
 
 ## Ranh giới
 - Tuân thủ chống thư rác: có lý do liên hệ hợp lệ, có cách từ chối nhận.
@@ -290,7 +294,7 @@ Sau đó là toàn văn từng email trong code block.
     description: 'Chuyển thông điệp thành brief thiết kế, storyboard video và đặc tả kích thước cho từng kênh.',
     tier: 'standard',
     defaultSkills: ['creative-brief', 'storyboarding'],
-    defaultTools: ['kb.search', 'kb.read', 'files.write', 'artifact.publish'],
+    defaultTools: ['kb_search', 'kb_read', 'files_write', 'artifact_publish', 'agent_ask', 'agent_escalate',],
     knowledgeRead: ['00-cong-ty', '10-brand', '30-kenh'],
     knowledgeWrite: [],
     basePrompt: `
@@ -324,7 +328,7 @@ Storyboard: bảng \`Cảnh | Thời lượng | Hình | Chữ/Thoại | Chuyển
     description: 'Đo KPI theo kênh và phễu, phát hiện bất thường, xây báo cáo định kỳ đáng tin cậy.',
     tier: 'deep',
     defaultSkills: ['data-analysis', 'kpi-reporting', 'anomaly-detection'],
-    defaultTools: ['kb.search', 'kb.read', 'kb.write', 'ga4.report', 'gsc.query', 'sheets.write', 'artifact.publish'],
+    defaultTools: ['kb_search', 'kb_read', 'kb_write', 'ga4_report', 'gsc_query', 'sheets_write', 'artifact_publish', 'agent_ask', 'agent_escalate',],
     knowledgeRead: ['00-cong-ty', '30-kenh', '40-du-lieu', '90-ket-qua'],
     knowledgeWrite: ['40-du-lieu'],
     basePrompt: `
@@ -333,7 +337,7 @@ Bạn là nguồn sự thật về hiệu suất. Bạn biến dữ liệu thô 
 
 ## Nhiệm vụ
 1. Chốt câu hỏi phân tích và KPI trước khi truy vấn.
-2. Lấy dữ liệu từ \`ga4.report\` / \`gsc.query\`; nếu chưa kết nối, báo rõ thiếu nguồn nào.
+2. Lấy dữ liệu từ \`ga4_report\` / \`gsc_query\`; nếu chưa kết nối, báo rõ thiếu nguồn nào.
 3. Phân tích theo phễu và theo kênh; so sánh với kỳ trước; tách tín hiệu khỏi nhiễu.
 4. Phát hiện bất thường: nêu ngưỡng dùng, mức độ tin cậy, và giả thuyết nguyên nhân.
 5. Ghi kết quả và bài học vào \`40-du-lieu\` để lần sau không phân tích lại từ đầu.
@@ -359,7 +363,7 @@ Sau đó: Phát hiện chính · Giả thuyết · Đề xuất hành động.
     description: 'Trả lời bình luận và tin nhắn, điều hành cộng đồng, phát hiện và leo thang khủng hoảng.',
     tier: 'standard',
     defaultSkills: ['community-response', 'crisis-escalation', 'brand-voice'],
-    defaultTools: ['kb.search', 'kb.read', 'meta.insights', 'meta.publish', 'artifact.publish'],
+    defaultTools: ['kb_search', 'kb_read', 'meta_insights', 'meta_publish', 'artifact_publish', 'agent_ask', 'agent_escalate',],
     knowledgeRead: ['00-cong-ty', '10-brand', '90-ket-qua'],
     knowledgeWrite: [],
     basePrompt: `

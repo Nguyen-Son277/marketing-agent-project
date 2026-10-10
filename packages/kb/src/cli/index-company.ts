@@ -112,7 +112,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     })
   } catch (error) {
     console.error(`[kb:index] Không mở được cơ sở dữ liệu "${options.databasePath}": ${errorMessage(error)}`)
-    console.error('Gợi ý: đặt DATABASE_PATH và APP_SECRET (tối thiểu 32 ký tự) trong .env hoặc biến môi trường.')
+    console.error('Gợi ý: đặt DATABASE_PATH và APP_SECRET (tối thiểu 16 ký tự) trong .env hoặc biến môi trường.')
     return 1
   }
 

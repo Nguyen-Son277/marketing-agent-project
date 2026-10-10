@@ -54,7 +54,7 @@ describe('OpenAiCompatibleAdapter', () => {
         choices: [
           {
             delta: {
-              tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'kb.search', arguments: '' } }],
+              tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'kb_search', arguments: '' } }],
             },
             finish_reason: null,
           },
@@ -72,7 +72,7 @@ describe('OpenAiCompatibleAdapter', () => {
       ...request,
       tools: [
         {
-          name: 'kb.search',
+          name: 'kb_search',
           description: 'Tìm trong kho kiến thức',
           parameters: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
         },
@@ -80,7 +80,7 @@ describe('OpenAiCompatibleAdapter', () => {
     })
 
     expect(toolCallsOf(chunks)).toEqual([
-      { id: 'call_1', name: 'kb.search', argumentsJson: '{"q":"giá"}' },
+      { id: 'call_1', name: 'kb_search', argumentsJson: '{"q":"giá"}' },
     ])
     expect(doneOf(chunks).finishReason).toBe('tool_calls')
     expect(doneOf(chunks).usage).toEqual({ promptTokens: 20, completionTokens: 8, cachedTokens: 0 })
@@ -107,15 +107,15 @@ describe('OpenAiCompatibleAdapter', () => {
     expect(
       toOpenAiMessages([
         { role: 'system', content: 'Bạn là trợ lý' },
-        { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'kb.read', argumentsJson: '{"id":"d1"}' }] },
-        { role: 'tool', toolCallId: 'c1', name: 'kb.read', content: 'Nội dung tài liệu' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'kb_read', argumentsJson: '{"id":"d1"}' }] },
+        { role: 'tool', toolCallId: 'c1', name: 'kb_read', content: 'Nội dung tài liệu' },
       ]),
     ).toEqual([
       { role: 'system', content: 'Bạn là trợ lý' },
       {
         role: 'assistant',
         content: null,
-        tool_calls: [{ id: 'c1', type: 'function', function: { name: 'kb.read', arguments: '{"id":"d1"}' } }],
+        tool_calls: [{ id: 'c1', type: 'function', function: { name: 'kb_read', arguments: '{"id":"d1"}' } }],
       },
       { role: 'tool', tool_call_id: 'c1', content: 'Nội dung tài liệu' },
     ])

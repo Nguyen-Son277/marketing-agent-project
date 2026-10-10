@@ -56,7 +56,7 @@ export function createMetaTools(store: IntegrationStore) {
   }
 
   const metaInsights = defineTool({
-    name: 'meta.insights',
+    name: 'meta_insights',
     description:
       'Lấy chỉ số hiệu suất từ Facebook Page / Instagram / tài khoản quảng cáo Meta: reach, impressions, engagement, chi tiêu, kết quả. Dùng để báo cáo kết quả thật của kênh social và quảng cáo.',
     parameters: {
@@ -183,7 +183,7 @@ export function createMetaTools(store: IntegrationStore) {
   })
 
   const metaPublish = defineTool({
-    name: 'meta.publish',
+    name: 'meta_publish',
     description:
       'Tạo bài đăng lên Facebook Page. MẶC ĐỊNH chỉ tạo bản nháp và cần người dùng phê duyệt trước khi đăng thật. Trả về nội dung đã soạn cùng trạng thái phê duyệt.',
     parameters: {

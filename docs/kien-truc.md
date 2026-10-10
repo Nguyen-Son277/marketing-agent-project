@@ -244,7 +244,7 @@ flowchart LR
     G --> H["buildSystemPrompt"]
     H --> I["ModelRouter chọn model"]
     I --> J["agent-runtime: vòng lặp tool"]
-    J --> K["kb.search (ACL lọc trước)"]
+    J --> K["kb_search (ACL lọc trước)"]
     J --> L["tool ngoài"]
     J --> M["artifacts + result_md"]
     M --> N["agent_messages: handoff"]

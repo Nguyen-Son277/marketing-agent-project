@@ -62,7 +62,7 @@ export interface CoordinationHost {
 
 export function createCoordinationTools(host: CoordinationHost) {
   const taskCreate = defineTool({
-    name: 'task.create',
+    name: 'task_create',
     description:
       'Tạo kế hoạch công việc: một danh sách việc, mỗi việc giao cho đúng một chuyên môn, kèm thứ tự phụ thuộc. Chỉ Leader được dùng. Việc không phụ thuộc nhau có thể chạy song song.',
     parameters: {
@@ -168,13 +168,13 @@ export function createCoordinationTools(host: CoordinationHost) {
   })
 
   const taskAssign = defineTool({
-    name: 'task.assign',
+    name: 'task_assign',
     description:
       'Giao một công việc đã tạo cho agent chuyên môn và chờ kết quả bàn giao. Chỉ Leader được dùng. Chỉ gọi được khi mọi việc phụ thuộc đã xong.',
     parameters: {
       type: 'object',
       properties: {
-        taskId: { type: 'string', description: 'ID công việc, lấy từ kết quả task.create' },
+        taskId: { type: 'string', description: 'ID công việc, lấy từ kết quả task_create' },
       },
       required: ['taskId'],
       additionalProperties: false,
@@ -197,7 +197,7 @@ export function createCoordinationTools(host: CoordinationHost) {
   })
 
   const agentAsk = defineTool({
-    name: 'agent.ask',
+    name: 'agent_ask',
     description:
       'Hỏi một agent chuyên môn khác khi cần thông tin họ đang giữ. Dùng thay vì tự suy đoán. Giới hạn 3 vòng hỏi cho mỗi cặp trong một công việc.',
     parameters: {
@@ -245,7 +245,7 @@ export function createCoordinationTools(host: CoordinationHost) {
   })
 
   const agentEscalate = defineTool({
-    name: 'agent.escalate',
+    name: 'agent_escalate',
     description:
       'Báo Leader khi bị chặn: thiếu dữ liệu, tool lỗi, hoặc cần quyết định vượt thẩm quyền. Nêu rõ đang thiếu gì, đã thử gì, và ít nhất 2 phương án.',
     parameters: {
@@ -284,7 +284,51 @@ export function createCoordinationTools(host: CoordinationHost) {
     },
   })
 
-  return { taskCreate, taskAssign, agentAsk, agentEscalate }
+  /**
+   * Leader báo một việc không thể tiếp tục, cho NGƯỜI DÙNG.
+   *
+   * Vì sao Leader không dùng `agent_escalate`: escalation nghĩa là "trình lên cấp
+   * trên để xin quyết định", và Leader không có cấp trên. Leader cần một cách nói
+   * rõ với người dùng rằng việc đang dừng và cần gì — đó là hành vi khác, nên là
+   * công cụ khác. Tách ra cũng khiến log đọc được: ai báo chặn cho ai.
+   */
+  const blockerReport = defineTool({
+    name: 'blocker_report',
+    description:
+      'Báo cho NGƯỜI DÙNG rằng một phần công việc không thể tiếp tục, kèm lý do và đề xuất. Dùng khi thiếu dữ liệu, thiếu kết nối, hoặc cần người dùng quyết định. Chỉ Leader được dùng.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', description: 'Vì sao không tiếp tục được' },
+        impact: { type: 'string', description: 'Phần nào của mục tiêu bị ảnh hưởng' },
+        options: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Các phương án người dùng có thể chọn',
+        },
+      },
+      required: ['reason'],
+      additionalProperties: false,
+    },
+    roles: ['marketing-leader'],
+    async handler(args, ctx): Promise<ToolResult> {
+      const reason = requireStringArg(args, 'reason')
+      const impact = optionalStringArg(args, 'impact')
+      const options = readStringList(args['options'])
+      const lines = [`⛔ **Cần bạn quyết định:** ${reason}`]
+      if (impact) lines.push('', `Ảnh hưởng: ${impact}`)
+      if (options && options.length > 0) {
+        lines.push('', 'Phương án đề xuất:', ...options.map((option, index) => `${index + 1}. ${option}`))
+      }
+      ctx.log('Leader báo chặn cho người dùng', { reason })
+      return {
+        content: lines.join('\n'),
+        data: { reported: true, reason, impact, options },
+      }
+    },
+  })
+
+  return { taskCreate, taskAssign, agentAsk, agentEscalate, blockerReport }
 }
 
 function readStringList(value: unknown): string[] | undefined {

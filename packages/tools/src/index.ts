@@ -29,9 +29,9 @@ export interface BuildToolRegistryOptions {
   readonly coreOptions?: CoreToolOptions
   /** Coordination tools; omit before the orchestrator exists. */
   readonly coordinationHost?: CoordinationHost
-  /** Tools owned by other packages (for example `kb.search`). */
+  /** Tools owned by other packages (for example `kb_search`). */
   readonly extraTools?: readonly ToolDefinition[]
-  /** Hosts `http.fetch` may reach. Empty/omitted still blocks private ranges. */
+  /** Hosts `http_fetch` may reach. Empty/omitted still blocks private ranges. */
   readonly allowedHosts?: readonly string[]
   /** Firecrawl base URL override, for a self-hosted crawler. */
   readonly firecrawlBaseUrl?: string
@@ -57,7 +57,13 @@ export function buildToolRegistry(options: BuildToolRegistryOptions = {}): Built
 
   if (options.coordinationHost) {
     const coordination = createCoordinationTools(options.coordinationHost)
-    tools.push(coordination.taskCreate, coordination.taskAssign, coordination.agentAsk, coordination.agentEscalate)
+    tools.push(
+      coordination.taskCreate,
+      coordination.taskAssign,
+      coordination.agentAsk,
+      coordination.agentEscalate,
+      coordination.blockerReport,
+    )
   }
 
   let integrationStore: IntegrationStore | undefined

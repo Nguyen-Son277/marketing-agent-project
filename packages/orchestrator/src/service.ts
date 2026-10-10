@@ -9,7 +9,7 @@
  * chạy kế hoạch, viết báo cáo). Nếu để server tự ghép các bước, mọi thay đổi quy
  * trình — thêm một cổng kiểm tra chẳng hạn — sẽ phải sửa ở tầng HTTP.
  */
-import { budgetExceeded, conflict, notFound, type AgentRole } from '@marketing-agent/shared'
+import { budgetExceeded, conflict, notFound, truncate, type AgentRole } from '@marketing-agent/shared'
 import type { Repos } from '@marketing-agent/db'
 import type { AgentRuntimeDeps } from '@marketing-agent/agent-runtime'
 import type { EmbeddingProvider } from '@marketing-agent/kb'
@@ -24,10 +24,12 @@ import {
   validatePlan,
   type RawPlan,
 } from './planner.ts'
+import { BRIEF_EXTRACTION_INSTRUCTION, extractLabeledBrief, mergeBriefFields, parseExtractedBrief } from './brief.ts'
 import { composeReport, persistReport } from './reporter.ts'
 import { reviewOutcomes } from './review.ts'
 import {
   BRIEF_FIELD_LABELS,
+  BRIEF_FIELDS,
   DEFAULT_LIMITS,
   type Brief,
   type DispatchSummary,
@@ -93,7 +95,34 @@ export class ConversationOrchestrator implements CoordinationHost {
       contentMd: input.content,
     })
 
-    const brief = parseBrief(conversation.briefJson)
+    // Trích brief từ toàn bộ hội thoại người dùng, rồi gộp với brief đã lưu.
+    // Phải chạy TRƯỚC khi kiểm tra, vì đây là bước biến lời nói thành 6 trường.
+    const lichSu = this.repos.work.listMessages(conversation.id, input.companyId, 40)
+    const nguoiDungNoi = lichSu
+      .filter((message) => message.authorKind === 'user')
+      .map((message) => message.contentMd)
+      .join('\n\n')
+
+    const labeled = extractLabeledBrief(nguoiDungNoi.length > 0 ? nguoiDungNoi : input.content)
+    let extracted = mergeBriefFields(parseBrief(conversation.briefJson), labeled)
+    // Chỉ nhờ model khi lớp nhãn vẫn còn thiếu trường: lớp nhãn tất định và miễn phí.
+    const conThieuSauNhan = BRIEF_FIELDS.filter((field) => extracted[field].trim().length === 0)
+    if (conThieuSauNhan.length > 0) {
+      try {
+        const output = await this.extractBriefWithModel(
+          input.companyId,
+          conversation.id,
+          nguoiDungNoi || input.content,
+        )
+        extracted = mergeBriefFields(extracted, parseExtractedBrief(output))
+      } catch (error) {
+        this.log?.('Không trích được brief bằng model, chỉ dùng lớp nhãn', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    const brief = extracted
     const check = checkBrief(brief)
     this.publish?.(event('leader.thinking', input.companyId, { conversationId: conversation.id }))
 
@@ -117,7 +146,9 @@ export class ConversationOrchestrator implements CoordinationHost {
         contentMd: reply,
         meta: { missingFields: check.missing },
       })
-      this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'clarify' })
+      // Lưu phần đã trích được: người dùng trả lời từng câu qua nhiều lượt, nên
+      // brief phải tích luỹ chứ không được hỏi lại từ đầu.
+      this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'clarify', brief })
       this.publish?.(event('brief.updated', input.companyId, { conversationId: conversation.id, missing: check.missing }))
 
       return {
@@ -130,9 +161,8 @@ export class ConversationOrchestrator implements CoordinationHost {
       }
     }
 
-    // Đã đủ brief: ghi lại brief và để Leader quyết định bước tiếp theo.
-    const merged = mergeBrief(brief, input.content)
-    this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'brief', brief: merged })
+    // Đã đủ brief: lưu lại và để Leader quyết định bước tiếp theo.
+    this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'brief', brief })
     this.publish?.(event('brief.updated', input.companyId, { conversationId: conversation.id, complete: true }))
 
     const turn = await this.runLeaderTurn(input.companyId, conversation.id, 'plan-request')
@@ -173,35 +203,99 @@ export class ConversationOrchestrator implements CoordinationHost {
     }
 
     const turn = await this.runLeaderTurn(input.companyId, conversation.id, 'create-plan')
+    // Nếu Leader gọi công cụ thay vì trả bảng, kết quả thường rỗng. Nói rõ nguyên nhân
+    // thay vì chỉ báo "không đọc được bảng" — đây là kiểu hỏng đã gặp thật.
+    if (turn.output.trim().length === 0) {
+      throw conflict(
+        'Leader không trả về nội dung kế hoạch' +
+          (turn.toolCalls.length > 0 ? ` (đã gọi công cụ: ${turn.toolCalls.join(', ')})` : '') +
+          '. Leader phải trình bày kế hoạch dưới dạng BẢNG Markdown bốn cột, không được gọi công cụ để tạo việc.',
+      )
+    }
     const rows = parsePlanTable(turn.output)
     if (rows.length === 0) {
+      // Ghi nguyên văn câu trả lời: đây là điểm dễ vỡ nhất khi đổi model, và không
+      // có log thì chỉ thấy "không đọc được bảng" mà không biết vì sao.
+      // Ghi nguyên văn câu trả lời ra tệp để chẩn đoán: đây là điểm dễ vỡ nhất khi
+      // đổi model, và log console không đủ chỗ cho một bảng Markdown.
+      try {
+        const { writeFileSync, mkdirSync } = await import('node:fs')
+        mkdirSync('data-diagnostics', { recursive: true })
+        writeFileSync(
+          `data-diagnostics/leader-plan-${Date.now()}.txt`,
+          `toolCalls: ${turn.toolCalls.join(', ') || '(none)'}\nstatus: ${turn.status}\nstopReason: ${turn.stopReason}\n\n${turn.output}`,
+          'utf8',
+        )
+      } catch {
+        // Chẩn đoán là tiện ích; không được làm hỏng luồng chính.
+      }
+      this.log?.('Không đọc được bảng kế hoạch từ Leader', {
+        outputLength: turn.output.length,
+        output: turn.output,
+        status: turn.status,
+        stopReason: turn.stopReason,
+        error: turn.error,
+      })
       throw conflict(
         'Không đọc được kế hoạch dạng bảng từ câu trả lời của Leader. ' +
           'Hãy yêu cầu Leader trình bày lại theo bảng: Công việc | Chuyên môn | Phụ thuộc | Đầu ra.',
       )
     }
+    const vaiTro = this.availableRoles(input.companyId)
+    // Chuẩn hoá phụ thuộc TRƯỚC khi xác thực: chuyển tham chiếu số/gộp về tiêu đề
+    // thật, và bỏ những phụ thuộc không khớp việc nào (kèm ghi chú) thay vì để bước
+    // xác thực từ chối cả kế hoạch.
+    const boPhuThuoc: string[] = []
+    const rowsDaChuanHoa = normalizeDependencies(rows, (task, dependency) => {
+      boPhuThuoc.push(`${task} → ${dependency}`)
+    })
+    if (boPhuThuoc.length > 0) {
+      this.log?.('Đã bỏ phụ thuộc không khớp việc nào', { bo: boPhuThuoc })
+    }
+
     const plan = validatePlan({
       plan: {
-        tasks: rows.map((row) => ({
-          title: row.title,
-          briefMd: row.deliverable.length > 0 ? `${row.title}. Đầu ra: ${row.deliverable}` : row.title,
-          assigneeRole: row.assigneeRole,
-          dependsOnTitles: row.dependsOn,
-        })),
+        tasks: rowsDaChuanHoa.map((row) => {
+          const role = resolveRole(row.assigneeRaw, vaiTro)
+          if (!role) {
+            throw conflict(
+              `Không xác định được chuyên môn cho việc "${row.title}" — Leader ghi "${row.assigneeRaw}". ` +
+                `Các chuyên môn hợp lệ: ${vaiTro.join(', ')}.`,
+            )
+          }
+          return {
+            title: row.title,
+            briefMd: row.deliverable.length > 0 ? `${row.title}. Đầu ra: ${row.deliverable}` : row.title,
+            assigneeRole: role,
+            dependsOnTitles: row.dependsOn,
+          }
+        }),
       },
-      availableRoles: this.availableRoles(input.companyId),
+      availableRoles: vaiTro,
     })
 
     // Ghi kế hoạch vào cơ sở dữ liệu, gồm cả cạnh phụ thuộc. Dùng chính văn bản
     // Leader đã viết làm brief của việc, thay vì đọc lại từ một chỗ lưu tạm.
+    // Dùng lại kế hoạch đã xác thực ở trên (vai trò đã được resolve), thay vì dựng
+    // lại từ `rows`: nếu dựng lại thì phải resolve vai trò lần thứ hai và hai chỗ có
+    // thể lệch nhau.
+    // Dùng lại vai trò đã resolve trong `plan` (một nguồn sự thật), nhưng lấy phần
+    // mô tả từ `rows` vì `PlannedTask` cố ý chỉ mang cấu trúc, không mang văn xuôi.
+    const rowByTitle = new Map(rowsDaChuanHoa.map((row) => [row.title, row]))
     const created = await this.createTasks(
       { companyId: input.companyId, conversationId: conversation.id },
-      rows.map((row) => ({
-        title: row.title,
-        briefMd: row.deliverable.length > 0 ? `${row.title}. Đầu ra: ${row.deliverable}` : row.title,
-        assigneeRole: row.assigneeRole,
-        dependsOnTitles: row.dependsOn,
-      })),
+      plan.tasks.map((task) => {
+        const row = rowByTitle.get(task.title)
+        return {
+          title: task.title,
+          briefMd:
+            row && row.deliverable.length > 0
+              ? `${row.title}. Đầu ra: ${row.deliverable}`
+              : task.title,
+          assigneeRole: task.assigneeRole,
+          dependsOnTitles: task.dependsOn,
+        }
+      }),
     )
 
     this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'assign' })
@@ -342,8 +436,13 @@ export class ConversationOrchestrator implements CoordinationHost {
     const checked = validatePlan({
       plan: { tasks },
       availableRoles: roles,
-      maxTasks: 8,
+      maxTasks: 10,
     })
+    if (checked.dropped > 0) {
+      this.log?.(`Kế hoạch vượt trần, đã bỏ ${checked.dropped} việc ít phụ thuộc nhất`, {
+        giuLai: checked.tasks.length,
+      })
+    }
 
     return this.repos.db.tx(() => {
       const idByTitle = new Map<string, string>()
@@ -570,12 +669,47 @@ export class ConversationOrchestrator implements CoordinationHost {
     }
   }
 
+  /**
+   * Nhờ Leader trích 6 trường brief từ hội thoại.
+   *
+   * Chạy với một bước và không cấp tool: đây là việc đọc-hiểu-và-trả-JSON, cấp tool
+   * chỉ làm model phân tâm và tốn thêm lượt gọi.
+   */
+  private async extractBriefWithModel(
+    companyId: string,
+    conversationId: string,
+    text: string,
+  ): Promise<string> {
+    const result = await runAgentForTask({
+      repos: this.repos,
+      tools: this.tools,
+      embedding: this.embedding,
+      runtimeOverrides: this.runtimeOverrides,
+      companyId,
+      role: 'marketing-leader',
+      taskId: null,
+      conversationId,
+      maxSteps: 1,
+      taskBrief: [BRIEF_EXTRACTION_INSTRUCTION, '', '## Hội thoại', truncate(text, 6_000)].join('\n'),
+      ...(this.log ? { log: this.log } : {}),
+    })
+    return result.run.output
+  }
+
   /** Một lượt chạy của Leader với vai trò điều hành. */
   private async runLeaderTurn(
     companyId: string,
     conversationId: string,
     mode: 'plan-request' | 'create-plan',
-  ): Promise<{ output: string; runId: string | null; costUsd: number }> {
+  ): Promise<{
+    output: string
+    runId: string | null
+    costUsd: number
+    status: string
+    stopReason: string
+    error: string | null
+    toolCalls: readonly string[]
+  }> {
     const conversation = this.repos.work.findConversation(conversationId, companyId)
     if (!conversation) throw notFound('Không tìm thấy cuộc trao đổi')
     const brief = parseBrief(conversation.briefJson)
@@ -591,11 +725,21 @@ export class ConversationOrchestrator implements CoordinationHost {
         ? [
             'Lập kế hoạch công việc cho mục tiêu dưới đây.',
             '',
+            'QUAN TRỌNG: câu trả lời của bạn PHẢI chứa bảng Markdown, vì đó là thứ',
+            'hệ thống đọc để tạo công việc. KHÔNG gọi công cụ nào cho việc lập kế hoạch.',
+            '',
             'Yêu cầu bắt buộc:',
-            '- Tối đa 8 việc; mỗi việc giao cho MỘT chuyên môn.',
+            '- Tối đa 10 việc; mỗi việc giao cho MỘT chuyên môn.',
             '- Nêu rõ đầu ra kiểm chứng được của từng việc.',
-            '- Nêu thứ tự phụ thuộc thật (việc nào phải xong trước).',
-            '- Trình bày kế hoạch dưới dạng bảng: Công việc | Chuyên môn | Phụ thuộc | Đầu ra.',
+            '- Nêu thứ tự phụ thuộc thật, ghi ĐÚNG TIÊU ĐỀ của việc phải xong trước.',
+            '- Mỗi tiêu đề công việc phải khác nhau (không trùng).',
+            '- Trình bày DUY NHẤT một bảng với đúng bốn cột, theo thứ tự:',
+            '  | Công việc | Chuyên môn | Phụ thuộc | Đầu ra |',
+            '- Cột "Chuyên môn" ghi đúng mã vai trò, ví dụ: market-research, seo-technical,',
+            '  content-writer, social-media, paid-media, email-crm, design-video,',
+            '  analytics, community-care.',
+            '- Ô "Phụ thuộc" ghi "không" nếu không phụ thuộc việc nào.',
+            '- Không thêm cột khác, không thêm dòng ghi chú hay nhóm việc bên trong bảng.',
             '- Sau bảng, nêu ngắn gọn vì sao kế hoạch này đạt được mục tiêu.',
           ].join('\n')
         : [
@@ -634,6 +778,10 @@ export class ConversationOrchestrator implements CoordinationHost {
       output: result.run.output,
       runId: result.run.runId,
       costUsd: result.run.usage.costUsd,
+      status: result.run.status,
+      stopReason: result.run.stopReason,
+      error: result.run.error,
+      toolCalls: result.run.toolCalls.map((call) => call.name),
     }
   }
 
@@ -641,23 +789,33 @@ export class ConversationOrchestrator implements CoordinationHost {
 
 export interface PlanRow {
   readonly title: string
-  readonly assigneeRole: string
+  /** Tên chuyên môn nguyên văn Leader viết; chưa chuẩn hoá. */
+  readonly assigneeRaw: string
   readonly dependsOn: readonly string[]
   readonly deliverable: string
+  /** Số thứ tự do Leader ghi ở cột đầu, nếu có. */
+  readonly soThuTu?: number | undefined
 }
 
 /**
  * Đọc bảng kế hoạch từ Markdown.
  *
- * Chấp nhận cả tiêu đề tiếng Việt và tiếng Anh, và chấp nhận nhiều dạng phân tách
- * phụ thuộc (dấu phẩy, dấu chấm phẩy, hoặc "không"). Mục tiêu là đọc được kế hoạch
- * thật thay vì bắt model khớp một định dạng duy nhất.
+ * Hai lượt, vì cột số thứ tự chỉ nhận diện được khi nhìn toàn bảng:
+ *  - Lượt 1: tách mọi dòng thành các ô, bỏ dòng tiêu đề/phân cách, xác định cột
+ *    chuyên môn theo NỘI DUNG (không theo vị trí).
+ *  - Lượt 2: biết cột nào là số thứ tự, rồi giải mã tham chiếu phụ thuộc kiểu "1".
+ *
+ * Đây là điểm dễ vỡ nhất khi đổi model: định dạng bảng do model quyết định, và nó
+ * thay đổi giữa các model và giữa các lần gọi. Bám vị trí cột sẽ vỡ ngay.
  */
 export function parsePlanTable(markdown: string): PlanRow[] {
-  const lines = markdown.split('\n')
-  const rows: PlanRow[] = []
+  interface Tho {
+    readonly cells: readonly string[]
+    readonly roleIndex: number
+  }
 
-  for (const rawLine of lines) {
+  const tho: Tho[] = []
+  for (const rawLine of markdown.split('\n')) {
     const line = rawLine.trim()
     if (!line.startsWith('|')) continue
     const cells = line
@@ -665,23 +823,221 @@ export function parsePlanTable(markdown: string): PlanRow[] {
       .slice(1, -1)
       .map((cell) => cell.trim())
     if (cells.length < 2) continue
-    // Bỏ dòng phân cách và dòng tiêu đề.
     if (cells.every((cell) => /^:?-{2,}:?$/.test(cell))) continue
-    const first = cells[0] ?? ''
-    if (/^(công việc|task|hạng mục|việc)$/i.test(first)) continue
+    if (laDongTieuDe(cells)) continue
 
-    const title = stripMarkdown(first)
+    const roleIndex = cells.findIndex((cell) => laOTenChuyenMon(cell))
+    if (roleIndex < 0) continue
+
+    // Ô ngay trước cột chuyên môn là nhãn tiêu đề -> đây vẫn là dòng tiêu đề.
+    if (roleIndex > 0) {
+      const truoc = stripMarkdown(cells[roleIndex - 1] ?? '')
+      if (/^(công việc|việc|task|hạng mục|nội dung|mục tiêu)$/i.test(truoc)) continue
+    }
+
+    tho.push({ cells, roleIndex })
+  }
+  if (tho.length === 0) return []
+
+  // Cột số thứ tự: mọi dòng đều là số nguyên VÀ tạo thành dãy 1,2,3… tăng dần.
+  //
+  // Vì sao đòi hỏi dãy tăng dần: chỉ "mọi ô đều là số" là chưa đủ — một bảng có ô
+  // phụ thuộc ghi số ("phụ thuộc: 99") cũng thoả điều kiện đó ở một cột, và khi ấy
+  // con số phụ thuộc bị hiểu nhầm thành số thứ tự của dòng. Đã gặp thật.
+  const soCot = tho[0]?.cells.length ?? 0
+  let cotSo: number | undefined
+  for (let column = 0; column < soCot; column += 1) {
+    if (tho.some((row) => row.roleIndex === column)) continue
+    const values = tho.map((row) => stripMarkdown(row.cells[column] ?? ''))
+    if (!values.every((value) => /^\d+$/.test(value))) continue
+    const so = values.map(Number)
+    const laDayTangDan = so.every((value, index) => value === index + 1)
+    if (laDayTangDan) {
+      cotSo = column
+      break
+    }
+  }
+
+  const rows: PlanRow[] = []
+  for (const row of tho) {
+    const { cells, roleIndex } = row
+
+    // Tiêu đề: ô chữ đầu tiên không phải cột số thứ tự và không phải cột chuyên môn.
+    let title = ''
+    for (let index = 0; index < cells.length; index += 1) {
+      if (index === cotSo || index === roleIndex) continue
+      const candidate = stripMarkdown(cells[index] ?? '')
+      if (candidate.length === 0 || !/[\p{L}\p{N}]/u.test(candidate)) continue
+      title = candidate
+      break
+    }
+    // Bảng đặt cột chuyên môn ở đầu: lấy ô chữ đầu tiên SAU cột chuyên môn.
+    if (title.length === 0) {
+      for (let index = roleIndex + 1; index < cells.length; index += 1) {
+        if (index === cotSo) continue
+        const candidate = stripMarkdown(cells[index] ?? '')
+        if (candidate.length === 0 || !/[\p{L}\p{N}]/u.test(candidate)) continue
+        title = candidate
+        break
+      }
+    }
     if (title.length === 0) continue
-    const assigneeRole = normalizeRole(cells[1] ?? '')
-    if (assigneeRole.length === 0) continue
+
+    // Phụ thuộc và đầu ra là hai ô đầu tiên còn lại, theo thứ tự trong bảng.
+    const conLai: string[] = []
+    for (let index = 0; index < cells.length; index += 1) {
+      if (index === cotSo || index === roleIndex) continue
+      const value = stripMarkdown(cells[index] ?? '')
+      if (value === title) continue
+      conLai.push(value)
+    }
+
     rows.push({
       title,
-      assigneeRole,
-      dependsOn: parseDependencies(cells[2] ?? ''),
-      deliverable: stripMarkdown(cells[3] ?? ''),
+      assigneeRaw: stripMarkdown(cells[roleIndex] ?? ''),
+      dependsOn: parseDependencies(conLai[0] ?? ''),
+      deliverable: conLai[1] ?? '',
+      soThuTu: cotSo === undefined ? undefined : Number(stripMarkdown(cells[cotSo] ?? '')),
     })
   }
-  return rows
+
+  return giaiMaPhuThuocSo(rows)
+}
+
+/**
+ * Chuyển tham chiếu phụ thuộc bằng SỐ THỨ TỰ thành tiêu đề công việc.
+ *
+ * Người và model đều hay viết "phụ thuộc: 1" nghĩa là "sau việc số 1". Giữ nguyên
+ * số thì bước xác thực báo "không có việc nào tên 1" và cả kế hoạch bị từ chối.
+ * Chỉ ánh xạ khi bảng THẬT SỰ có cột số thứ tự; con số không khớp được giữ nguyên
+ * để báo lỗi thay vì bị đoán thành một việc có thật.
+ */
+function giaiMaPhuThuocSo(rows: readonly PlanRow[]): PlanRow[] {
+  const theoSo = new Map<number, string>()
+  for (const row of rows) {
+    if (row.soThuTu !== undefined && !theoSo.has(row.soThuTu)) theoSo.set(row.soThuTu, row.title)
+  }
+  // Không có cột số thứ tự thì không có gì để giải mã: giữ nguyên văn.
+  if (theoSo.size === 0) return [...rows]
+
+  return rows.map((row) => ({
+    ...row,
+    dependsOn: row.dependsOn.map((dependency) => {
+      if (!/^\d+$/.test(dependency)) return dependency
+      // Số khớp dòng nào thì thay bằng tiêu đề; không khớp thì giữ nguyên số để
+      // `normalizeDependencies` phán quyết và báo lại — tầng parse không bỏ dữ liệu.
+      return theoSo.get(Number(dependency)) ?? dependency
+    }),
+  }))
+}
+
+/**
+ * Chuẩn hoá danh sách phụ thuộc của cả kế hoạch về tiêu đề công việc thật.
+ *
+ * Ba dạng được chấp nhận: tiêu đề chính xác, số thứ tự dòng, và ô gộp nhiều việc
+ * ("A + B"). Phụ thuộc không khớp việc nào bị BỎ kèm ghi chú: giữ lại sẽ khiến bước
+ * xác thực từ chối cả kế hoạch, và người dùng không còn gì để duyệt — trong khi hệ
+ * quả của một phụ thuộc bị bỏ chỉ là một việc có thể chạy hơi sớm.
+ */
+export function normalizeDependencies(
+  rows: readonly PlanRow[],
+  onDropped?: (task: string, dependency: string) => void,
+): PlanRow[] {
+  const titles = rows.map((row) => row.title)
+  const theoSo = new Map<number, string>()
+  for (const row of rows) {
+    if (row.soThuTu !== undefined && !theoSo.has(row.soThuTu)) theoSo.set(row.soThuTu, row.title)
+  }
+
+  return rows.map((row) => {
+    const ketQua = new Set<string>()
+    for (const dependency of row.dependsOn) {
+      if (dependency === row.title) continue
+      if (/^\d+$/.test(dependency)) {
+        const title = theoSo.get(Number(dependency))
+        if (title && title !== row.title) ketQua.add(title)
+        else onDropped?.(row.title, dependency)
+        continue
+      }
+      if (titles.includes(dependency)) {
+        if (dependency !== row.title) ketQua.add(dependency)
+        continue
+      }
+      // Ô gộp nhiều việc: tìm mọi tiêu đề xuất hiện bên trong.
+      let khop = false
+      for (const title of titles) {
+        if (title !== row.title && dependency.includes(title)) {
+          ketQua.add(title)
+          khop = true
+        }
+      }
+      if (khop) continue
+      // Tách theo dấu phân tách rồi khớp từng mảnh.
+      for (const phan of dependency.split(/[&+/]|\bvà\b/)) {
+        const cleaned = phan.trim()
+        if (cleaned.length === 0) continue
+        const hit = titles.find(
+          (title) => title === cleaned || (cleaned.length >= 4 && title.includes(cleaned)),
+        )
+        if (hit && hit !== row.title) {
+          ketQua.add(hit)
+          khop = true
+        }
+      }
+      if (!khop) onDropped?.(row.title, dependency)
+    }
+    return { ...row, dependsOn: [...ketQua] }
+  })
+}
+
+/**
+ * Có phải dòng tiêu đề của bảng?
+ *
+ * Điều kiện phải CHẶT: chỉ cần một ô chứa từ khoá là đủ để loại thì sẽ loại oan dữ
+ * liệu thật — đã gặp: tiêu đề "Nghiên cứu từ khoá" chứa "nghiên cứu" nên bị coi là
+ * dòng tiêu đề và mất cả dòng. Vì vậy chỉ loại khi MỌI ô đều là nhãn tiêu đề, hoặc
+ * khi có ít nhất hai ô là nhãn tiêu đề và mọi ô đều là nhãn ngắn.
+ */
+function laDongTieuDe(cells: readonly string[]): boolean {
+  const tuKhoa =
+    /^(#|stt|no\.?|tt|công việc|task|hạng mục|việc|nội dung|chuyên môn|phụ trách|agent|role|assignee|phụ thuộc|phụ thuộc vào|đầu ra|kết quả|ghi chú|mục tiêu)$/i
+  const sach = cells.map((cell) => stripMarkdown(cell))
+  if (sach.every((cell) => cell.length === 0 || tuKhoa.test(cell))) return true
+  if (/^(#|stt|no\.?|tt)$/i.test(sach[0] ?? '')) {
+    return sach.slice(1).every((cell) => cell.length === 0 || tuKhoa.test(cell))
+  }
+  const soTuKhoa = sach.filter((cell) => tuKhoa.test(cell)).length
+  const toanNhanNgan = sach.every((cell) => cell.length <= 24 && !/\d{2,}|https?:/i.test(cell))
+  return soTuKhoa >= 2 && toanNhanNgan
+}
+
+/** Tên canonical của mọi chuyên môn; dùng để nhận diện ô chuyên môn. */
+const TEN_CANONICAL =
+  /(marketing-leader|market-research|content-writer|seo-technical|social-media|paid-media|email-crm|design-video|analytics|community-care)/i
+
+/**
+ * Ô này có phải tên chuyên môn không (khớp TRỌN ô, không khớp một phần).
+ *
+ * Vì sao phải khớp trọn ô: "Công việc" chứa "việc", và nếu chỉ cần khớp một phần thì
+ * ô tiêu đề bị nhận nhầm thành ô chuyên môn — đã gặp thật, parser tạo ra công việc
+ * tên "#" với chuyên môn "Công việc" và cả kế hoạch bị từ chối.
+ */
+function laOTenChuyenMon(cell: string): boolean {
+  const sach = stripMarkdown(cell)
+  if (sach.length === 0) return false
+  const tenViet = [
+    'nghiên cứu thị trường', 'nghiên cứu', 'viết nội dung', 'seo kỹ thuật',
+    'social media', 'quảng cáo trả phí', 'quảng cáo', 'email & crm', 'email và crm',
+    'thiết kế & video', 'thiết kế và video', 'thiết kế', 'phân tích & báo cáo',
+    'phân tích và báo cáo', 'phân tích', 'chăm sóc cộng đồng', 'cộng đồng',
+    'content writer', 'seo technical', 'leader', 'social', 'email',
+  ]
+  const lower = sach.toLowerCase()
+  // Khớp trọn ô với tên canonical hoặc tên tiếng Việt.
+  if (TEN_CANONICAL.test(sach) || tenViet.includes(lower)) return true
+  // Chấp nhận tiền tố như "1. content-writer" nhưng vẫn yêu cầu phần còn lại khớp.
+  const boSo = lower.replace(/^\s*\d+\s*[.)-]\s*/, '')
+  return boSo !== lower && (TEN_CANONICAL.test(boSo) || tenViet.includes(boSo))
 }
 
 /** Bỏ định dạng Markdown trong ô bảng để tiêu đề dùng được làm khoá. */
@@ -693,9 +1049,60 @@ export function stripMarkdown(value: string): string {
     .trim()
 }
 
+/** Bỏ dấu tiếng Việt và ký tự không phải chữ/số, để so khớp mờ. */
+function khongDau(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+/**
+ * Tìm vai trò hợp lệ gần nhất với một chuỗi tự do.
+ *
+ * Vì sao cần khớp mờ thay vì chỉ so bằng: Leader viết tên chuyên môn bằng lời
+ * ("Nghiên cứu thị trường", "Viết nội dung", thậm chí "Content Writer"), và một
+ * danh sách alias cố định sẽ luôn thiếu. Khớp theo tỉ lệ từ trùng với chính danh
+ * sách vai trò đang bật khiến việc này chịu được cách viết khác nhau mà vẫn an
+ * toàn: không có ứng viên nào đủ gần thì trả về undefined để báo lỗi rõ ràng.
+ */
+export function resolveRole(raw: string, available: readonly string[]): string | undefined {
+  const target = khongDau(raw)
+  if (target.length === 0) return undefined
+
+  // 1) Khớp chính xác sau khi bỏ dấu và dấu câu.
+  for (const role of available) {
+    if (khongDau(role) === target) return role
+  }
+  // 2) Khớp theo alias đã biết.
+  const alias = normalizeRole(raw)
+  if (available.includes(alias)) return alias
+  // 3) Khớp mờ: chọn vai trò có nhiều từ trùng nhất, yêu cầu tỉ lệ đủ cao để không
+  //    nhận nhầm một ô tiêu đề bảng thành tên chuyên môn.
+  const words = new Set(target.split(' '))
+  let best: { role: string; score: number } | undefined
+  for (const role of available) {
+    const roleWords = khongDau(role).split(' ')
+    const shared = roleWords.filter((word) => words.has(word)).length
+    const score = shared / Math.max(roleWords.length, words.size)
+    if (shared > 0 && (!best || score > best.score)) best = { role, score }
+  }
+  if (best && best.score >= 0.5) return best.role
+  return undefined
+}
+
 /** Chuẩn hoá tên vai trò: bỏ khoảng trắng, hạ chữ, đổi khoảng trắng thành gạch. */
 export function normalizeRole(value: string): string {
-  const cleaned = stripMarkdown(value).toLowerCase()
+  // Bỏ số thứ tự đầu ô ("1. Content Writer") trước khi tra alias: model hay đánh
+  // số cột này, và số thứ tự không phải phần của tên vai trò.
+  const cleaned = stripMarkdown(value)
+    .toLowerCase()
+    .replace(/^\s*\d+\s*[.)-]\s*/, '')
+    .trim()
   const aliases: Record<string, string> = {
     leader: 'marketing-leader',
     'trưởng phòng marketing': 'marketing-leader',
@@ -735,25 +1142,6 @@ export function parseDependencies(value: string): string[] {
     .split(/[,;]|(?<![\p{L}\p{N}])và(?![\p{L}\p{N}])/u)
     .map((part) => stripMarkdown(part))
     .filter((part) => part.length > 0 && !/^(không|none|-|—)$/i.test(part))
-}
-
-/** Gộp brief đã lưu với nội dung người dùng vừa gửi, ưu tiên giá trị mới. */
-export function mergeBrief(existing: Brief | undefined, userMessage: string): Brief {
-  const base: Brief = existing ?? {
-    objective: '',
-    kpi: '',
-    scope: '',
-    deadline: '',
-    budget: '',
-    constraints: '',
-  }
-  // Câu trả lời của người dùng thường bổ sung cho các trường còn thiếu; nối vào
-  // trường yếu nhất thay vì ghi đè mục tiêu đã chốt.
-  const merged = { ...base }
-  const record = merged as unknown as Record<string, string>
-  if (record.objective?.trim().length === 0) record.objective = userMessage.slice(0, 500)
-  else if (record.constraints?.trim().length === 0) record.constraints = userMessage.slice(0, 500)
-  return merged
 }
 
 export function formatBrief(brief: Brief): string {

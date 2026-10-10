@@ -18,19 +18,19 @@ function longConversation(): LlmMessage[] {
     messages.push({
       role: 'assistant',
       content: `Bước ${index}: ${'phân tích từ khoá '.repeat(30)}`,
-      toolCalls: [{ id: `call_${index}`, name: 'kb.search', argumentsJson: '{"q":"seo"}' }],
+      toolCalls: [{ id: `call_${index}`, name: 'kb_search', argumentsJson: '{"q":"seo"}' }],
     })
     messages.push({
       role: 'tool',
       toolCallId: `call_${index}`,
-      name: 'kb.search',
+      name: 'kb_search',
       content: `Kết quả ${index}: ${'dữ liệu thị trường '.repeat(30)}`,
     })
   }
   messages.push({
     role: 'tool',
     toolCallId: 'call_last',
-    name: 'kb.read',
+    name: 'kb_read',
     content: 'KẾT QUẢ CUỐI CÙNG CẦN GIỮ NGUYÊN',
   })
   return messages

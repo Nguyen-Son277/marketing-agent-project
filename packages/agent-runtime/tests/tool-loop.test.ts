@@ -44,7 +44,7 @@ describe('runAgent — vòng lặp cơ bản', () => {
       content: `Kết quả cho ${String(args.q)} tại ${ctx.companyId}`,
     }))
     const adapter = scriptedAdapter([
-      toolTurn([{ id: 'call_1', name: 'kb.search', argumentsJson: '{"q":"seo"}' }]),
+      toolTurn([{ id: 'call_1', name: 'kb_search', argumentsJson: '{"q":"seo"}' }]),
       textTurn('Đã tổng hợp xong báo cáo.'),
     ])
     const { deps, meter } = depsFor(adapter)
@@ -54,7 +54,7 @@ describe('runAgent — vòng lặp cơ bản', () => {
         agent: buildResolvedAgent(),
         context: testContext(),
         messages: [{ role: 'user', content: 'Tìm tài liệu SEO' }],
-        tools: [testTool('kb.search', search)],
+        tools: [testTool('kb_search', search)],
       },
       deps,
     )
@@ -63,7 +63,7 @@ describe('runAgent — vòng lặp cơ bản', () => {
     expect(result.stopReason).toBe('completed')
     expect(result.steps).toBe(2)
     expect(result.output).toBe('Đã tổng hợp xong báo cáo.')
-    expect(result.toolCalls).toEqual([expect.objectContaining({ name: 'kb.search', ok: true })])
+    expect(result.toolCalls).toEqual([expect.objectContaining({ name: 'kb_search', ok: true })])
     expect(search).toHaveBeenCalledTimes(1)
     expect(search.mock.calls[0]?.[0]).toEqual({ q: 'seo' })
     expect(search.mock.calls[0]?.[1]?.companyId).toBe('c1')
@@ -93,8 +93,8 @@ describe('runAgent — vòng lặp cơ bản', () => {
 
     const adapter = scriptedAdapter([
       toolTurn([
-        { id: 'c1', name: 'kb.search', argumentsJson: '{"q":"a"}' },
-        { id: 'c2', name: 'kb.read', argumentsJson: '{"id":"d1"}' },
+        { id: 'c1', name: 'kb_search', argumentsJson: '{"q":"a"}' },
+        { id: 'c2', name: 'kb_read', argumentsJson: '{"id":"d1"}' },
       ]),
       textTurn('Xong cả hai.'),
     ])
@@ -104,7 +104,7 @@ describe('runAgent — vòng lặp cơ bản', () => {
       {
         agent: buildResolvedAgent(),
         context: testContext(),
-        tools: [testTool('kb.search', makeHandler('search')), testTool('kb.read', makeHandler('read'))],
+        tools: [testTool('kb_search', makeHandler('search')), testTool('kb_read', makeHandler('read'))],
       },
       deps,
     )
@@ -121,7 +121,7 @@ describe('runAgent — lỗi công cụ không làm chết run', () => {
       throw new Error('mất kết nối kho kiến thức')
     })
     const adapter = scriptedAdapter([
-      toolTurn([{ id: 'c1', name: 'kb.search', argumentsJson: '{"q":"seo"}' }]),
+      toolTurn([{ id: 'c1', name: 'kb_search', argumentsJson: '{"q":"seo"}' }]),
       textTurn('Không lấy được dữ liệu; đây là blocker cần Leader xử lý.'),
     ])
     const { deps, meter } = depsFor(adapter)
@@ -130,14 +130,14 @@ describe('runAgent — lỗi công cụ không làm chết run', () => {
       {
         agent: buildResolvedAgent(),
         context: testContext(),
-        tools: [testTool('kb.search', failing)],
+        tools: [testTool('kb_search', failing)],
       },
       deps,
     )
 
     expect(result.status).toBe('succeeded')
     expect(result.output).toContain('blocker')
-    expect(result.toolCalls[0]).toEqual(expect.objectContaining({ name: 'kb.search', ok: false }))
+    expect(result.toolCalls[0]).toEqual(expect.objectContaining({ name: 'kb_search', ok: false }))
     expect(result.toolCalls[0]?.error).toContain('mất kết nối')
 
     const second = adapter.requests[1]!
@@ -149,13 +149,13 @@ describe('runAgent — lỗi công cụ không làm chết run', () => {
   it('công cụ trả isError cũng được ghi nhận là thất bại', async () => {
     const notFoundTool = vi.fn(async () => ({ content: 'Không tìm thấy tài liệu', isError: true }))
     const adapter = scriptedAdapter([
-      toolTurn([{ id: 'c1', name: 'kb.read', argumentsJson: '{"id":"d1"}' }]),
+      toolTurn([{ id: 'c1', name: 'kb_read', argumentsJson: '{"id":"d1"}' }]),
       textTurn('Báo chưa có dữ liệu.'),
     ])
     const { deps } = depsFor(adapter)
 
     const result = await runAgent(
-      { agent: buildResolvedAgent(), context: testContext(), tools: [testTool('kb.read', notFoundTool)] },
+      { agent: buildResolvedAgent(), context: testContext(), tools: [testTool('kb_read', notFoundTool)] },
       deps,
     )
 
@@ -166,7 +166,7 @@ describe('runAgent — lỗi công cụ không làm chết run', () => {
   it('công cụ treo quá thời gian bị cắt và run vẫn tiếp tục', async () => {
     const hanging = vi.fn(() => new Promise<ToolResult>(() => undefined))
     const adapter = scriptedAdapter([
-      toolTurn([{ id: 'c1', name: 'kb.search', argumentsJson: '{}' }]),
+      toolTurn([{ id: 'c1', name: 'kb_search', argumentsJson: '{}' }]),
       textTurn('Bỏ qua công cụ treo và báo blocker.'),
     ])
     const { deps } = depsFor(adapter)
@@ -175,7 +175,7 @@ describe('runAgent — lỗi công cụ không làm chết run', () => {
       {
         agent: buildResolvedAgent(),
         context: testContext(),
-        tools: [testTool('kb.search', hanging)],
+        tools: [testTool('kb_search', hanging)],
         toolTimeoutMs: 20,
       },
       deps,
@@ -190,14 +190,14 @@ describe('runAgent — lỗi công cụ không làm chết run', () => {
 describe('runAgent — guard', () => {
   it('dừng đúng ở maxSteps khi model liên tục gọi công cụ', async () => {
     const handler = vi.fn(async () => ({ content: 'ok' }))
-    const adapter = scriptedAdapter([toolTurn([{ id: 'c1', name: 'kb.search', argumentsJson: '{}' }])])
+    const adapter = scriptedAdapter([toolTurn([{ id: 'c1', name: 'kb_search', argumentsJson: '{}' }])])
     const { deps, meter } = depsFor(adapter)
 
     const result = await runAgent(
       {
         agent: buildResolvedAgent(),
         context: testContext(),
-        tools: [testTool('kb.search', handler)],
+        tools: [testTool('kb_search', handler)],
         maxSteps: 3,
       },
       deps,
@@ -235,14 +235,14 @@ describe('runAgent — guard', () => {
 
   it('vượt giới hạn token đầu ra thì dừng với output_limit', async () => {
     const handler = vi.fn(async () => ({ content: 'ok' }))
-    const adapter = scriptedAdapter([toolTurn([{ id: 'c1', name: 'kb.search', argumentsJson: '{}' }], usage(100, 50))])
+    const adapter = scriptedAdapter([toolTurn([{ id: 'c1', name: 'kb_search', argumentsJson: '{}' }], usage(100, 50))])
     const { deps } = depsFor(adapter)
 
     const result = await runAgent(
       {
         agent: buildResolvedAgent(),
         context: testContext(),
-        tools: [testTool('kb.search', handler)],
+        tools: [testTool('kb_search', handler)],
         maxOutputTokens: 40,
       },
       deps,
@@ -284,7 +284,7 @@ describe('runAgent — công cụ ngoài grant', () => {
       {
         agent: buildResolvedAgent(),
         context: testContext(),
-        tools: [testTool('kb.search', granted)],
+        tools: [testTool('kb_search', granted)],
       },
       deps,
     )
@@ -354,7 +354,7 @@ describe('runAgent — ghép nối thật với repos', () => {
       name: 'Viết nội dung',
       description: 'Viết nội dung',
       systemPrompt: '# Vai trò',
-      defaultTools: ['kb.search'],
+      defaultTools: ['kb_search'],
     })
     const provider = repos.llm.createProvider({
       companyId: null,
@@ -375,7 +375,7 @@ describe('runAgent — ghép nối thật với repos', () => {
     const agent = repos.team.resolveAgent('c1', 'content-writer')
 
     const adapter = scriptedAdapter([
-      toolTurn([{ id: 'c1', name: 'kb.search', argumentsJson: '{"q":"seo"}' }]),
+      toolTurn([{ id: 'c1', name: 'kb_search', argumentsJson: '{"q":"seo"}' }]),
       textTurn('Báo cáo hoàn tất.'),
     ])
     const deps: AgentRuntimeDeps = { ...createRuntimeDeps(repos), adapter }
@@ -385,7 +385,7 @@ describe('runAgent — ghép nối thật với repos', () => {
         agent,
         context: testContext(),
         messages: [{ role: 'user', content: 'Tìm tài liệu SEO' }],
-        tools: [testTool('kb.search', async () => ({ content: 'Tài liệu SEO' }))],
+        tools: [testTool('kb_search', async () => ({ content: 'Tài liệu SEO' }))],
       },
       deps,
     )

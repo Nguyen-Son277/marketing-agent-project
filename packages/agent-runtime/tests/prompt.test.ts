@@ -17,8 +17,8 @@ describe('buildSystemPrompt', () => {
       knowledgeWrite: ['90-ket-qua'],
     })
     const prompt = buildSystemPrompt(resolved, [
-      testTool('kb.search', async () => ({ content: '' })),
-      testTool('meta.publish', async () => ({ content: '' }), { requiresApproval: true }),
+      testTool('kb_search', async () => ({ content: '' })),
+      testTool('meta_publish', async () => ({ content: '' }), { requiresApproval: true }),
     ])
 
     expect(prompt).toContain('# Vai trò')
@@ -29,8 +29,8 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('Kết quả & tài sản (90-ket-qua)')
     expect(prompt).toContain('### copywriting')
     expect(prompt).toContain('Viết nội dung theo cấu trúc')
-    expect(prompt).toContain('kb.search')
-    expect(prompt).toContain('meta.publish')
+    expect(prompt).toContain('kb_search')
+    expect(prompt).toContain('meta_publish')
     expect(prompt).toContain('cần phê duyệt')
     expect(prompt).toContain('Không bịa số liệu')
     expect(prompt).toContain('blocker')

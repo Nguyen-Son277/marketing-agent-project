@@ -24,6 +24,8 @@ import {
   mechanicalChecks,
   parsePlanTable,
   parseDependencies,
+  normalizeDependencies,
+  resolveRole,
   normalizeRole,
   planLevels,
   hasSourceEvidence,
@@ -201,13 +203,37 @@ describe('validatePlan', () => {
     ).toThrow(/trùng/i)
   })
 
-  it('từ chối kế hoạch quá nhiều việc', () => {
-    const tasks = Array.from({ length: 9 }, (_, index) => ({
+  it('cắt bớt thay vì từ chối khi kế hoạch vượt trần số việc', () => {
+    // Vượt trần không phải lỗi chặn: kế hoạch do model viết là văn bản hợp lệ, và
+    // từ chối toàn bộ chỉ vì chia 12 việc thay vì 10 sẽ khiến người dùng nhận thông
+    // báo lỗi mà không có gì để duyệt. Đã gặp thật với model 9 việc / trần 8.
+    const tasks = Array.from({ length: 12 }, (_, index) => ({
       title: `Việc ${index + 1}`,
       briefMd: 'Mô tả đủ dài cho việc này',
       assigneeRole: role,
     }))
-    expect(() => validatePlan({ availableRoles: [...available], plan: { tasks } })).toThrow(/vượt giới hạn/i)
+    const result = validatePlan({ availableRoles: [...available], plan: { tasks } })
+    expect(result.tasks).toHaveLength(10)
+    expect(result.dropped).toBe(2)
+    expect(result.order).toHaveLength(10)
+  })
+
+  it('khi cắt bớt vẫn không để lại phụ thuộc trỏ tới việc đã bị bỏ', () => {
+    // Chuỗi phụ thuộc A → B → C → D; trần 3 nên một việc phải bị bỏ, và việc giữ
+    // lại cuối cùng không được trỏ tới việc đã bỏ.
+    const tasks = [
+      { title: 'A', briefMd: 'Mô tả đủ dài cho việc A', assigneeRole: role },
+      { title: 'B', briefMd: 'Mô tả đủ dài cho việc B', assigneeRole: role, dependsOnTitles: ['A'] },
+      { title: 'C', briefMd: 'Mô tả đủ dài cho việc C', assigneeRole: role, dependsOnTitles: ['B'] },
+      { title: 'D', briefMd: 'Mô tả đủ dài cho việc D', assigneeRole: role, dependsOnTitles: ['C'] },
+    ]
+    const result = validatePlan({ availableRoles: [...available], plan: { tasks }, maxTasks: 3 })
+    const giu = new Set(result.tasks.map((task) => task.title))
+    for (const task of result.tasks) {
+      for (const dependency of task.dependsOn) {
+        expect(giu.has(dependency), `${task.title} trỏ tới ${dependency} đã bị bỏ`).toBe(true)
+      }
+    }
   })
 })
 
@@ -241,10 +267,114 @@ describe('parsePlanTable', () => {
     const rows = parsePlanTable(markdown)
     expect(rows).toHaveLength(2)
     expect(rows[0]?.title).toBe('Nghiên cứu từ khoá')
-    expect(rows[0]?.assigneeRole).toBe('seo-technical')
+    // Tên chuyên môn giữ nguyên văn tại đây; việc resolve sang role thật do
+    // `resolveRole` làm ở bước lập kế hoạch (xem bài test bên dưới).
+    // `parsePlanTable` giữ nguyên văn tên chuyên môn; `resolveRole` mới là nơi
+    // chuyển nó thành role thật (xem bài test riêng bên dưới).
+    expect(rows[0]?.assigneeRaw).toBe('SEO kỹ thuật')
     expect(rows[0]?.dependsOn).toEqual([])
-    expect(rows[1]?.assigneeRole).toBe('content-writer')
+    expect(rows[1]?.assigneeRaw).toBe('content-writer')
     expect(rows[1]?.dependsOn).toEqual(['Nghiên cứu từ khoá'])
+  })
+
+  it('đọc được bảng có cột số thứ tự ở đầu', () => {
+    // Ca này đã làm hỏng luồng thật: model thêm cột "#", parser coi dòng tiêu đề là
+    // một công việc tên "#" với chuyên môn "Công việc", rồi cả kế hoạch bị từ chối.
+    const md = [
+      '| # | Công việc | Chuyên môn | Phụ thuộc | Đầu ra |',
+      '|---|---|---|---|---|',
+      '| 1 | Nghiên cứu từ khoá | SEO kỹ thuật | không | Danh sách cluster |',
+      '| 2 | Viết bài | content-writer | Nghiên cứu từ khoá | 5 bài |',
+    ].join('\n')
+    const rows = parsePlanTable(md)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.title).toBe('Nghiên cứu từ khoá')
+    expect(rows[0]?.assigneeRaw).toBe('SEO kỹ thuật')
+    expect(rows[1]?.dependsOn).toEqual(['Nghiên cứu từ khoá'])
+  })
+
+  it('đọc được bảng khi cột chuyên môn đứng trước cột công việc', () => {
+    const md = [
+      '| Chuyên môn | Công việc | Đầu ra | Phụ thuộc |',
+      '|---|---|---|---|',
+      '| analytics | Đo KPI | Bảng chỉ số | không |',
+    ].join('\n')
+    const rows = parsePlanTable(md)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.title).toBe('Đo KPI')
+    expect(rows[0]?.assigneeRaw).toBe('analytics')
+  })
+
+  it('không lấy dòng dữ liệu có tiêu đề chứa từ khoá làm dòng tiêu đề', () => {
+    // Tiêu đề "Nghiên cứu từ khoá" chứa "nghiên cứu"; nếu luật nhận dòng tiêu đề
+    // chỉ cần "một ô chứa từ khoá" thì dòng dữ liệu này bị mất.
+    const md = [
+      '| Công việc | Chuyên môn | Phụ thuộc | Đầu ra |',
+      '|---|---|---|---|',
+      '| Nghiên cứu từ khoá | SEO kỹ thuật | — | Danh sách cluster |',
+    ].join('\n')
+    const rows = parsePlanTable(md)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.title).toBe('Nghiên cứu từ khoá')
+  })
+
+  it('giải mã phụ thuộc ghi bằng số thứ tự thành tiêu đề công việc', () => {
+    // Đã gặp thật: Leader viết "phụ thuộc: 1" nghĩa là "sau việc số 1". Giữ nguyên
+    // số thì bước xác thực báo "không có việc nào tên 1" và cả kế hoạch bị từ chối.
+    const md = [
+      '| # | Công việc | Chuyên môn | Phụ thuộc | Đầu ra |',
+      '|---|---|---|---|---|',
+      '| 1 | Nghiên cứu từ khoá | SEO kỹ thuật | không | Cluster |',
+      '| 2 | Viết bài | content-writer | 1 | 5 bài |',
+      '| 3 | Đo lường | analytics | 2 | Bảng số |',
+    ].join('\n')
+    const rows = parsePlanTable(md)
+    expect(rows).toHaveLength(3)
+    expect(rows[1]?.dependsOn).toEqual(['Nghiên cứu từ khoá'])
+    expect(rows[2]?.dependsOn).toEqual(['Viết bài'])
+  })
+
+  it('giữ nguyên số phụ thuộc không khớp dòng nào ở tầng parse', () => {
+    const md = [
+      '| Công việc | Chuyên môn | Phụ thuộc | Đầu ra |',
+      '|---|---|---|---|',
+      '| Viết bài | content-writer | 99 | 5 bài |',
+    ].join('\n')
+    const rows = parsePlanTable(md)
+    // Tầng parse giữ nguyên văn; việc phán quyết thuộc `normalizeDependencies`.
+    expect(rows[0]?.dependsOn).toEqual(['99'])
+  })
+
+  it('tách được ô phụ thuộc gộp nhiều việc bằng "&" và "+"', () => {
+    // Đã gặp thật: Leader ghi "Thiết kế bộ sáng tạo & landing + Thiết lập đo lường"
+    // trong một ô, và bước xác thực từ chối cả kế hoạch vì không có việc nào tên đó.
+    const md = [
+      '| Công việc | Chuyên môn | Phụ thuộc | Đầu ra |',
+      '|---|---|---|---|',
+      '| Nghiên cứu từ khoá | seo-technical | không | Cluster |',
+      '| Thiết kế bộ sáng tạo & landing | design-video | Nghiên cứu từ khoá | Bộ ảnh |',
+      '| Thiết lập đo lường | analytics | Nghiên cứu từ khoá | Sơ đồ tracking |',
+      '| Chạy chiến dịch | paid-media | Thiết kế bộ sáng tạo & landing + Thiết lập đo lường | Báo cáo |',
+    ].join('\n')
+    const rows = normalizeDependencies(parsePlanTable(md))
+    expect(rows).toHaveLength(4)
+    expect([...rows[3]!.dependsOn].sort()).toEqual(['Thiết kế bộ sáng tạo & landing', 'Thiết lập đo lường'])
+  })
+
+  it('bỏ phụ thuộc không khớp việc nào, và báo lại qua callback', () => {
+    // Phụ thuộc sai khiến một việc chạy hơi sớm; từ chối cả kế hoạch khiến người
+    // dùng không có gì để duyệt. Chọn cách ít thiệt hại hơn, nhưng phải báo lại.
+    const md = [
+      '| Công việc | Chuyên môn | Phụ thuộc | Đầu ra |',
+      '|---|---|---|---|',
+      '| Việc A | content-writer | Việc không tồn tại | Bài viết |',
+    ].join('\n')
+    const bo: string[] = []
+    const rows = normalizeDependencies(parsePlanTable(md), (task, dependency) => {
+      bo.push(`${task}→${dependency}`)
+    })
+    expect(rows[0]?.dependsOn).toEqual([])
+    expect(bo).toEqual(['Việc A→Việc không tồn tại'])
   })
 
   it('trả mảng rỗng khi không có bảng, để caller báo lỗi rõ', () => {
@@ -254,6 +384,39 @@ describe('parsePlanTable', () => {
   it('bỏ qua dòng tiêu đề và dòng phân cách', () => {
     const rows = parsePlanTable(['| Công việc | Chuyên môn |', '|---|---|'].join('\n'))
     expect(rows).toEqual([])
+  })
+})
+
+describe('resolveRole', () => {
+  const co = ['marketing-leader', 'market-research', 'content-writer', 'seo-technical', 'analytics', 'paid-media']
+
+  it('khớp tên viết đúng', () => {
+    expect(resolveRole('content-writer', co)).toBe('content-writer')
+    expect(resolveRole('analytics', co)).toBe('analytics')
+  })
+
+  it('khớp tên tiếng Việt có dấu', () => {
+    expect(resolveRole('SEO kỹ thuật', co)).toBe('seo-technical')
+    expect(resolveRole('Nghiên cứu thị trường', co)).toBe('market-research')
+    expect(resolveRole('Quảng cáo trả phí', co)).toBe('paid-media')
+  })
+
+  it('bỏ số thứ tự ở đầu ô', () => {
+    expect(resolveRole('1. Content Writer', co)).toBe('content-writer')
+    expect(resolveRole('2) SEO kỹ thuật', co)).toBe('seo-technical')
+  })
+
+  it('khớp mờ khi Leader viết khác đi', () => {
+    expect(resolveRole('Content Writer', co)).toBe('content-writer')
+    expect(resolveRole('SEO Technical', co)).toBe('seo-technical')
+    expect(resolveRole('Phân tích', co)).toBe('analytics')
+  })
+
+  it('trả về undefined khi không đủ gần, để caller báo lỗi rõ', () => {
+    // Ô tiêu đề bảng từng bị nhận nhầm thành chuyên môn; đây là ca bảo vệ.
+    expect(resolveRole('Công việc', co)).toBeUndefined()
+    expect(resolveRole('Đầu ra', co)).toBeUndefined()
+    expect(resolveRole('', co)).toBeUndefined()
   })
 })
 
@@ -573,7 +736,7 @@ describe('escalation', () => {
       taskId: task.id,
       fromRole: 'analytics',
       reason: 'Chưa kết nối GA4',
-      attempts: 'Đã thử ga4.report, nhận lỗi needs_configuration',
+      attempts: 'Đã thử ga4_report, nhận lỗi needs_configuration',
       options: ['Nhờ người dùng kết nối', 'Dùng dữ liệu GSC thay thế'],
     })
 

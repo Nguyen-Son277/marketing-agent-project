@@ -148,7 +148,7 @@ async function buildSharedServices(ctx: AppContext): Promise<SharedServices> {
     },
     availableRoles(companyId: string) {
       // Cùng quy tắc với orchestrator, nhưng đọc thẳng repos để hàm này đồng bộ:
-      // validation của tool `task.create` gọi nó ngay trong lượt chạy.
+      // validation của tool `task_create` gọi nó ngay trong lượt chạy.
       return ctx.repos.team
         .listAgentDefs()
         .filter((def) => ctx.repos.team.findPreset(companyId, def.id)?.enabled === true)

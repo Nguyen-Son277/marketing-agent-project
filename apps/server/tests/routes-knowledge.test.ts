@@ -95,8 +95,9 @@ describe('knowledge routes', () => {
 
   it('index lại đọc file thật trong thư mục KB của công ty', async () => {
     const { ownerCookie, company } = await tenant(ctx, 'kb-reindex@example.com', 'KB Reindex')
+    // Ghi vào `kbRoot` (kho kiến thức), KHÔNG phải `companiesRoot` (vùng file của agent).
     writeKbFile(
-      ctx.companiesRoot,
+      ctx.kbRoot,
       company.slug,
       '20-thi-truong/doi-thu.md',
       '# Đối thủ\n\nĐối thủ chính là phần mềm nhập khẩu giá cao.',

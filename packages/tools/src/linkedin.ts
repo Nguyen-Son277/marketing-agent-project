@@ -47,7 +47,7 @@ export function createLinkedInTools(store: IntegrationStore) {
   }
 
   const linkedinPublish = defineTool({
-    name: 'linkedin.publish',
+    name: 'linkedin_publish',
     description:
       'Tạo bài đăng LinkedIn cho tổ chức hoặc cá nhân. MẶC ĐỊNH chỉ soạn bản nháp và cần người dùng phê duyệt trước khi đăng thật.',
     parameters: {
@@ -128,7 +128,7 @@ export function createLinkedInTools(store: IntegrationStore) {
   })
 
   const linkedinInsights = defineTool({
-    name: 'linkedin.insights',
+    name: 'linkedin_insights',
     description:
       'Lấy chỉ số hiệu suất bài đăng LinkedIn của tổ chức: lượt hiển thị, người tiếp cận, tương tác, lượt bấm. Dùng để báo cáo hiệu quả kênh LinkedIn.',
     parameters: {

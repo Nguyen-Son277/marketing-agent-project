@@ -1,6 +1,6 @@
 /**
- * Ba công cụ để agent làm việc với kho kiến thức công ty: tìm (`kb.search`),
- * đọc một tài liệu (`kb.read`), và ghi/cập nhật (`kb.write`).
+ * Ba công cụ để agent làm việc với kho kiến thức công ty: tìm (`kb_search`),
+ * đọc một tài liệu (`kb_read`), và ghi/cập nhật (`kb_write`).
  *
  * Vì sao quyền được kiểm tra ở đây chứ không ở tầng gọi: model chỉ điều khiển
  * tham số, không điều khiển danh tính. Mọi kiểm tra đọc/ghi đều lấy `companyId`
@@ -24,11 +24,11 @@ import { categoryFromPath, parseFrontmatter } from './frontmatter.ts'
 import { retrieve } from './retriever.ts'
 import type { EmbeddingProvider } from './embeddings.ts'
 
-export const KB_TOOL_NAMES = ['kb.search', 'kb.read', 'kb.write'] as const
+export const KB_TOOL_NAMES = ['kb_search', 'kb_read', 'kb_write'] as const
 
 export interface KbToolDeps {
   readonly repos: Repos
-  /** Bỏ trống thì kb.search vẫn chạy nhưng chỉ tìm theo từ khoá. */
+  /** Bỏ trống thì kb_search vẫn chạy nhưng chỉ tìm theo từ khoá. */
   readonly embeddingProvider?: EmbeddingProvider
 }
 
@@ -95,7 +95,7 @@ const WRITE_PARAMETERS: ToolParameterSchema = {
 
 export function createKbSearchTool(deps: KbToolDeps): ToolDefinition {
   return {
-    name: 'kb.search',
+    name: 'kb_search',
     description:
       'Tìm trong kho kiến thức của công ty theo câu hỏi tiếng Việt. Chỉ trả về tài liệu thuộc danh mục ' +
       'mà agent này được phép đọc. Mỗi kết quả kèm path, title và headingPath để trích dẫn nguồn.',
@@ -106,7 +106,7 @@ export function createKbSearchTool(deps: KbToolDeps): ToolDefinition {
 
 export function createKbReadTool(deps: KbToolDeps): ToolDefinition {
   return {
-    name: 'kb.read',
+    name: 'kb_read',
     description:
       'Đọc toàn bộ nội dung một tài liệu trong kho kiến thức theo đường dẫn. Từ chối nếu tài liệu thuộc ' +
       'danh mục agent không được phép đọc.',
@@ -117,7 +117,7 @@ export function createKbReadTool(deps: KbToolDeps): ToolDefinition {
 
 export function createKbWriteTool(deps: KbToolDeps): ToolDefinition {
   return {
-    name: 'kb.write',
+    name: 'kb_write',
     description:
       'Ghi mới hoặc cập nhật một tài liệu Markdown trong kho kiến thức. Chỉ ghi được vào danh mục agent ' +
       'được phép ghi; nội dung được phân đoạn và nhúng lại ngay sau khi lưu.',
@@ -134,7 +134,7 @@ export function createKbTools(deps: KbToolDeps): ToolDefinition[] {
 
 async function searchHandler(deps: KbToolDeps, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
   const parsed = searchArgsSchema.safeParse(args)
-  if (!parsed.success) return invalidArguments('kb.search', parsed.error.issues.map((issue) => issue.message))
+  if (!parsed.success) return invalidArguments('kb_search', parsed.error.issues.map((issue) => issue.message))
 
   const readable = deps.repos.team.readableCategories(ctx.companyId, ctx.agentDefId)
   if (readable.length === 0) {
@@ -162,7 +162,7 @@ async function searchHandler(deps: KbToolDeps, args: Record<string, unknown>, ct
       ...(deps.embeddingProvider ? { embeddingProvider: deps.embeddingProvider } : {}),
       categories,
     })
-    ctx.log('kb.search', { query: parsed.data.query, hits: hits.length, categories })
+    ctx.log('kb_search', { query: parsed.data.query, hits: hits.length, categories })
 
     if (hits.length === 0) {
       return {
@@ -193,7 +193,7 @@ async function searchHandler(deps: KbToolDeps, args: Record<string, unknown>, ct
 
 async function readHandler(deps: KbToolDeps, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
   const parsed = readArgsSchema.safeParse(args)
-  if (!parsed.success) return invalidArguments('kb.read', parsed.error.issues.map((issue) => issue.message))
+  if (!parsed.success) return invalidArguments('kb_read', parsed.error.issues.map((issue) => issue.message))
 
   try {
     const path = normalizeDocPath(parsed.data.path)
@@ -210,7 +210,7 @@ async function readHandler(deps: KbToolDeps, args: Record<string, unknown>, ctx:
 
     const chunks = deps.repos.knowledge.listChunks(document.id)
     const body = chunks.map((chunk) => (chunk.headingPath ? `<!-- ${chunk.headingPath} -->\n${chunk.text}` : chunk.text))
-    ctx.log('kb.read', { path, chunks: chunks.length })
+    ctx.log('kb_read', { path, chunks: chunks.length })
     return {
       content: [
         `# ${document.title}`,
@@ -235,7 +235,7 @@ async function readHandler(deps: KbToolDeps, args: Record<string, unknown>, ctx:
 
 async function writeHandler(deps: KbToolDeps, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
   const parsed = writeArgsSchema.safeParse(args)
-  if (!parsed.success) return invalidArguments('kb.write', parsed.error.issues.map((issue) => issue.message))
+  if (!parsed.success) return invalidArguments('kb_write', parsed.error.issues.map((issue) => issue.message))
 
   try {
     const path = normalizeDocPath(parsed.data.path)
@@ -283,7 +283,7 @@ async function writeHandler(deps: KbToolDeps, args: Record<string, unknown>, ctx
       source: 'agent',
       force: true,
     })
-    ctx.log('kb.write', { path, category, chunks: result.chunks })
+    ctx.log('kb_write', { path, category, chunks: result.chunks })
     return {
       content: `Đã ghi tài liệu "${result.document.path}" (danh mục ${category}, phiên bản ${result.document.version}, ${result.chunks} đoạn).`,
       data: {

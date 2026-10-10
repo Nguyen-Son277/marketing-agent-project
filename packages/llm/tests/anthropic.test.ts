@@ -21,7 +21,7 @@ describe('AnthropicAdapter', () => {
         message: { usage: { input_tokens: 30, output_tokens: 0, cache_read_input_tokens: 10 } },
       }),
       JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Đang tra ' } }),
-      JSON.stringify({ type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 'toolu_1', name: 'kb.search' } }),
+      JSON.stringify({ type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 'toolu_1', name: 'kb_search' } }),
       JSON.stringify({ type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{"q":"seo"}' } }),
       JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'cứu.' } }),
       JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { output_tokens: 42 } }),
@@ -35,12 +35,12 @@ describe('AnthropicAdapter', () => {
       messages: [
         { role: 'system', content: 'Bạn là chuyên viên SEO.' },
         { role: 'user', content: 'Nghiên cứu từ khoá' },
-        { role: 'assistant', content: '', toolCalls: [{ id: 't0', name: 'kb.read', argumentsJson: '{"id":"d1"}' }] },
-        { role: 'tool', toolCallId: 't0', name: 'kb.read', content: 'Tài liệu cũ' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 't0', name: 'kb_read', argumentsJson: '{"id":"d1"}' }] },
+        { role: 'tool', toolCallId: 't0', name: 'kb_read', content: 'Tài liệu cũ' },
       ],
       tools: [
         {
-          name: 'kb.search',
+          name: 'kb_search',
           description: 'Tìm kiến thức',
           parameters: { type: 'object', properties: { q: { type: 'string' } } },
         },
@@ -48,7 +48,7 @@ describe('AnthropicAdapter', () => {
     })
 
     expect(textOf(chunks)).toBe('Đang tra cứu.')
-    expect(toolCallsOf(chunks)).toEqual([{ id: 'toolu_1', name: 'kb.search', argumentsJson: '{"q":"seo"}' }])
+    expect(toolCallsOf(chunks)).toEqual([{ id: 'toolu_1', name: 'kb_search', argumentsJson: '{"q":"seo"}' }])
     expect(doneOf(chunks).finishReason).toBe('tool_calls')
     expect(doneOf(chunks).usage).toEqual({ promptTokens: 40, completionTokens: 42, cachedTokens: 10 })
 
@@ -59,7 +59,7 @@ describe('AnthropicAdapter', () => {
     expect(sent.system).toBe('Bạn là chuyên viên SEO.')
     expect((init?.headers as Record<string, string>)['x-api-key']).toBe('sk-ant')
     const tools = sent.tools as { name: string; input_schema: unknown }[]
-    expect(tools[0]?.name).toBe('kb.search')
+    expect(tools[0]?.name).toBe('kb_search')
     expect(tools[0]?.input_schema).toMatchObject({ type: 'object' })
   })
 
@@ -77,7 +77,7 @@ describe('AnthropicAdapter', () => {
       { role: 'system', content: 'Phần một' },
       { role: 'system', content: 'Phần hai' },
       { role: 'user', content: 'Câu hỏi' },
-      { role: 'assistant', content: 'Gọi hai công cụ', toolCalls: [{ id: 'a', name: 'kb.read', argumentsJson: '{}' }, { id: 'b', name: 'kb.read', argumentsJson: '{}' }] },
+      { role: 'assistant', content: 'Gọi hai công cụ', toolCalls: [{ id: 'a', name: 'kb_read', argumentsJson: '{}' }, { id: 'b', name: 'kb_read', argumentsJson: '{}' }] },
       { role: 'tool', toolCallId: 'a', content: 'Kết quả A' },
       { role: 'tool', toolCallId: 'b', content: 'Kết quả B' },
     ])

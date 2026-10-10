@@ -8,6 +8,7 @@
  */
 import { AppError, newId, nowIso, type CompanyRecord, type CompanyRole, type PublicUser } from '@marketing-agent/shared'
 import type { Repos } from '@marketing-agent/db'
+import { installDefaultKnowledgeAcl } from './knowledge-acl.ts'
 
 export interface CreateCompanyResult {
   readonly company: CompanyRecord
@@ -15,6 +16,8 @@ export interface CreateCompanyResult {
   readonly members: number
   readonly presets: number
   readonly routes: number
+  /** Số bản ghi quyền đọc/ghi kho kiến thức đã cài (6 danh mục × 10 agent). */
+  readonly aclEntries: number
 }
 
 /** Tier → model id defaults, matching the seeded catalog. Overridable per company. */
@@ -127,8 +130,11 @@ export function createCompanyForUser(
       routes++
     }
 
-    // Knowledge ACL: leader reads everything, each specialist keeps the
-    // definition's defaults already installed by `ensurePreset`.
+    // Phân quyền tri thức là bước BẮT BUỘC, không phải tuỳ chọn: thiếu nó thì mọi
+    // agent chạy nhưng không đọc được tài liệu nào, và triệu chứng duy nhất là câu
+    // trả lời "không tìm thấy" — rất khó lần ra. Xem services/knowledge-acl.ts.
+    const aclEntries = installDefaultKnowledgeAcl(repos, companyId)
+
     const company = repos.auth.findCompanyById(companyId)
     if (!company) throw new AppError('internal', 'Không tạo được công ty')
 
@@ -138,6 +144,7 @@ export function createCompanyForUser(
       members: 1,
       presets,
       routes,
+      aclEntries,
     }
   })
 }

@@ -140,7 +140,7 @@ export function knowledgeRoutes() {
           try {
             const result = await indexCompany(repos, {
               companyId,
-              rootDir: companyKbDir(company.slug, ctx.config.companiesRoot),
+              rootDir: companyKbDir(company.slug, ctx.config.kbRoot),
               force: input.force,
               ...(provider ? { provider } : {}),
             })

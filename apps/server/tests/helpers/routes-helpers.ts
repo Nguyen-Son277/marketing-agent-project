@@ -26,6 +26,7 @@ import { taskRoutes } from '../../src/routes/task-routes.ts'
 import { settingsRoutes } from '../../src/routes/settings-routes.ts'
 import { costRoutes } from '../../src/routes/cost-routes.ts'
 import { diagramRoutes } from '../../src/routes/diagram-routes.ts'
+import { dashboardRoutes } from '../../src/routes/dashboard-routes.ts'
 
 const SECRET = 'unit-test-app-secret-0123456789'
 
@@ -33,7 +34,10 @@ export interface RoutesTestContext {
   readonly repos: Repos
   readonly app: App
   readonly client: TestClient
+  /** Vùng FILE của agent (`<companiesRoot>/<companyId>/`). */
   readonly companiesRoot: string
+  /** Gốc kho kiến thức (`<kbRoot>/<slug>/kb`). */
+  readonly kbRoot: string
   close(): Promise<void>
 }
 
@@ -48,13 +52,18 @@ export function optionalRouteModules(): OptionalRouteModule[] {
     settingsRoutes(),
     costRoutes(),
     diagramRoutes(),
+    dashboardRoutes(),
   ]
 }
 
 export async function createRoutesTestContext(): Promise<RoutesTestContext> {
   const repos = createRepos({ file: ':memory:', allowWeakSecret: true, appSecret: SECRET })
   seedCatalog(repos)
-  const companiesRoot = mkdtempSync(join(tmpdir(), 'ma-routes-test-'))
+  // Hai gốc riêng biệt đúng như production. Trộn hai gốc từng là lỗi thật, nên test
+  // cố ý tách ra để bắt được sự nhầm lẫn.
+  const base = mkdtempSync(join(tmpdir(), 'ma-routes-test-'))
+  const companiesRoot = join(base, 'company-files')
+  const kbRoot = join(base, 'companies')
   const context: AppContext = {
     config: loadConfig({
       appSecret: SECRET,
@@ -62,6 +71,7 @@ export async function createRoutesTestContext(): Promise<RoutesTestContext> {
       isProduction: false,
       webDist: undefined,
       companiesRoot,
+      kbRoot,
       // Ép provider nhúng `hash`: test phải chạy offline và tất định, không thử nạp model ONNX.
       embedding: { provider: 'hash', model: 'test-hash', baseUrl: undefined, apiKey: undefined },
     }),
@@ -76,10 +86,11 @@ export async function createRoutesTestContext(): Promise<RoutesTestContext> {
     app,
     client,
     companiesRoot,
+    kbRoot,
     async close() {
       await client.close()
       repos.db.close()
-      rmSync(companiesRoot, { recursive: true, force: true })
+      rmSync(base, { recursive: true, force: true })
     },
   }
 }

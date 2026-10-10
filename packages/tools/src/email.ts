@@ -228,7 +228,7 @@ export function buildMimeMessage(input: {
 
 export function createEmailTools(store: IntegrationStore) {
   const emailSend = defineTool({
-    name: 'email.send',
+    name: 'email_send',
     description:
       'Gửi email cho danh sách người nhận qua SMTP đã cấu hình. Đây là hành động không thể thu hồi — MẶC ĐỊNH chỉ soạn bản nháp, cần người dùng phê duyệt trước khi gửi thật.',
     parameters: {

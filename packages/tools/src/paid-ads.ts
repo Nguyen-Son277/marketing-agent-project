@@ -9,7 +9,7 @@
  * without needing the ads-specific APIs.
  *
  * The write paths are the reason this file is conservative: creating a campaign
- * spends real money. `ads.meta` and `ads.google` therefore default to returning a
+ * spends real money. `ads_meta` and `ads_google` therefore default to returning a
  * plan, and only transmit when `apply = true` after explicit approval.
  */
 import { toolError, type ToolResult } from '@marketing-agent/shared'
@@ -20,7 +20,7 @@ import type { GoogleOAuthConfig, MetaConfig } from './integrations.ts'
 
 export function createPaidAdsTools(store: IntegrationStore) {
   const adsMeta = defineTool({
-    name: 'ads.meta',
+    name: 'ads_meta',
     description:
       'Đọc hoặc tạo cấu trúc chiến dịch Meta Ads. MẶC ĐỊNH chỉ trả về kế hoạch cấu trúc và ngân sách để người dùng duyệt; chỉ gửi lên Meta khi apply = true sau khi được phê duyệt. KHÔNG bao giờ tự tăng ngân sách.',
     parameters: {
@@ -154,7 +154,7 @@ export function createPaidAdsTools(store: IntegrationStore) {
   })
 
   const adsGoogle = defineTool({
-    name: 'ads.google',
+    name: 'ads_google',
     description:
       'Đọc hoặc lập kế hoạch chiến dịch Google Ads. MẶC ĐỊNH chỉ trả kế hoạch; chỉ gửi yêu cầu khi apply = true sau khi được phê duyệt. Cần developer token của Google Ads.',
     parameters: {

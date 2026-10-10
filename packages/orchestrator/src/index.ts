@@ -7,6 +7,7 @@
 export * from './types.ts'
 export * from './events.ts'
 export * from './planner.ts'
+export * from './brief.ts'
 export * from './dispatcher.ts'
 export * from './review.ts'
 export * from './reporter.ts'

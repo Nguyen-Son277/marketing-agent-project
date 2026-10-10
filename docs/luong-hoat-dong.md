@@ -37,7 +37,7 @@ sequenceDiagram
         P->>W: Phát task
         W->>X: Chạy run (model theo preset của agent)
         Note over X: buildSystemPrompt(role + skills + tools + ACL)
-        X->>K: kb.search(query) — <b>ACL lọc trước khi xếp hạng</b>
+        X->>K: kb_search(query) — <b>ACL lọc trước khi xếp hạng</b>
         K-->>X: chunk + path + heading (có nguồn để trích dẫn)
         X->>T: Gọi tool (kiểm tra quyền ở registry)
         T->>EXT: Firecrawl / GSC / GA4 / Meta / LinkedIn
@@ -49,7 +49,7 @@ sequenceDiagram
         else Cần thông tin từ chuyên môn khác
             X->>X: agent_messages (kind=request, tối đa 3 vòng)
         end
-        X->>K: artifact.publish + result_md
+        X->>K: artifact_publish + result_md
         X->>L: handoff — kết quả + nguồn + chi phí
         W-->>P: task done
     end

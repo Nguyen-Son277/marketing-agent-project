@@ -38,7 +38,7 @@ type Dimension = (typeof ALLOWED_DIMENSIONS)[number]
 
 export function createSearchConsoleTools(store: IntegrationStore) {
   const gscQuery = defineTool({
-    name: 'gsc.query',
+    name: 'gsc_query',
     description:
       'Lấy dữ liệu hiệu suất tìm kiếm thật từ Google Search Console: impressions, clicks, CTR, vị trí trung bình. Dùng trước khi đưa ra bất kỳ khuyến nghị SEO nào.',
     parameters: {
@@ -140,7 +140,7 @@ export function createSearchConsoleTools(store: IntegrationStore) {
   })
 
   const gscInspectUrl = defineTool({
-    name: 'gsc.inspectUrl',
+    name: 'gsc_inspect_url',
     description:
       'Kiểm tra trạng thái index của một URL trong Google Search Console: đã được index chưa, lần thu thập gần nhất, lỗi robots/canonical, và lý do nếu bị loại khỏi index.',
     parameters: {

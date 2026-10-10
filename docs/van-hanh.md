@@ -969,7 +969,7 @@ Sau khi phục hồi bản sao, nhớ đặt lại `chmod 600` (bước 3 ở §
 | **Vector search brute-force** | Truy vấn chậm dần khi vượt ~10⁵ chunk/công ty | Chuyển `sqlite-vec`/pgvector; `packages/db/src/vector.ts` là điểm thay duy nhất |
 | **`SQLITE_BUSY` khi tải ghi cao** | Xuất hiện quanh ~20 người dùng ghi đồng thời | Chuyển `packages/db` sang Postgres; repo API giữ nguyên |
 | **Chưa render ảnh/video thật** | `design-video` chỉ sinh **spec/brief/storyboard**, không có bước render | Cần pipeline render riêng |
-| **Google Ads / Meta Ads còn ở mức khuôn** | `ads.meta`/`ads.google` mặc định **chỉ trả kế hoạch**; chỉ gửi lên nền tảng khi `apply = true` sau phê duyệt, và cần developer token + tài khoản liên kết. Chưa kiểm chứng end-to-end với tài khoản thật | Khi chuẩn bị chạy quảng cáo thật |
+| **Google Ads / Meta Ads còn ở mức khuôn** | `ads_meta`/`ads_google` mặc định **chỉ trả kế hoạch**; chỉ gửi lên nền tảng khi `apply = true` sau phê duyệt, và cần developer token + tài khoản liên kết. Chưa kiểm chứng end-to-end với tài khoản thật | Khi chuẩn bị chạy quảng cáo thật |
 | **Chưa có billing nhiều tổ chức** | Không có bảng `plans`/`subscriptions`; không giới hạn theo gói | Khi bán cho nhiều khách trả tiền |
 | **`ENV` embedding local không kèm sẵn** | Mặc định rơi về `hash` → tìm kiếm ngữ nghĩa yếu | §11.5 |
 | **Chi phí `deepseek-*` = 0** | Gateway nội bộ không tính tiền theo model, nên màn hình Chi phí hiển thị 0 cho các model này | Chỉ có ý nghĩa khi bạn thêm provider trả phí thật |

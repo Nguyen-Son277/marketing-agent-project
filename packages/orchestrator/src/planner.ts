@@ -73,28 +73,42 @@ export interface RawPlan {
   readonly tasks: readonly PlannedTaskInput[]
 }
 
-/** Xác thực kế hoạch và trả về thứ tự thi hành đã sắp xếp. */
+/** Kết quả xác thực, kèm thông tin đã phải cắt bớt việc hay chưa. */
+export interface PlanValidation extends PlanResult {
+  /** Số việc bị cắt vì vượt trần. */
+  readonly dropped: number
+}
+
+/**
+ * Xác thực kế hoạch và trả về thứ tự thi hành đã sắp xếp.
+ *
+ * Vượt trần số việc KHÔNG phải lỗi chặn: kế hoạch do model viết là văn bản hợp lệ,
+ * và từ chối toàn bộ chỉ vì nó chia 9 việc thay vì 8 là hành vi mong manh — người
+ * dùng nhận thông báo lỗi mà không có gì để duyệt. Thay vào đó ta CẮT BỚT theo thứ
+ * tự phụ thuộc và báo rõ đã bỏ bao nhiêu việc.
+ *
+ * Việc bị cắt được chọn sao cho không phá vỡ đồ thị: chỉ cắt những việc không phải
+ * tổ tiên của việc nào khác, nên mọi việc giữ lại vẫn còn đủ phụ thuộc.
+ */
 export function validatePlan(input: {
   plan: RawPlan
   /** Vai trò đang bật cho công ty, lấy từ cơ sở dữ liệu. */
   availableRoles: readonly AgentRole[]
   maxTasks?: number
-}): PlanResult {
+}): PlanValidation {
   const { plan, availableRoles } = input
-  const maxTasks = input.maxTasks ?? 8
+  const maxTasks = input.maxTasks ?? 10
 
   if (plan.tasks.length === 0) {
     throw validation('Kế hoạch không có công việc nào')
   }
-  if (plan.tasks.length > maxTasks) {
-    throw validation(
-      `Kế hoạch có ${plan.tasks.length} việc, vượt giới hạn ${maxTasks}. Hãy gộp các việc nhỏ lại.`,
-    )
-  }
+
+  const kept = plan.tasks.length > maxTasks ? chonViecGiuLai(plan.tasks, maxTasks) : plan.tasks
+  const dropped = plan.tasks.length - kept.length
 
   const available = new Set<string>(availableRoles)
   const titles = new Set<string>()
-  for (const task of plan.tasks) {
+  for (const task of kept) {
     const title = task.title.trim()
     if (title.length === 0) throw validation('Có công việc không có tiêu đề')
     if (titles.has(title)) throw validation(`Tiêu đề công việc bị trùng: "${title}"`)
@@ -110,7 +124,7 @@ export function validatePlan(input: {
     }
   }
 
-  for (const task of plan.tasks) {
+  for (const task of kept) {
     for (const dependency of task.dependsOnTitles ?? []) {
       if (!titles.has(dependency)) {
         throw validation(
@@ -123,24 +137,64 @@ export function validatePlan(input: {
     }
   }
 
-  if (hasCycle(plan.tasks)) {
+  if (hasCycle(kept)) {
     throw validation(
       'Kế hoạch có vòng phụ thuộc. Hãy sắp xếp lại để không việc nào phụ thuộc vòng tròn.',
     )
   }
 
-  const ordered = topologicalOrder(plan.tasks)
+  const ordered = topologicalOrder(kept)
   if (!ordered) throw validation('Không sắp xếp được thứ tự thi hành cho kế hoạch này')
 
   return {
-    tasks: plan.tasks.map((task) => ({
+    tasks: kept.map((task) => ({
       id: task.title,
       title: task.title,
       assigneeRole: task.assigneeRole,
       dependsOn: task.dependsOnTitles ?? [],
     })),
     order: ordered.map((task) => task.title),
+    dropped,
   }
+}
+
+/**
+ * Chọn `maxTasks` việc để giữ lại, ưu tiên những việc mà việc khác phụ thuộc vào.
+ *
+ * Vì sao theo thứ tự phụ thuộc ngược: nếu cắt mất một việc mà việc khác đang phụ
+ * thuộc nó, việc còn lại sẽ trỏ tới một phụ thuộc không tồn tại và kế hoạch hỏng.
+ * Duyệt từ lá lên gốc và giữ lại tổ tiên của mọi việc được giữ, nên đồ thị giữ lại
+ * luôn khép kín.
+ */
+function chonViecGiuLai(
+  tasks: readonly PlannedTaskInput[],
+  maxTasks: number,
+): PlannedTaskInput[] {
+  const byTitle = new Map(tasks.map((task) => [task.title, task]))
+  const canGiu = new Set<string>()
+
+  // Đếm số việc phụ thuộc trực tiếp vào mỗi việc, để biết việc nào là "gốc".
+  const soPhuThuoc = new Map<string, number>()
+  for (const task of tasks) {
+    for (const dependency of task.dependsOnTitles ?? []) {
+      soPhuThuoc.set(dependency, (soPhuThuoc.get(dependency) ?? 0) + 1)
+    }
+  }
+
+  // Giữ theo thứ tự tô-pô (việc không phụ thuộc trước), bỏ qua việc mà việc khác
+  // đang cần nếu ngân sách đã hết.
+  const ordered = topologicalOrder(tasks) ?? [...tasks]
+  for (const task of ordered) {
+    if (canGiu.size >= maxTasks) break
+    // Việc bị cắt không được là phụ thuộc của việc đã giữ.
+    const laPhuThuocCuaViecDaGiu = [...canGiu].some((title) =>
+      (byTitle.get(title)?.dependsOnTitles ?? []).includes(task.title),
+    )
+    if (laPhuThuocCuaViecDaGiu) continue
+    canGiu.add(task.title)
+  }
+
+  return tasks.filter((task) => canGiu.has(task.title))
 }
 
 /**

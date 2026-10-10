@@ -114,6 +114,7 @@ const OPTIONAL_ROUTE_MODULES: readonly { name: string; exportName: string }[] = 
   { name: 'settings', exportName: 'settingsRoutes' },
   { name: 'costs', exportName: 'costRoutes' },
   { name: 'diagram', exportName: 'diagramRoutes' },
+  { name: 'dashboard', exportName: 'dashboardRoutes' },
 ]
 
 async function loadOptionalModules(): Promise<{

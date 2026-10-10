@@ -176,10 +176,10 @@ export function composeTaskPrompt(input: {
     '## Yêu cầu bàn giao',
     '1. Kết quả phải trả lời trực tiếp công việc trên, không lan sang việc của chuyên môn khác.',
     '2. Mọi số liệu phải kèm nguồn: đường dẫn tài liệu trong kho kiến thức, hoặc kết quả công cụ.',
-    '3. Dùng `artifact.publish` để công bố tài sản chính (báo cáo, kế hoạch, lịch, bảng) kèm tóm tắt ngắn.',
+    '3. Dùng `artifact_publish` để công bố tài sản chính (báo cáo, kế hoạch, lịch, bảng) kèm tóm tắt ngắn.',
     '4. Kết thúc bằng mục "Cần xác nhận" liệt kê giả định và câu hỏi mở, nếu có.',
-    '5. Nếu thiếu dữ liệu hoặc bị chặn: dùng `agent.escalate` nêu rõ đang thiếu gì, đã thử gì, và 2 phương án.',
-    '6. Nếu cần thông tin mà chuyên môn khác đang giữ: dùng `agent.ask` thay vì tự suy đoán.',
+    '5. Nếu thiếu dữ liệu hoặc bị chặn: dùng `agent_escalate` nêu rõ đang thiếu gì, đã thử gì, và 2 phương án.',
+    '6. Nếu cần thông tin mà chuyên môn khác đang giữ: dùng `agent_ask` thay vì tự suy đoán.',
   )
   return lines.join('\n')
 }

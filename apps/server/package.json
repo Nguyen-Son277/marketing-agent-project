@@ -5,8 +5,13 @@
   "type": "module",
   "main": "./src/main.ts",
   "dependencies": {
-    "@marketing-agent/shared": "workspace:*",
+    "@marketing-agent/agent-runtime": "workspace:*",
     "@marketing-agent/db": "workspace:*",
+    "@marketing-agent/kb": "workspace:*",
+    "@marketing-agent/llm": "workspace:*",
+    "@marketing-agent/orchestrator": "workspace:*",
+    "@marketing-agent/shared": "workspace:*",
+    "@marketing-agent/tools": "workspace:*",
     "zod": "^3.24.2"
   }
 }

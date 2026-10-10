@@ -26,8 +26,8 @@ describe('tool routes', () => {
     expect(response.status).toBe(200)
     const tools = response.json<{ tools: { name: string; requiresApproval: boolean }[] }>().tools
     expect(tools.length).toBeGreaterThan(0)
-    expect(tools.some((tool) => tool.name === 'http.fetch')).toBe(true)
-    expect(tools.some((tool) => tool.name === 'task.create')).toBe(true)
+    expect(tools.some((tool) => tool.name === 'http_fetch')).toBe(true)
+    expect(tools.some((tool) => tool.name === 'task_create')).toBe(true)
     expect(tools.every((tool) => typeof tool.requiresApproval === 'boolean')).toBe(true)
   })
 

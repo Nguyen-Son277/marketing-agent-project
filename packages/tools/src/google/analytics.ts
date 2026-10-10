@@ -55,7 +55,7 @@ interface Ga4Response {
 
 export function createAnalyticsTools(store: IntegrationStore) {
   const ga4Report = defineTool({
-    name: 'ga4.report',
+    name: 'ga4_report',
     description:
       'Chạy báo cáo Google Analytics 4: sessions, users, pageviews, conversions, doanh thu — theo chiều như kênh, trang, thiết bị hoặc ngày. Dùng để lấy số liệu thật thay vì phỏng đoán.',
     parameters: {
@@ -156,7 +156,7 @@ export function createAnalyticsTools(store: IntegrationStore) {
   })
 
   const sheetsWrite = defineTool({
-    name: 'sheets.write',
+    name: 'sheets_write',
     description:
       'Ghi dữ liệu vào một Google Sheet để người dùng xem lại. Dùng khi cần bàn giao bảng số liệu hoặc lịch nội dung cho người dùng ngoài hệ thống.',
     parameters: {

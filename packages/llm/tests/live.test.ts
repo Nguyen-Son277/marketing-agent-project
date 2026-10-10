@@ -51,10 +51,10 @@ describe('gateway nội bộ (tuỳ chọn)', () => {
     for await (const chunk of adapter.chat({
       model: 'deepseek-v4-flash',
       maxTokens: 1_024,
-      messages: [{ role: 'user', content: 'Tìm giúp tôi tài liệu về SEO. Hãy gọi công cụ kb.search.' }],
+      messages: [{ role: 'user', content: 'Tìm giúp tôi tài liệu về SEO. Hãy gọi công cụ kb_search.' }],
       tools: [
         {
-          name: 'kb.search',
+          name: 'kb_search',
           description: 'Tìm tài liệu trong kho kiến thức công ty',
           parameters: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
         },
@@ -64,7 +64,7 @@ describe('gateway nội bộ (tuỳ chọn)', () => {
     }
 
     expect(calls.length).toBeGreaterThan(0)
-    expect(calls[0]?.name).toBe('kb.search')
+    expect(calls[0]?.name).toBe('kb_search')
     expect(JSON.parse(calls[0]?.argumentsJson ?? '{}')).toHaveProperty('q')
   })
 })
