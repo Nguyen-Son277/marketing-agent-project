@@ -1,0 +1,24 @@
+# Những gì không đưa vào build context.
+#
+# Vì sao quan trọng: `data/` chứa cơ sở dữ liệu thật và kho kiến thức của khách
+# hàng. Nếu lọt vào context, nó sẽ nằm trong layer image và bị đẩy lên registry.
+
+node_modules
+**/node_modules
+.pnpm-store
+data
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+*.log
+dist
+**/dist
+coverage
+.vscode
+.idea
+.DS_Store
+*.tsbuildinfo
+docs
+README.md

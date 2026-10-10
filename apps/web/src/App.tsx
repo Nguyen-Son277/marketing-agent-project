@@ -1,0 +1,32 @@
+/**
+ * Khung ứng dụng: quyết định hiển thị màn hình đăng nhập hay shell chính.
+ *
+ * Vì sao tách khỏi từng màn hình: chỉ một chỗ quyết định "đã đăng nhập chưa" và
+ * "đã có công ty chưa", nên không màn hình nào phải tự xử lý hai trạng thái đó.
+ */
+import type { ReactNode } from 'react'
+import { useSession } from './lib/session.tsx'
+import { DangTai } from './components/ui.tsx'
+import { DangNhapScreen } from './screens/DangNhap.tsx'
+import { ChonCongTyScreen } from './screens/ChonCongTy.tsx'
+import { Shell } from './Shell.tsx'
+
+export function App(): ReactNode {
+  const { user, company, ready, loading } = useSession()
+
+  if (!ready || (loading && !user)) {
+    return (
+      <div className="dang-nhap">
+        <div className="dang-nhap__hop">
+          <h1 className="dang-nhap__tieude">Đội Agent Marketing</h1>
+          <DangTai nhan="Đang kiểm tra phiên đăng nhập…" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) return <DangNhapScreen />
+  if (!company) return <ChonCongTyScreen />
+
+  return <Shell />
+}

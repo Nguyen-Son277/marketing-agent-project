@@ -1,14 +1,12 @@
-/** Small dependency-free helpers used across packages. */
-import { createHash, randomBytes, randomUUID } from 'node:crypto'
-
-export const newId = (): string => randomUUID()
+/**
+ * Tiện ích thuần, không phụ thuộc Node.
+ *
+ * Vì sao phải thuần: giao diện web dùng chung module này. Bất kỳ import `node:*`
+ * nào ở đây cũng làm hỏng bundle trình duyệt — các hàm cần `node:crypto` nằm ở
+ * `crypto-util.ts` và chỉ phía server import.
+ */
 
 export const nowIso = (): string => new Date().toISOString()
-
-/** UUID-shaped id with a readable prefix, e.g. `task_1f2c…` — helps log reading. */
-export function prefixedId(prefix: string): string {
-  return `${prefix}_${randomUUID().replaceAll('-', '').slice(0, 24)}`
-}
 
 /** URL/folder-safe slug for a Vietnamese or ASCII label. */
 export function slugify(input: string): string {
@@ -22,12 +20,6 @@ export function slugify(input: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 64)
 }
-
-/** Stable content checksum for change detection in the knowledge index. */
-export const sha256 = (input: string | Buffer): string =>
-  createHash('sha256').update(input).digest('hex')
-
-export const randomToken = (bytes = 32): string => randomBytes(bytes).toString('base64url')
 
 /** Clamp a number into an inclusive range. */
 export const clamp = (value: number, min: number, max: number): number =>

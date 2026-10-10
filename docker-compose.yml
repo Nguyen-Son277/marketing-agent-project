@@ -1,0 +1,75 @@
+# docker-compose cho bản tự host một máy.
+#
+# Vì sao một service duy nhất: SQLite ở chế độ WAL chỉ dùng được bởi một tiến trình
+# ghi. Tách server và worker ra hai container sẽ tạo hai writer trên cùng một file
+# và làm hỏng dữ liệu. Xem docs/kien-truc.md mục 2.2 và mục 7 (ngưỡng nâng cấp).
+#
+# Vì sao không có service database: cơ sở dữ liệu là một file trên volume. Đổi lại
+# được vận hành cực đơn giản — một file, một lệnh backup — với giá là không scale
+# ngang được.
+name: marketing-agent
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: marketing-agent:local
+    restart: unless-stopped
+
+    # Biến môi trường đọc từ .env cùng thư mục (xem .env.example).
+    # `required: false` để `docker compose config` vẫn chạy được khi chưa tạo .env
+    # (ví dụ trên máy CI); lúc chạy thật, entrypoint sẽ tự từ chối nếu thiếu
+    # APP_SECRET kèm thông báo rõ ràng.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DATABASE_PATH: /data/marketing.db
+      COMPANIES_ROOT: /data/companies
+      # Trỏ mặc định tới gateway trên máy host khi chạy compose tại máy đó.
+      # Trong mạng nội bộ thật, hãy đổi thành URL của gateway và đặt trong .env.
+      DEFAULT_LLM_BASE_URL: ${DEFAULT_LLM_BASE_URL:-http://host.docker.internal:20128/v1}
+
+    # Gateway LLM chạy trên máy host (ví dụ http://localhost:20128). Cách này cho
+    # container gọi được nó mà không cần --network host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    ports:
+      # Chỉ bind vào loopback: đặt sau reverse proxy mới mở ra Internet.
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+
+    volumes:
+      # Toàn bộ dữ liệu nghiệp vụ nằm ở đây: SQLite + kho kiến thức Markdown.
+      # Mất volume này là mất dữ liệu, nên hãy backup theo docs/van-hanh.md.
+      - marketing-data:/data
+      # Model embedding tải về được cache lại để không tải lại mỗi lần restart.
+      - marketing-models:/app/data/models
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/readyz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    # SQLite ghi ra đĩa; cho container thêm thời gian kết thúc lượt chạy đang dở
+    # trước khi bị SIGKILL. Server đã bắt SIGTERM để đóng listener rồi đóng DB.
+    stop_grace_period: 30s
+
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  marketing-data:
+  marketing-models:
