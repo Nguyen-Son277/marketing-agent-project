@@ -73,13 +73,44 @@ export async function httpProviderError(response: Response): Promise<Error> {
 /**
  * Lỗi tạm thời thì thử lại: mạng chập chờn, 429, 5xx. Lỗi 4xx do cấu hình (sai khoá,
  * sai model) không thử lại vì chỉ tốn thời gian và tiền.
+ *
+ * Ngoại lệ đã kiểm chứng: gateway định tuyến nội bộ có lúc trả 400 `bad_request`
+ * cho một request hoàn toàn hợp lệ đang dùng công cụ (đo được 1–2 lần hỏng trong
+ * 3 lần gọi cùng payload). Vì vậy 400 được thử lại CHỈ KHI thân lỗi mang dấu hiệu
+ * `bad_request` của gateway VÀ không khớp các mẫu lỗi cấu hình đã biết. Nếu khớp
+ * lỗi cấu hình thì vẫn không thử lại — thử lại một request sai chỉ tốn thời gian.
  */
+const CONFIG_ERROR_PATTERNS = [
+  /invalid[_ ]api[_ ]key/i,
+  /incorrect api key/i,
+  /model[_ ]not[_ ]found/i,
+  /does not exist/i,
+  /unsupported model/i,
+  /no such model/i,
+  /invalid[_ ]model/i,
+  /context[_ ]length/i,
+  /maximum context/i,
+  /insufficient[_ ]quota/i,
+  /billing/i,
+]
+
 export function isRetryableProviderError(error: unknown): boolean {
   if (error instanceof Error && error.name === 'AbortError') return false
   if (!isAppError(error)) return true
   if (error.code === 'rate_limited') return true
   if (error.code !== 'provider_error') return false
-  const status = (error.details as { status?: number } | undefined)?.status
+  const details = error.details as { status?: number; body?: string } | undefined
+  const status = details?.status
   if (status === undefined) return true
-  return status === 408 || status === 409 || status === 429 || status >= 500
+  if (status === 408 || status === 409 || status === 429 || status >= 500) return true
+  if (status === 400) return isTransientBadRequest(details?.body)
+  return false
+}
+
+/** Gateway đôi khi trả 400 tạm thời; phân biệt với lỗi cấu hình thật. */
+export function isTransientBadRequest(body: string | undefined): boolean {
+  if (!body) return false
+  const lowered = body.toLowerCase()
+  if (!lowered.includes('bad_request')) return false
+  return !CONFIG_ERROR_PATTERNS.some((pattern) => pattern.test(body))
 }

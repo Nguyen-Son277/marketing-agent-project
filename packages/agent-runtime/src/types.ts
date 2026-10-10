@@ -70,6 +70,12 @@ export interface AgentRunResult {
   readonly modelId: string | null
   readonly error: string | null
   readonly compactions: readonly CompactionRecord[]
+  /**
+   * Reasoning the model produced but did not turn into an answer. Non-empty only
+   * for reasoning models; the orchestrator uses it to tell "no answer" apart from
+   * "no reasoning at all" when reporting a failed run.
+   */
+  readonly reasoningText: string
 }
 
 /** Model đã chọn cho lượt chạy, kèm lý do — dùng để log chi phí. */

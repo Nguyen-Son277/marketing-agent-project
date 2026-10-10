@@ -49,6 +49,8 @@ const ZERO_USAGE: LlmUsage = { promptTokens: 0, completionTokens: 0, cachedToken
 
 interface ModelTurn {
   readonly text: string
+  /** Hidden reasoning emitted by a reasoning model; empty for ordinary models. */
+  readonly reasoning: string
   readonly toolCalls: readonly LlmToolCall[]
   readonly finishReason: string | null
   readonly usage: LlmUsage
@@ -91,6 +93,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
   let steps = 0
   let output = ''
   let partialText = ''
+  let reasoningText = ''
   let stopReason: AgentStopReason = 'completed'
   let errorMessage: string | null = null
   let escalations = 0
@@ -163,6 +166,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
       const usage = normalizeUsage(turn.usage, conversation, turn.text)
       meter.addUsage(choice.model, usage)
       if (turn.text.trim().length > 0) partialText = turn.text
+      if (turn.reasoning.trim().length > 0) reasoningText = turn.reasoning
 
       if (turn.toolCalls.length === 0) {
         output = turn.text
@@ -207,6 +211,14 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
   }
 
   if (output.length === 0) output = partialText
+  // Reasoning models can spend their whole output budget on hidden reasoning and
+  // emit no answer text. Returning an empty string would look like success and
+  // leave the user with nothing, so surface the reasoning with an explicit note.
+  if (output.trim().length === 0 && reasoningText.trim().length > 0) {
+    output = `[Chưa có câu trả lời cuối — model đã dùng hết hạn mức token cho phần suy luận]\n\n${reasoningText}`
+    if (stopReason === 'completed') stopReason = 'output_limit'
+    errorMessage ??= 'Model suy luận hết hạn mức token trước khi trả lời; hãy tăng max_tokens cho agent này.'
+  }
   const status = statusFor(stopReason)
   const usageSnapshot = meter.snapshot()
 
@@ -228,6 +240,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
     modelId,
     error: errorMessage,
     compactions,
+    reasoningText,
   }
 }
 
@@ -258,6 +271,7 @@ async function collectTurn(
   signal: AbortSignal | undefined,
 ): Promise<ModelTurn> {
   let text = ''
+  let reasoning = ''
   const toolCalls: LlmToolCall[] = []
   let finishReason: string | null = null
   let usage: LlmUsage = ZERO_USAGE
@@ -265,6 +279,7 @@ async function collectTurn(
   for await (const chunk of adapter.chat(request)) {
     if (signal?.aborted) throw abortError()
     if (chunk.type === 'text') text += chunk.text
+    else if (chunk.type === 'reasoning') reasoning += chunk.text
     else if (chunk.type === 'tool_call') toolCalls.push(chunk.call)
     else if (chunk.type === 'done') {
       finishReason = chunk.finishReason
@@ -272,7 +287,7 @@ async function collectTurn(
     }
   }
 
-  return { text, toolCalls, finishReason, usage }
+  return { text, reasoning, toolCalls, finishReason, usage }
 }
 
 /**

@@ -23,7 +23,10 @@ describe('gateway nội bộ (tuỳ chọn)', () => {
     let sawDone = false
     for await (const chunk of adapter.chat({
       model: 'deepseek-v4-flash',
-      maxTokens: 64,
+      // Quan trọng: model này là model suy luận, nên hạn mức token nhỏ sẽ bị
+      // phần suy luận ẩn dùng hết và không còn token để trả lời (đã kiểm chứng:
+      // maxTokens 64 → không có text, chỉ có reasoning; 512 → trả lời bình thường).
+      maxTokens: 1_024,
       messages: [{ role: 'user', content: 'Trả lời đúng một từ tiếng Việt: xin chào' }],
     })) {
       if (chunk.type === 'text') text += chunk.text
@@ -47,7 +50,7 @@ describe('gateway nội bộ (tuỳ chọn)', () => {
     const calls = []
     for await (const chunk of adapter.chat({
       model: 'deepseek-v4-flash',
-      maxTokens: 256,
+      maxTokens: 1_024,
       messages: [{ role: 'user', content: 'Tìm giúp tôi tài liệu về SEO. Hãy gọi công cụ kb.search.' }],
       tools: [
         {
