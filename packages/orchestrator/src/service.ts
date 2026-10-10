@@ -63,6 +63,9 @@ export class ConversationOrchestrator implements CoordinationHost {
   private readonly publish: ((event: AppEvent) => void) | undefined
   private readonly log: ((message: string, data?: unknown) => void) | undefined
   private readonly runtimeOverrides: Partial<AgentRuntimeDeps> | undefined
+  private readonly writeDiagnostic:
+    | ((name: string, content: string) => void | Promise<void>)
+    | undefined
 
   constructor(deps: OrchestratorDeps) {
     this.repos = deps.repos
@@ -72,6 +75,7 @@ export class ConversationOrchestrator implements CoordinationHost {
     this.publish = deps.publish
     this.log = deps.log
     this.runtimeOverrides = deps.runtimeOverrides
+    this.writeDiagnostic = deps.writeDiagnostic
   }
 
   /* ------------------------------------------------------------ public API */
@@ -216,18 +220,24 @@ export class ConversationOrchestrator implements CoordinationHost {
     if (rows.length === 0) {
       // Ghi nguyên văn câu trả lời: đây là điểm dễ vỡ nhất khi đổi model, và không
       // có log thì chỉ thấy "không đọc được bảng" mà không biết vì sao.
-      // Ghi nguyên văn câu trả lời ra tệp để chẩn đoán: đây là điểm dễ vỡ nhất khi
-      // đổi model, và log console không đủ chỗ cho một bảng Markdown.
+      // Ghi nguyên văn bảng kế hoạch qua sink chẩn đoán (nếu nơi gọi cấp). Đây là
+      // điểm dễ vỡ nhất khi đổi model, và log console không đủ chỗ cho một bảng
+      // Markdown. Lỗi khi ghi chẩn đoán không được làm hỏng luồng chính.
       try {
-        const { writeFileSync, mkdirSync } = await import('node:fs')
-        mkdirSync('data-diagnostics', { recursive: true })
-        writeFileSync(
-          `data-diagnostics/leader-plan-${Date.now()}.txt`,
-          `toolCalls: ${turn.toolCalls.join(', ') || '(none)'}\nstatus: ${turn.status}\nstopReason: ${turn.stopReason}\n\n${turn.output}`,
-          'utf8',
+        await this.writeDiagnostic?.(
+          `leader-plan-${Date.now()}.txt`,
+          [
+            `toolCalls: ${turn.toolCalls.join(', ') || '(none)'}`,
+            `status: ${turn.status}`,
+            `stopReason: ${turn.stopReason}`,
+            '',
+            turn.output,
+          ].join('\n'),
         )
-      } catch {
-        // Chẩn đoán là tiện ích; không được làm hỏng luồng chính.
+      } catch (error) {
+        this.log?.('Không ghi được chẩn đoán bảng kế hoạch', {
+          error: error instanceof Error ? error.message : String(error),
+        })
       }
       this.log?.('Không đọc được bảng kế hoạch từ Leader', {
         outputLength: turn.output.length,

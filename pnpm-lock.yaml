@@ -42,6 +42,9 @@ importers:
       '@marketing-agent/orchestrator':
         specifier: workspace:*
         version: link:../../packages/orchestrator
+      '@marketing-agent/seed':
+        specifier: workspace:*
+        version: link:../../seed
       '@marketing-agent/shared':
         specifier: workspace:*
         version: link:../../packages/shared

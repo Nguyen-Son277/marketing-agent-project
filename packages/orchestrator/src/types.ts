@@ -122,6 +122,14 @@ export interface OrchestratorDeps {
   readonly publish?: ((event: AppEvent) => void) | undefined
   /** Ghi log chẩn đoán; bỏ trống thì im lặng. */
   readonly log?: ((message: string, data?: unknown) => void) | undefined
+  /**
+   * Ghi lại một payload chẩn đoán dài (ví dụ nguyên văn bảng kế hoạch mà parser
+   * không đọc được). Tầng điều phối không tự quyết định chỗ ghi: môi trường triển
+   * khai biết chỗ nào ghi được, và test có thể bỏ qua.
+   */
+  readonly writeDiagnostic?:
+    | ((name: string, content: string) => void | Promise<void>)
+    | undefined
   /** Ghi đè tham số chạy agent, dùng trong test để chèn adapter giả. */
   readonly runtimeOverrides?: Partial<Pick<import('@marketing-agent/agent-runtime').AgentRuntimeDeps, 'adapter' | 'adapters' | 'router' | 'meterFactory'>> | undefined
 }

@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 /**
  * Vòng đời của các dịch vụ nặng: tool registry, embedding provider, orchestrator.
  *
@@ -107,6 +109,17 @@ async function getOrchestrator(ctx: AppContext, companyId: string): Promise<Conv
         if (data === undefined) console.log(`[orchestrator] ${message}`)
         else console.log(`[orchestrator] ${message}`, data)
       },
+      // Chẩn đoán dài (nguyên văn bảng kế hoạch khi parser không đọc được) ghi ra
+      // đĩa để còn đối chiếu về sau. Server biết thư mục ghi được; tầng điều phối thì
+      // không. Có biến môi trường để tắt khi không muốn giữ lại nội dung model sinh.
+      ...(process.env.DIAGNOSTICS_DIR
+        ? {
+            writeDiagnostic: (name: string, content: string) => {
+              mkdirSync(process.env.DIAGNOSTICS_DIR!, { recursive: true })
+              writeFileSync(join(process.env.DIAGNOSTICS_DIR!, name), content, 'utf8')
+            },
+          }
+        : {}),
     })
   })()
   byCompany.set(companyId, pending)
