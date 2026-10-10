@@ -25,7 +25,8 @@
       "@marketing-agent/agent-runtime": ["packages/agent-runtime/src/index.ts"],
       "@marketing-agent/kb": ["packages/kb/src/index.ts"],
       "@marketing-agent/tools": ["packages/tools/src/index.ts"],
-      "@marketing-agent/orchestrator": ["packages/orchestrator/src/index.ts"]
+      "@marketing-agent/orchestrator": ["packages/orchestrator/src/index.ts"],
+      "@marketing-agent/seed": ["seed/src/index.ts"]
     }
   },
   "include": [

@@ -282,3 +282,23 @@ function checksumOf(content: string): string {
 export function expectedTierMatrix(): { role: AgentRole; tier: ModelTier }[] {
   return AGENT_DEF_SEEDS.map((def) => ({ role: def.role, tier: def.tier }))
 }
+
+/* ---------------------------------------------------------------- re-exports */
+
+// The package root is the only supported import surface (a subpath alias would
+// be shadowed by the root alias in the test resolver), so public seed data is
+// re-exported here.
+export { AGENT_DEF_SEEDS, AGENT_DEF_BY_ROLE, requireAgentDefSeed, expandKnowledgeRead } from './agents.ts'
+export type { AgentDefSeed } from './agents.ts'
+export { SKILL_SEEDS, SKILL_SEED_BY_NAME } from './skills.ts'
+export type { SkillSeed } from './skills.ts'
+export { DEMO_KB_DOCUMENTS } from './knowledge.ts'
+export type { SeedDocument } from './knowledge.ts'
+export {
+  PROVIDER_SEEDS,
+  DEFAULT_TIER_ROUTES,
+  DEFAULT_BUDGET,
+  DEFAULT_BASE_URL,
+  DEFAULT_API_KEY_REF,
+} from './providers.ts'
+export type { ProviderSeed, ModelSeed } from './providers.ts'

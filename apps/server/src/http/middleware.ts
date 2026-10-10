@@ -1,0 +1,120 @@
+/**
+ * Authentication, tenancy and role middleware.
+ *
+ * The tenancy rule is enforced in one place: any route under
+ * `/api/companies/:companyId/...` runs `requireMembership`, which resolves the
+ * membership from the database and never trusts a client-supplied company id.
+ * Handlers below that layer receive the checked membership through
+ * `ctx.state.membership`.
+ */
+import { AppError, forbidden, unauthorized, type CompanyRole, type MembershipRecord, type PublicUser } from '@marketing-agent/shared'
+import type { Repos } from '@marketing-agent/db'
+import type { Middleware, RequestContext } from './router.ts'
+
+export const SESSION_COOKIE = 'ma_session'
+
+export interface AuthState {
+  readonly user: PublicUser
+  readonly sessionId: string
+}
+
+export interface TenancyState {
+  readonly companyId: string
+  readonly membership: MembershipRecord
+  readonly role: CompanyRole
+}
+
+export function readAuth(ctx: RequestContext): AuthState | undefined {
+  return ctx.state.auth as AuthState | undefined
+}
+
+/** Authenticated user, or throw 401. Use inside handlers that already passed the guard. */
+export function requireAuthState(ctx: RequestContext): AuthState {
+  const auth = readAuth(ctx)
+  if (!auth) throw unauthorized()
+  return auth
+}
+
+export function readTenancy(ctx: RequestContext): TenancyState | undefined {
+  return ctx.state.tenancy as TenancyState | undefined
+}
+
+export function requireTenancyState(ctx: RequestContext): TenancyState {
+  const tenancy = readTenancy(ctx)
+  if (!tenancy) throw forbidden('Thiếu ngữ cảnh công ty')
+  return tenancy
+}
+
+/** Resolve the session cookie into `ctx.state.auth`. Never rejects on its own. */
+export function sessionMiddleware(repos: Repos): Middleware {
+  return (ctx, next) => {
+    const token = ctx.cookies()[SESSION_COOKIE]
+    if (token) {
+      const resolved = repos.auth.resolveSession(token)
+      if (resolved) {
+        ctx.state.auth = {
+          user: {
+            id: resolved.user.id,
+            email: resolved.user.email,
+            name: resolved.user.name,
+            isAdmin: resolved.user.isAdmin,
+          },
+          sessionId: resolved.sessionId,
+        } satisfies AuthState
+      }
+    }
+    return next()
+  }
+}
+
+/** Reject anonymous requests. */
+export const requireAuth: Middleware = (ctx, next) => {
+  if (!readAuth(ctx)) throw unauthorized()
+  return next()
+}
+
+/**
+ * Resolve and check membership for `:companyId`, then hand it to the handler.
+ * A non-member receives 404 rather than 403 so tenants cannot enumerate each
+ * other's company ids.
+ */
+export function requireMembership(repos: Repos): Middleware {
+  return (ctx, next) => {
+    const auth = readAuth(ctx)
+    if (!auth) throw unauthorized()
+    const companyId = ctx.params.companyId
+    if (!companyId) throw new AppError('internal', 'Route thiếu tham số :companyId')
+    const membership = repos.auth.membership(companyId, auth.user.id)
+    if (!membership) {
+      // Distinguish "no such company" from "not a member" only in the message
+      // text; both answer 404 so ids stay unguessable.
+      const exists = repos.auth.findCompanyById(companyId) !== undefined
+      throw exists
+        ? forbidden('Bạn không thuộc công ty này')
+        : new AppError('not_found', 'Không tìm thấy công ty')
+    }
+    ctx.state.tenancy = {
+      companyId,
+      membership,
+      role: membership.role,
+    } satisfies TenancyState
+    return next()
+  }
+}
+
+/** Require one of the given company roles. */
+export function requireRole(...roles: readonly CompanyRole[]): Middleware {
+  return (ctx, next) => {
+    const tenancy = requireTenancyState(ctx)
+    if (!roles.includes(tenancy.role)) {
+      throw forbidden(`Cần quyền ${roles.join(' hoặc ')} để thực hiện thao tác này`)
+    }
+    return next()
+  }
+}
+
+/** Owner/admin only: configuration changes. */
+export const requireManage = requireRole('owner', 'admin')
+
+/** Everyone except viewers: starting work, sending messages, approving output. */
+export const requireWork = requireRole('owner', 'admin', 'member')

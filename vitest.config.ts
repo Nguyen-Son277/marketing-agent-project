@@ -13,6 +13,8 @@ export default defineConfig({
       '@marketing-agent/kb': r('./packages/kb/src/index.ts'),
       '@marketing-agent/tools': r('./packages/tools/src/index.ts'),
       '@marketing-agent/orchestrator': r('./packages/orchestrator/src/index.ts'),
+      // Import the seed package only through its root: a plain string alias for
+      // the root would shadow any subpath, so subpaths are re-exported instead.
       '@marketing-agent/seed': r('./seed/src/index.ts'),
     },
   },

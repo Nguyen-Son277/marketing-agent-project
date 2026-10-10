@@ -25,6 +25,30 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.5)(tsx@4.23.15)
 
+  apps/server:
+    dependencies:
+      '@marketing-agent/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@marketing-agent/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+
+  packages/agent-runtime:
+    dependencies:
+      '@marketing-agent/db':
+        specifier: workspace:*
+        version: link:../db
+      '@marketing-agent/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@marketing-agent/shared':
+        specifier: workspace:*
+        version: link:../shared
+
   packages/db:
     dependencies:
       '@marketing-agent/shared':
@@ -41,11 +65,56 @@ importers:
         specifier: ^7.6.12
         version: 7.6.13
 
+  packages/kb:
+    dependencies:
+      '@marketing-agent/db':
+        specifier: workspace:*
+        version: link:../db
+      '@marketing-agent/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+
+  packages/llm:
+    dependencies:
+      '@marketing-agent/db':
+        specifier: workspace:*
+        version: link:../db
+      '@marketing-agent/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+
   packages/shared:
     dependencies:
       zod:
         specifier: ^3.24.2
         version: 3.25.76
+
+  packages/tools:
+    dependencies:
+      '@marketing-agent/db':
+        specifier: workspace:*
+        version: link:../db
+      '@marketing-agent/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+
+  seed:
+    dependencies:
+      '@marketing-agent/db':
+        specifier: workspace:*
+        version: link:../packages/db
+      '@marketing-agent/shared':
+        specifier: workspace:*
+        version: link:../packages/shared
 
 packages:
 
