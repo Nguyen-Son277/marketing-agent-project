@@ -130,13 +130,13 @@ describe('task routes', () => {
     })
 
     const read = await ctx.client.request('GET', `/api/tasks/${task.id}`, { headers: b.ownerCookie })
-    expect([403, 404]).toContain(read.status)
+    expect(read.status).toBe(404)
 
     const review = await ctx.client.request('POST', `/api/tasks/${task.id}/review`, {
       headers: b.ownerCookie,
       body: { decision: 'cancel' },
     })
-    expect([403, 404]).toContain(review.status)
+    expect(review.status).toBe(404)
     // Trạng thái của A không đổi.
     expect(ctx.repos.work.requireTask(task.id, a.company.id).status).toBe('review')
   })

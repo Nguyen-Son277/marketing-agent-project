@@ -86,12 +86,22 @@ export function requireMembership(repos: Repos): Middleware {
     if (!companyId) throw new AppError('internal', 'Route thiếu tham số :companyId')
     const membership = repos.auth.membership(companyId, auth.user.id)
     if (!membership) {
-      // Distinguish "no such company" from "not a member" only in the message
-      // text; both answer 404 so ids stay unguessable.
+      /**
+       * Cả hai trường hợp đều trả 404, và đây là chủ đích bảo mật chứ không phải sơ suất.
+       *
+       * Trước đây nhánh "công ty có tồn tại nhưng người này không thuộc" trả 403, còn
+       * "không có công ty" trả 404 — nghĩa là chỉ cần thử một id, người ngoài biết được
+       * công ty đó có tồn tại hay không. Khi mỗi tài khoản có thể thuộc nhiều công ty,
+       * việc dò được id công ty của người khác là thông tin không nên lộ.
+       *
+       * Thông điệp vẫn phân biệt được ý nghĩa cho người vận hành đọc log, nhưng mã trạng
+       * thái thì không.
+       */
       const exists = repos.auth.findCompanyById(companyId) !== undefined
-      throw exists
-        ? forbidden('Bạn không thuộc công ty này')
-        : new AppError('not_found', 'Không tìm thấy công ty')
+      throw new AppError(
+        'not_found',
+        exists ? 'Bạn không thuộc công ty này' : 'Không tìm thấy công ty',
+      )
     }
     ctx.state.tenancy = {
       companyId,

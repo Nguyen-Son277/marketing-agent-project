@@ -228,8 +228,10 @@ describe('tenancy isolation', () => {
     const response = await client.request('GET', `/api/companies/${companyB.id}/members`, {
       headers: ownerA.cookie,
     })
-    // 403 would confirm the company exists; 404 keeps ids unguessable.
-    expect([403, 404]).toContain(response.status)
+    // 403 would confirm the company exists; 404 keeps ids unguessable. Phải khẳng định
+    // ĐÚNG 404 chứ không phải "403 hoặc 404": bản trước viết `expect([403,404]).toContain`
+    // nên luôn xanh dù middleware trả 403, tức là test không hề kiểm tra điều mà tên nó nói.
+    expect(response.status).toBe(404)
   })
 
   it('refuses an authenticated non-member', async () => {
@@ -237,7 +239,9 @@ describe('tenancy isolation', () => {
     const response = await client.request('GET', `/api/companies/${companyA.id}/members`, {
       headers: ownerB.cookie,
     })
-    expect(response.status).toBeGreaterThanOrEqual(403)
+    // Đúng 404, không phải "từ 403 trở lên": 403 xác nhận công ty có tồn tại, và khi một
+    // tài khoản thuộc nhiều công ty thì đó là thông tin không nên lộ ra ngoài.
+    expect(response.status).toBe(404)
   })
 
   it('refuses an anonymous caller', async () => {

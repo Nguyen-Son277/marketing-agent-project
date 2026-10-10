@@ -122,13 +122,13 @@ describe('team routes', () => {
     const read = await ctx.client.request('GET', `/api/companies/${a.company.id}/team`, {
       headers: b.ownerCookie,
     })
-    expect([403, 404]).toContain(read.status)
+    expect(read.status).toBe(404)
 
     const write = await ctx.client.request('PATCH', `/api/companies/${a.company.id}/team/content-writer`, {
       headers: b.ownerCookie,
       body: { enabled: false },
     })
-    expect([403, 404]).toContain(write.status)
+    expect(write.status).toBe(404)
   })
 
   it('trả 401 cho người chưa đăng nhập', async () => {

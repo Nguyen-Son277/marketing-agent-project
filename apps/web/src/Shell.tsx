@@ -18,6 +18,7 @@ import { CongViec } from './screens/CongViec.tsx'
 import { DoiAgent } from './screens/DoiAgent.tsx'
 import { KhoKienThuc } from './screens/KhoKienThuc.tsx'
 import { CaiDat } from './screens/CaiDat.tsx'
+import { CongTyCuaToi } from './screens/CongTyCuaToi.tsx'
 import { ChiPhi } from './screens/ChiPhi.tsx'
 import { SoDoDoiAgent } from './screens/SoDoDoiAgent.tsx'
 
@@ -34,6 +35,7 @@ export const ROUTES = [
   { id: 'cong-viec', nhan: 'nav.tasks', nhom: 'nav.group.work', bieuTuong: '🗂️' },
   { id: 'doi-agent', nhan: 'nav.team', nhom: 'nav.group.config', bieuTuong: '🎯' },
   { id: 'kho-kien-thuc', nhan: 'nav.knowledge', nhom: 'nav.group.config', bieuTuong: '📚' },
+  { id: 'cong-ty', nhan: 'nav.companies', nhom: 'nav.group.config', bieuTuong: '🏢' },
   { id: 'cai-dat', nhan: 'nav.settings', nhom: 'nav.group.config', bieuTuong: '⚙️' },
   { id: 'chi-phi', nhan: 'nav.costs', nhom: 'nav.group.monitor', bieuTuong: '💰' },
   { id: 'so-do', nhan: 'nav.diagram', nhom: 'nav.group.monitor', bieuTuong: '🗺️' },
@@ -95,6 +97,8 @@ export function Shell(): ReactNode {
         return <DoiAgent companyId={companyId} />
       case 'kho-kien-thuc':
         return <KhoKienThuc companyId={companyId} />
+      case 'cong-ty':
+        return <CongTyCuaToi />
       case 'cai-dat':
         return <CaiDat companyId={companyId} />
       case 'chi-phi':

@@ -81,10 +81,10 @@ describe('cost routes', () => {
     const costs = await ctx.client.request('GET', `/api/companies/${a.company.id}/costs`, {
       headers: b.ownerCookie,
     })
-    expect([403, 404]).toContain(costs.status)
+    expect(costs.status).toBe(404)
     const audit = await ctx.client.request('GET', `/api/companies/${a.company.id}/audit`, {
       headers: b.ownerCookie,
     })
-    expect([403, 404]).toContain(audit.status)
+    expect(audit.status).toBe(404)
   })
 })

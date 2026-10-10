@@ -202,6 +202,10 @@ export const en_settings = {
   'settings.limits.title': 'Limits',
   'settings.limits.subtitle':
     'Cost caps and loop counts. Exceeding a cap stops the run instead of continuing to spend.',
+  /** Naming the company matters: switching company is easy to miss, and the wrong cap
+   *  silently blocks (or unblocks) spending for a different company. */
+  'settings.limits.companyScope':
+    'These limits apply only to "{{company}}". Switching to another company switches the limits as well.',
   'settings.limits.used24hPrefix': 'Used in the last 24 hours:',
   'settings.limits.limitPrefix': '/ cap',
   'settings.limits.noCap': 'No cap set',

@@ -205,6 +205,13 @@ export const vi_settings = {
   'settings.limits.title': 'Giới hạn',
   'settings.limits.subtitle':
     'Trần chi phí và số vòng lặp. Vượt trần thì lượt chạy bị dừng thay vì chạy tiếp và tiêu thêm tiền.',
+  /**
+   * Vì sao phải nói rõ công ty: người dùng thuộc nhiều công ty rất dễ sửa trần chi phí
+   * của công ty này trong khi tưởng đang sửa cho công ty khác — hậu quả là một công ty
+   * bị chặn chi phí ngoài ý muốn, hoặc ngược lại không có trần nào.
+   */
+  'settings.limits.companyScope':
+    'Các giới hạn này áp dụng riêng cho công ty "{{company}}". Chuyển sang công ty khác thì giới hạn cũng đổi theo.',
   // Tách làm hai khoá vì số tiền ở giữa được bọc <strong> để mắt bắt nhanh con số.
   'settings.limits.used24hPrefix': 'Đã dùng 24 giờ qua:',
   'settings.limits.limitPrefix': '/ trần',

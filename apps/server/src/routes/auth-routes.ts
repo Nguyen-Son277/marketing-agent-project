@@ -6,7 +6,16 @@
  * responses, a session cookie that is HttpOnly and Secure in production, and
  * audit records for the security-relevant actions.
  */
-import { AppError, parseOrThrow, slugify, unauthorized, createCompanySchema, loginSchema, registerSchema } from '@marketing-agent/shared'
+import {
+  AppError,
+  parseOrThrow,
+  slugify,
+  unauthorized,
+  createCompanySchema,
+  loginSchema,
+  registerSchema,
+  updateCompanySchema,
+} from '@marketing-agent/shared'
 import type { Repos } from '@marketing-agent/db'
 import { SESSION_COOKIE, requireAuthState, requireManage, requireMembership } from '../http/middleware.ts'
 import type { RequestContext, Router } from '../http/router.ts'
@@ -84,6 +93,31 @@ export function registerAuthRoutes(router: Router, repos: Repos, sessionTtlDays:
     })
   })
 
+  /**
+   * Đổi tên hiển thị công ty.
+   *
+   * `requireMembership` trả 404 cho người không thuộc công ty (giữ nguyên quy ước chung:
+   * không lộ sự tồn tại của công ty). `requireManage` chặn `viewer`.
+   *
+   * Chỉ nhận `name`; slug giữ nguyên có chủ đích — xem `updateCompanyName` trong repo.
+   */
+  router.patch(
+    '/api/companies/:companyId',
+    async (ctx) => {
+      const { user } = requireAuthState(ctx)
+      const companyId = ctx.params.companyId!
+      const input = parseOrThrow(updateCompanySchema, await ctx.body(), 'tên công ty')
+      const updated = repos.auth.updateCompanyName(companyId, input.name)
+      // Chỉ xảy ra khi công ty bị xoá giữa lúc kiểm quyền và lúc ghi — hiếm nhưng phải
+      // trả lỗi rõ thay vì trả `company: undefined`.
+      if (!updated) throw notFoundCompany()
+      repos.accounting.audit({ companyId, userId: user.id, action: 'company.rename', target: input.name })
+      const role = repos.auth.membership(companyId, user.id)?.role ?? 'member'
+      ctx.json(200, { company: updated, role })
+    },
+    [requireMembership(repos), requireManage],
+  )
+
   router.delete(
     '/api/companies/:companyId',
     async (ctx) => {
@@ -123,6 +157,11 @@ function setSessionCookie(ctx: RequestContext, token: string, expiresAt: string)
 }
 
 /** Append a numeric suffix when the slug is taken, so creation never collides. */
+/** Lỗi dùng khi công ty biến mất giữa lúc kiểm quyền và lúc ghi. */
+function notFoundCompany(): AppError {
+  return new AppError('not_found', 'Không tìm thấy công ty')
+}
+
 export function ensureUniqueSlug(repos: Repos, name: string): string {
   const base = slugify(name) || 'cong-ty'
   let candidate = base

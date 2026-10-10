@@ -46,6 +46,17 @@ export interface ErrorEnvelope {
   }
 }
 
+/**
+ * Đổi tên hiển thị của công ty.
+ *
+ * Cố ý KHÔNG cho đổi `slug`: slug là tên thư mục kho kiến thức trên đĩa
+ * (`<kbRoot>/<slug>/kb`) và là khoá tra cứu tài liệu đã index. Đổi slug sẽ làm mồ côi
+ * toàn bộ tài liệu đang có, nên tên hiển thị và đường dẫn tách rời nhau có chủ đích.
+ */
+export interface UpdateCompanyBody {
+  readonly name: string
+}
+
 export interface CompanySummary {
   readonly id: string
   readonly name: string
@@ -633,6 +644,7 @@ export const API_ROUTES = {
   me: '/api/auth/me',
   companies: '/api/companies',
   company: (id: string) => `/api/companies/${id}`,
+  updateCompany: (id: string) => `/api/companies/${id}`,
   members: (id: string) => `/api/companies/${id}/members`,
   team: (id: string) => `/api/companies/${id}/team`,
   teamMember: (id: string, role: string) => `/api/companies/${id}/team/${role}`,

@@ -1059,3 +1059,36 @@ a {
 .hoi__chon-lai strong {
   font-weight: 600;
 }
+
+/*
+ * Màn "Công ty của tôi": mỗi công ty một thẻ trong danh sách.
+ *
+ * Vì sao cần lớp riêng thay vì dùng `.card`: thẻ công ty nằm LỒNG trong một `.card`,
+ * mà `.card + .card` lại thêm khoảng cách và bóng — lồng nhau sẽ thành hai tầng khung
+ * nhìn nặng nề. Lớp `cty-` giữ đúng một tầng viền mảnh.
+ */
+.cty-the {
+  border: 1px solid var(--mau-vien);
+  border-radius: var(--ban-kinh-nho);
+  padding: 12px 14px;
+}
+
+.cty-the + .cty-the {
+  margin-top: 10px;
+}
+
+/* Công ty đang dùng phải nhìn ra ngay từ xa: viền đậm, nền nhạt và vạch màu bên trái.
+   Chỉ đổi chữ "Đang dùng" thì mắt phải đọc từng dòng mới nhận ra. */
+.cty-the--dang-dung {
+  border-color: var(--mau-chinh);
+  background: var(--mau-chinh-nhat);
+  box-shadow: inset 3px 0 0 var(--mau-chinh);
+}
+
+/* Ô sửa tên tách khỏi phần thông tin phía trên bằng đường kẻ đứt, để thấy rõ đây là
+   chế độ đang sửa chứ không phải nội dung thường. */
+.cty-dong-sua {
+  margin-top: 12px;
+  border-top: 1px dashed var(--mau-vien);
+  padding-top: 12px;
+}

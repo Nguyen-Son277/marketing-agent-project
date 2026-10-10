@@ -102,16 +102,16 @@ describe('diagram routes', () => {
     const diagram = await ctx.client.request('GET', `/api/companies/${a.company.id}/diagram`, {
       headers: b.ownerCookie,
     })
-    expect([403, 404]).toContain(diagram.status)
+    expect(diagram.status).toBe(404)
 
     const dashboard = await ctx.client.request('GET', `/api/companies/${a.company.id}/dashboard`, {
       headers: b.ownerCookie,
     })
-    expect([403, 404]).toContain(dashboard.status)
+    expect(dashboard.status).toBe(404)
 
     const single = await ctx.client.request('GET', `/api/artifacts/${artifact.id}`, {
       headers: b.ownerCookie,
     })
-    expect([403, 404]).toContain(single.status)
+    expect(single.status).toBe(404)
   })
 })

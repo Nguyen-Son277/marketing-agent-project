@@ -11,6 +11,7 @@ import type {
   ArtifactView,
   ClarificationAnswer,
   CompanySummary,
+  CompanyRole,
   ConversationDetailResponse,
   ConversationView,
   CostsResponse,
@@ -209,6 +210,21 @@ export const api = {
 
   async createCompany(input: { name: string }): Promise<{ company: CompanySummary; presets: number }> {
     return request('/api/companies', { method: 'POST', body: input })
+  },
+
+  /**
+   * Đổi tên hiển thị công ty.
+   *
+   * Slug giữ nguyên có chủ đích: nó là tên thư mục kho kiến thức trên đĩa và là khoá tra
+   * cứu tài liệu đã index. Xem `UpdateCompanyBody` trong shared.
+   *
+   * Trả kèm `role` để nơi gọi không phải tra lại quyền của mình ở công ty đó.
+   */
+  async renameCompany(
+    companyId: string,
+    name: string,
+  ): Promise<{ company: CompanySummary; role: CompanyRole }> {
+    return request(`/api/companies/${companyId}`, { method: 'PATCH', body: { name } })
   },
 
   async dashboard(companyId: string): Promise<DashboardResponse> {

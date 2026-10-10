@@ -162,6 +162,16 @@ export const updateTeamMemberSchema = z.object({
 })
 export type UpdateTeamMemberInput = z.infer<typeof updateTeamMemberSchema>
 
+/**
+ * Đổi tên công ty.
+ *
+ * Giới hạn 120 ký tự để tên vừa thanh tiêu đề và ô chọn công ty; cắt khoảng trắng vì
+ * tên chỉ có khoảng trắng ở hai đầu là lỗi gõ, không phải tên thật.
+ */
+export const updateCompanySchema = z.object({
+  name: z.string().trim().min(1, 'Cần tên công ty').max(120, 'Tên công ty quá dài'),
+})
+
 export const createConversationSchema = z.object({
   title: z.string().trim().min(1).max(200).default('Cuộc trao đổi mới'),
   /**

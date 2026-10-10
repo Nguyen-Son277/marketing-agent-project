@@ -37,7 +37,7 @@ describe('tool routes', () => {
     const response = await ctx.client.request('GET', `/api/companies/${a.company.id}/tools`, {
       headers: b.ownerCookie,
     })
-    expect([403, 404]).toContain(response.status)
+    expect(response.status).toBe(404)
   })
 
   it('trả 401 cho người chưa đăng nhập', async () => {

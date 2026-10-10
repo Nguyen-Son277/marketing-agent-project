@@ -164,7 +164,7 @@ describe('knowledge routes', () => {
     const read = await ctx.client.request('GET', `/api/companies/${a.company.id}/knowledge`, {
       headers: b.ownerCookie,
     })
-    expect([403, 404]).toContain(read.status)
+    expect(read.status).toBe(404)
 
     const write = await ctx.client.request('POST', `/api/companies/${a.company.id}/knowledge`, {
       headers: b.ownerCookie,
@@ -176,6 +176,6 @@ describe('knowledge routes', () => {
         content: 'x',
       },
     })
-    expect([403, 404]).toContain(write.status)
+    expect(write.status).toBe(404)
   })
 })

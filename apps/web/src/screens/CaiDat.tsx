@@ -25,6 +25,7 @@ import { INTEGRATION_KINDS, MODEL_TIERS, PROVIDER_KINDS } from '@marketing-agent
 import type { MessageKey } from '@marketing-agent/i18n'
 import { api, ApiError } from '../lib/api.ts'
 import { useI18n } from '../lib/i18n.tsx'
+import { useSession } from '../lib/session.tsx'
 import {
   Card,
   DangTai,
@@ -1409,6 +1410,9 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
 
 function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
   const { t, formatCurrencyUsd } = useI18n()
+  // Tên công ty đang mở: giới hạn lưu theo `companyId`, nên phải nói rõ đang sửa cho
+  // công ty nào — người thuộc nhiều công ty rất dễ sửa nhầm.
+  const { company: congTyDangMo } = useSession()
   const [duLieu, setDuLieu] = useState<{
     dailyCostUsd: string
     taskCostUsd: string
@@ -1511,6 +1515,10 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
                 transition: 'width 0.2s ease',
               }}
             />
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 13, color: 'var(--mau-chu-mo)' }}>
+            {t('settings.limits.companyScope', { company: congTyDangMo?.name ?? companyId })}
           </div>
 
           {thongBao ? (

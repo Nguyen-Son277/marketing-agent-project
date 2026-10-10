@@ -1,4 +1,5 @@
 import { en_clarify } from './en/clarify.ts'
+import { en_companies } from './en/companies.ts'
 import { en_errors } from './en/errors.ts'
 /**
  * English catalog.
@@ -182,6 +183,7 @@ export const en = {
 
   /* ------------------------------------------- per-screen namespaces */
   ...en_errors,
+  ...en_companies,
   ...en_clarify,
   ...en_chat,
   ...en_tasks,

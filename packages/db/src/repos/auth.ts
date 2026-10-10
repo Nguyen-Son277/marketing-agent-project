@@ -218,6 +218,20 @@ export class AuthRepo {
     return row ? toCompany(row) : undefined
   }
 
+  /**
+   * Đổi tên hiển thị của công ty. Trả về bản ghi mới, hoặc `undefined` nếu không có.
+   *
+   * Cố ý KHÔNG nhận `slug`: slug là tên thư mục kho kiến thức trên đĩa và là khoá tra
+   * cứu tài liệu đã index, nên đổi nó sẽ làm mồ côi toàn bộ tài liệu đang có. Tách tên
+   * hiển thị khỏi đường dẫn là quyết định có chủ đích, không phải thiếu sót.
+   */
+  updateCompanyName(companyId: string, name: string): CompanyRecord | undefined {
+    const trimmed = name.trim()
+    if (trimmed.length === 0) return undefined
+    this.db.run('UPDATE companies SET name = ? WHERE id = ?', [trimmed, companyId])
+    return this.findCompanyById(companyId)
+  }
+
   listMembers(companyId: string): (MembershipRecord & { user: PublicUser })[] {
     const rows = this.db.all<MembershipRow & { u_id: string; u_email: string; u_name: string; u_is_admin: number }>(
       `SELECT m.*, u.id AS u_id, u.email AS u_email, u.name AS u_name, u.is_admin AS u_is_admin

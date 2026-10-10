@@ -112,19 +112,19 @@ describe('chat routes', () => {
     const read = await ctx.client.request('GET', `/api/conversations/${conversationId}`, {
       headers: b.ownerCookie,
     })
-    expect([403, 404]).toContain(read.status)
+    expect(read.status).toBe(404)
 
     const write = await ctx.client.request('POST', `/api/conversations/${conversationId}/messages`, {
       headers: b.ownerCookie,
       body: { content: 'B gửi vào phiên của A' },
     })
-    expect([403, 404]).toContain(write.status)
+    expect(write.status).toBe(404)
 
     const plan = await ctx.client.request('POST', `/api/conversations/${conversationId}/plan`, {
       headers: b.ownerCookie,
       body: {},
     })
-    expect([403, 404]).toContain(plan.status)
+    expect(plan.status).toBe(404)
   })
 
   it('phát sự kiện SSE của đúng phiên', async () => {

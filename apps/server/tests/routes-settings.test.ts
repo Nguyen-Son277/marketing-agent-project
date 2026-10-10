@@ -309,12 +309,12 @@ describe('settings routes', () => {
     const read = await ctx.client.request('GET', `/api/companies/${a.company.id}/providers`, {
       headers: b.ownerCookie,
     })
-    expect([403, 404]).toContain(read.status)
+    expect(read.status).toBe(404)
 
     const write = await ctx.client.request('POST', `/api/companies/${a.company.id}/providers`, {
       headers: b.ownerCookie,
       body: { name: 'B ghi vào A', kind: 'openai_compatible', baseUrl: 'http://127.0.0.1:1/v1' },
     })
-    expect([403, 404]).toContain(write.status)
+    expect(write.status).toBe(404)
   })
 })
