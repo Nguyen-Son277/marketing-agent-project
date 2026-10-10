@@ -9,6 +9,7 @@
 import type { Repos } from '@marketing-agent/db'
 import type { EmbeddingProvider } from '@marketing-agent/kb'
 import type { ToolRegistry } from '@marketing-agent/tools'
+import type { ClarificationRequest } from '@marketing-agent/shared'
 import type { AgentRunResult } from '@marketing-agent/agent-runtime'
 import type { AppEvent } from './events.ts'
 
@@ -49,6 +50,14 @@ export interface LeaderTurnResult {
   readonly briefComplete: boolean
   /** Trường còn thiếu, để giao diện hỏi đúng chỗ. */
   readonly missingFields: readonly (keyof Brief)[]
+  /**
+   * Câu hỏi có cấu trúc của lượt này, chỉ có khi brief còn thiếu.
+   *
+   * Vì sao trả kèm ở đây chứ không bắt tầng HTTP đọc lại `meta` của tin nhắn: `meta` là
+   * `unknown` và không có hợp đồng kiểu; trả thẳng từ nguồn sinh ra nó thì route chỉ việc
+   * chuyển tiếp, còn lịch sử tin nhắn vẫn lấy được qua `MessageView.clarify`.
+   */
+  readonly clarify?: ClarificationRequest
   readonly plan?: PlanResult
   readonly runId: string | null
   readonly costUsd: number

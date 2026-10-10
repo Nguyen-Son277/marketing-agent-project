@@ -203,3 +203,59 @@ describe('CSS thẻ chọn phương án', () => {
     expect(chon).toMatch(/background/)
   })
 })
+
+/**
+ * Bất biến cấu trúc JSX của màn Trao đổi.
+ *
+ * Vì sao kiểm cả mã nguồn chứ không chỉ CSS: CSS chỉ đúng khi cây phần tử đúng. Một lần
+ * sửa bố cục vô ý lồng `.chat` vào trong một `div` khác, hoặc chuyển phần đầu vào cùng
+ * thẻ với khung chat, là đủ để khung nhập bị đẩy khỏi màn hình trở lại — mà `tsc` và
+ * `vite build` đều không nói gì.
+ */
+const traoDoi = readFileSync(fileURLToPath(new URL('../src/screens/TraoDoi.tsx', import.meta.url)), 'utf8')
+
+describe('cấu trúc màn Trao đổi', () => {
+  it('dùng chế độ cao đầy đủ', () => {
+    expect(traoDoi).toMatch(/<Trang[^>]*caoDay/)
+  })
+
+  it('khung chat nằm trong thẻ chat, và thẻ chat là .card con trực tiếp', () => {
+    // Thẻ chat phải là `.card` và chứa `.chat`; thứ tự xuất hiện trong file chứng minh
+    // điều đó vì JSX lồng nhau theo thứ tự.
+    const cardIndex = traoDoi.indexOf('<div className="card"')
+    const chatIndex = traoDoi.indexOf('<div className="chat"')
+    const khungIndex = traoDoi.indexOf('className="chat__khung"')
+    const nhapIndex = traoDoi.indexOf('className="chat__nhap"')
+    expect(cardIndex).toBeGreaterThan(-1)
+    expect(chatIndex).toBeGreaterThan(cardIndex)
+    expect(khungIndex).toBeGreaterThan(chatIndex)
+    expect(nhapIndex).toBeGreaterThan(khungIndex)
+  })
+
+  it('phần đầu màn hình KHÔNG nằm trong thẻ chứa khung chat', () => {
+    // Ba nút điều khiển phải ở phần đầu. Nếu chúng nằm trong cùng `.card` với `.chat` thì
+    // thẻ đó cao theo phần đầu và khung nhập lại bị đẩy xuống dưới.
+    const cardIndex = traoDoi.indexOf('<div className="card"')
+    const planButton = traoDoi.indexOf("chayBuoc('plan')")
+    expect(planButton).toBeGreaterThan(-1)
+    expect(planButton).toBeLessThan(cardIndex)
+  })
+
+  it('giữ cuộn thông minh: chỉ theo dõi khi người dùng ở gần đáy', () => {
+    // Phải có theo dõi sự kiện cuộn và một ngưỡng khoảng cách, nếu không khung nhìn sẽ bị
+    // kéo xuống trong lúc agent đang chạy và người dùng không đọc được tin cũ.
+    expect(traoDoi).toMatch(/onScroll=/)
+    expect(traoDoi).toMatch(/scrollHeight/)
+  })
+
+  it('thẻ chọn phương án được vẽ theo tin nhắn có clarify', () => {
+    expect(traoDoi).toMatch(/message\.clarify/)
+    expect(traoDoi).toMatch(/<TheChonPhuongAn/)
+  })
+
+  it('gửi câu trả lời có cấu trúc kèm nội dung đọc được', () => {
+    // Server điền brief bằng `answers` (tất định); `content` để lịch sử chat đọc được.
+    expect(traoDoi).toMatch(/answers/)
+    expect(traoDoi).toMatch(/api\.sendMessage/)
+  })
+})

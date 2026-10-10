@@ -13,6 +13,9 @@ import type {
   ArtifactRecord,
   ArtifactView,
   ConversationRecord,
+  ClarificationOption,
+  ClarificationQuestion,
+  ClarificationRequest,
   ConversationView,
   IntegrationRecord,
   IntegrationView,
@@ -247,18 +250,76 @@ export function toConversationView(conversation: ConversationRecord, costUsd: nu
 }
 
 export function toMessageView(message: MessageRecord): MessageView {
+  const meta = parseJsonOrNull(message.metaJson)
+  const clarify = readClarification(meta)
   return {
     id: message.id,
     role: message.role,
     authorKind: message.authorKind,
     authorAgent: message.authorAgent,
     contentMd: message.contentMd,
-    meta: parseJsonOrNull(message.metaJson),
+    meta,
+    ...(clarify ? { clarify } : {}),
     tokensIn: message.tokensIn,
     tokensOut: message.tokensOut,
     costUsd: message.costUsd,
     createdAt: message.createdAt,
   }
+}
+
+/**
+ * Đọc thẻ chọn phương án từ `meta` của tin nhắn, kiểm tra hình dạng trước khi tin.
+ *
+ * Vì sao kiểm tra ở đây thay vì để giao diện đọc thẳng `meta`: `meta` là `unknown` và đã
+ * dùng cho việc khác (`missingFields`), nên nếu giao diện tự đọc vào đó thì mỗi lần hình
+ * dạng đổi sẽ hỏng im lặng — giao diện vẽ ra thẻ rỗng thay vì báo lỗi. Kiểm một lần ở
+ * biên, trả `undefined` khi không khớp, thì phần còn lại luôn nhận dữ liệu đúng kiểu hoặc
+ * không nhận gì.
+ */
+function readClarification(meta: unknown): ClarificationRequest | undefined {
+  if (typeof meta !== 'object' || meta === null) return undefined
+  const candidate = (meta as { clarify?: unknown }).clarify
+  if (typeof candidate !== 'object' || candidate === null) return undefined
+
+  const record = candidate as { intro?: unknown; questions?: unknown }
+  if (typeof record.intro !== 'string' || !Array.isArray(record.questions)) return undefined
+
+  const questions: ClarificationQuestion[] = []
+  for (const raw of record.questions) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const q = raw as Record<string, unknown>
+    if (typeof q['field'] !== 'string' || typeof q['question'] !== 'string') continue
+    if (q['inputMode'] !== 'single' && q['inputMode'] !== 'multi') continue
+    if (!Array.isArray(q['options'])) continue
+
+    const options: ClarificationOption[] = []
+    for (const rawOption of q['options']) {
+      if (typeof rawOption !== 'object' || rawOption === null) continue
+      const o = rawOption as Record<string, unknown>
+      if (typeof o['id'] !== 'string' || typeof o['label'] !== 'string') continue
+      options.push({
+        id: o['id'],
+        label: o['label'],
+        ...(typeof o['hint'] === 'string' ? { hint: o['hint'] } : {}),
+        ...(o['exclusive'] === true ? { exclusive: true } : {}),
+      })
+    }
+    // Câu hỏi không có phương án nào là vô nghĩa với người dùng; bỏ thay vì vẽ thẻ rỗng.
+    if (options.length === 0) continue
+
+    questions.push({
+      field: q['field'],
+      question: q['question'],
+      ...(typeof q['helper'] === 'string' ? { helper: q['helper'] } : {}),
+      inputMode: q['inputMode'],
+      options,
+      // Luôn cho phép ý kiến khác, kể cả khi nguồn dữ liệu không nói rõ: người dùng phải
+      // luôn còn đường nói ý mình.
+      allowCustom: q['allowCustom'] !== false,
+    })
+  }
+  if (questions.length === 0) return undefined
+  return { intro: record.intro, questions }
 }
 
 export function conversationCost(repos: Repos, companyId: string, conversationId: string): number {

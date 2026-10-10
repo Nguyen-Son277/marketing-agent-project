@@ -112,6 +112,13 @@ export function chatRoutes() {
             userId,
             content: input.content,
             autoPlan: input.autoPlan,
+            // Câu trả lời thẻ chọn đi thẳng xuống orchestrator: nơi đó áp vào brief một
+            // cách tất định trước khi BriefGate kiểm tra, nên route không tự đoán.
+            answers: (input.answers ?? []).map((answer) => ({
+              field: answer.field,
+              optionIds: answer.optionIds ?? [],
+              ...(answer.custom ? { custom: answer.custom } : {}),
+            })),
           })
 
           const conversation = repos.work.requireConversation(conversationId, companyId)
@@ -123,6 +130,8 @@ export function chatRoutes() {
             missingFields: turn.missingFields,
             phase: turn.phase as ConversationPhase,
             costUsd: turn.costUsd,
+            // Thẻ chọn cho lượt này; `reply.clarify` do view-mappers gắn từ meta.
+            ...(turn.clarify ? { clarify: turn.clarify } : {}),
           }
           request.json(200, response)
         },

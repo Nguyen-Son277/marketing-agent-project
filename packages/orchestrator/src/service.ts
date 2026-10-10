@@ -9,8 +9,16 @@
  * chạy kế hoạch, viết báo cáo). Nếu để server tự ghép các bước, mọi thay đổi quy
  * trình — thêm một cổng kiểm tra chẳng hạn — sẽ phải sửa ở tầng HTTP.
  */
-import { budgetExceeded, conflict, notFound, truncate, type AgentRole } from '@marketing-agent/shared'
-import { isLocale, type Locale } from '@marketing-agent/i18n'
+import {
+  budgetExceeded,
+  conflict,
+  notFound,
+  truncate,
+  type AgentRole,
+  type ClarificationAnswer,
+  type ClarificationRequest,
+} from '@marketing-agent/shared'
+import { isLocale, translator, type Locale } from '@marketing-agent/i18n'
 import type { Repos } from '@marketing-agent/db'
 import type { AgentRuntimeDeps } from '@marketing-agent/agent-runtime'
 import type { EmbeddingProvider } from '@marketing-agent/kb'
@@ -19,9 +27,12 @@ import { runAgentForTask } from './agent-runner.ts'
 import { dispatchPlan } from './dispatcher.ts'
 import { event, type AppEvent } from './events.ts'
 import {
+  applyClarificationAnswers,
+  buildClarification,
+  buildClarificationRewriteInstruction,
   checkBrief,
-  clarifyingQuestions,
   parseBrief,
+  parseClarificationRewrite,
   validatePlan,
   type RawPlan,
 } from './planner.ts'
@@ -49,6 +60,14 @@ export interface SendMessageInput {
   readonly content: string
   /** Khi true, Leader lập kế hoạch ngay nếu brief đã đủ. */
   readonly autoPlan?: boolean
+  /**
+   * Câu trả lời cho thẻ chọn phương án của lượt hỏi trước.
+   *
+   * Vì sao đi qua orchestrator thay vì route tự ghi brief: việc áp câu trả lời phải nằm
+   * cùng chỗ với BriefGate, nếu không route và orchestrator sẽ có hai cách hiểu khác nhau
+   * về "brief đã đủ chưa".
+   */
+  readonly answers?: readonly ClarificationAnswer[]
 }
 
 export interface PlanInput {
@@ -91,6 +110,7 @@ export class ConversationOrchestrator implements CoordinationHost {
   async sendMessage(input: SendMessageInput): Promise<LeaderTurnResult> {
     const conversation = this.requireConversation(input.companyId, input.conversationId)
     this.assertBudget(input.companyId)
+    const locale = this.localeOf(input.companyId, conversation.id)
 
     this.repos.work.addMessage({
       conversationId: conversation.id,
@@ -98,7 +118,17 @@ export class ConversationOrchestrator implements CoordinationHost {
       role: 'user',
       authorKind: 'user',
       contentMd: input.content,
+      // Lưu lại thẻ nào đã được trả lời: giao diện cần biết để không hỏi lại câu cũ.
+      ...(input.answers && input.answers.length > 0 ? { meta: { answers: input.answers } } : {}),
     })
+
+    // Áp câu trả lời thẻ chọn TRƯỚC lớp trích tự động: giá trị người dùng chọn là tất
+    // định và phải thắng, còn lớp trích chỉ được điền vào chỗ còn trống.
+    const tuTheChon = applyClarificationAnswers(
+      parseBrief(conversation.briefJson),
+      input.answers ?? [],
+      locale,
+    )
 
     // Trích brief từ toàn bộ hội thoại người dùng, rồi gộp với brief đã lưu.
     // Phải chạy TRƯỚC khi kiểm tra, vì đây là bước biến lời nói thành 6 trường.
@@ -109,7 +139,7 @@ export class ConversationOrchestrator implements CoordinationHost {
       .join('\n\n')
 
     const labeled = extractLabeledBrief(nguoiDungNoi.length > 0 ? nguoiDungNoi : input.content)
-    let extracted = mergeBriefFields(parseBrief(conversation.briefJson), labeled)
+    let extracted = mergeBriefFields(tuTheChon, labeled)
     // Chỉ nhờ model khi lớp nhãn vẫn còn thiếu trường: lớp nhãn tất định và miễn phí.
     const conThieuSauNhan = BRIEF_FIELDS.filter((field) => extracted[field].trim().length === 0)
     if (conThieuSauNhan.length > 0) {
@@ -133,13 +163,23 @@ export class ConversationOrchestrator implements CoordinationHost {
 
     // Chưa đủ brief: hỏi lại. Đây là hành vi rẻ nhất và đúng nhất.
     if (!check.complete) {
-      const questions = clarifyingQuestions(check.missing)
+      // Tầng 1 tất định luôn cho ra câu hỏi; tầng 2 chỉ làm câu chữ hợp ngữ cảnh hơn.
+      const base = buildClarification(check.missing, locale)
+      const improved = await this.improveClarification(input.companyId, conversation.id, base, locale)
+      const clarify = improved.request
+      // Văn bản đọc được vẫn phải có: lịch sử chat và thông báo đẩy không vẽ được thẻ chọn.
+      const t = translator(locale)
+      // Nhãn trường lấy từ catalog i18n ở CẢ HAI ngôn ngữ: nhãn nghiệp vụ ngắn nên đọc
+      // nhanh hơn câu hỏi đầy đủ, và dùng chung một nguồn câu chữ với phần còn lại.
+      const fieldsText = check.missing
+        .map((field) => t(`clarify.field.${field}` as never))
+        .join(' · ')
       const reply = [
-        'Trước khi lập kế hoạch, tôi cần chốt thêm vài điểm để đội làm đúng việc:',
+        clarify.intro,
         '',
-        ...questions.map((q, index) => `${index + 1}. ${q}`),
+        ...clarify.questions.map((question, index) => `${index + 1}. ${question.question}`),
         '',
-        `_Còn thiếu: ${check.missing.map((field) => BRIEF_FIELD_LABELS[field]).join(' · ')}_`,
+        `_${t('clarify.remaining', { fields: fieldsText })}_`,
       ].join('\n')
 
       this.repos.work.addMessage({
@@ -149,7 +189,9 @@ export class ConversationOrchestrator implements CoordinationHost {
         authorKind: 'leader',
         authorAgent: 'marketing-leader',
         contentMd: reply,
-        meta: { missingFields: check.missing },
+        // Hình dạng này được `readClarification` ở tầng API kiểm tra; đổi tên trường là
+        // thẻ chọn biến mất khỏi giao diện.
+        meta: { missingFields: check.missing, clarify },
       })
       // Lưu phần đã trích được: người dùng trả lời từng câu qua nhiều lượt, nên
       // brief phải tích luỹ chứ không được hỏi lại từ đầu.
@@ -161,8 +203,9 @@ export class ConversationOrchestrator implements CoordinationHost {
         phase: 'clarify',
         briefComplete: false,
         missingFields: check.missing,
+        clarify,
         runId: null,
-        costUsd: 0,
+        costUsd: improved.costUsd,
       }
     }
 
@@ -201,6 +244,8 @@ export class ConversationOrchestrator implements CoordinationHost {
     const check = checkBrief(brief)
     if (!check.complete || !brief) {
       throw conflict(
+        // Thông báo này chưa gắn `messageKey` nên chưa dịch được; đây là chỗ còn lại đã
+        // biết, và tách riêng khỏi việc đang làm để không mở rộng phạm vi.
         `Chưa chốt đủ thông tin để lập kế hoạch. Còn thiếu: ${check.missing
           .map((field) => BRIEF_FIELD_LABELS[field])
           .join(', ')}`,
@@ -724,6 +769,46 @@ export class ConversationOrchestrator implements CoordinationHost {
       ...(this.log ? { log: this.log } : {}),
     })
     return result.run.output
+  }
+
+  /**
+   * Tầng 2 — nhờ Leader viết lại phương án theo ngữ cảnh công ty.
+   *
+   * Vì sao nuốt mọi lỗi và trả về bản tất định: một lượt gọi model hỏng (mạng, hết ngân
+   * sách, JSON rác) KHÔNG được phép làm thẻ chọn rỗng — người dùng sẽ bị kẹt ở vòng hỏi
+   * mà không có gì để bấm. Tầng 1 đã đủ dùng, nên đây chỉ là lớp làm đẹp có dự phòng.
+   */
+  private async improveClarification(
+    companyId: string,
+    conversationId: string,
+    base: ClarificationRequest,
+    locale: Locale,
+  ): Promise<{ request: ClarificationRequest; costUsd: number }> {
+    if (base.questions.length === 0) return { request: base, costUsd: 0 }
+    try {
+      const result = await runAgentForTask({
+        repos: this.repos,
+        tools: this.tools,
+        embedding: this.embedding,
+        runtimeOverrides: this.runtimeOverrides,
+        companyId,
+        role: 'marketing-leader',
+        taskId: null,
+        conversationId,
+        locale,
+        maxSteps: 2,
+        taskBrief: buildClarificationRewriteInstruction(base),
+        ...(this.log ? { log: this.log } : {}),
+      })
+      // Model có thể trả JSON hợp lệ mà không đổi gì; khi đó `undefined` và ta giữ tầng 1.
+      const parsed = parseClarificationRewrite(result.run.output, base, locale)
+      return { request: parsed ?? base, costUsd: result.run.usage.costUsd }
+    } catch (error) {
+      this.log?.('Không cải thiện được câu hỏi làm rõ bằng model; dùng bản tất định', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return { request: base, costUsd: 0 }
+    }
   }
 
   /**

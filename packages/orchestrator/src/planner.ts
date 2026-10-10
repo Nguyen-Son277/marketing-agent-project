@@ -11,10 +11,17 @@
 import {
   AppError,
   isAppError,
+  truncate,
   validation,
   type AgentRole,
+  type ClarificationAnswer,
+  type ClarificationInputMode,
+  type ClarificationQuestion,
+  type ClarificationRequest,
 } from '@marketing-agent/shared'
+import { translator, vi, type Locale, type MessageKey } from '@marketing-agent/i18n'
 import { hasCycle, topologicalOrder, type PlannedTaskInput } from '@marketing-agent/tools'
+import { mergeBriefFields } from './brief.ts'
 import { BRIEF_FIELDS, type Brief, type PlanResult, type PlannedTask } from './types.ts'
 
 /** Kết quả kiểm tra brief, kèm câu hỏi gợi ý cho trường còn thiếu. */
@@ -55,18 +62,341 @@ export function parseBrief(json: string | null | undefined): Brief | undefined {
   return collected as Brief
 }
 
-/** Câu hỏi làm rõ cho từng trường còn thiếu, kèm gợi ý để người dùng chỉ cần chọn. */
-export function clarifyingQuestions(missing: readonly (keyof Brief)[], maxQuestions = 3): string[] {
-  const templates: Record<keyof Brief, string> = {
-    objective: 'Mục tiêu cuối cùng là gì? (ví dụ: "tăng đăng ký dùng thử", "giảm CPL")',
-    kpi: 'Đo thành công bằng chỉ số nào và mốc nào? (ví dụ: "50 lead/tháng", "CPL ≤ 120.000đ")',
-    scope: 'Phạm vi gồm những gì, và điều gì KHÔNG làm lần này?',
-    deadline: 'Cần xong trước ngày nào? Có mốc trung gian nào không?',
-    budget: 'Ngân sách bao nhiêu? (tiền quảng cáo và/hoặc số giờ người)',
-    constraints: 'Có ràng buộc nào bắt buộc? (thương hiệu, pháp lý, kênh bắt buộc, điều cấm)',
-  }
-  return missing.slice(0, maxQuestions).map((field) => templates[field])
+/* ------------------------------------------- hỏi lại có cấu trúc */
+
+/** Số câu hỏi tối đa mỗi lượt; giữ hành vi cũ để không hỏi dồn dập. */
+export const MAX_CLARIFICATION_QUESTIONS = 3
+
+interface ClarifyFieldSpec {
+  readonly questionKey: MessageKey
+  readonly helperKey: MessageKey
+  readonly inputMode: ClarificationInputMode
+  readonly optionIds: readonly string[]
+  /**
+   * Phương án nói về việc KHÔNG làm, chỉ có nghĩa với chọn-nhiều.
+   *
+   * Khai báo tường minh thay vì suy từ tiền tố: `constraints-no-*` cũng bắt đầu bằng
+   * `no-` nhưng đó là RÀNG BUỘC bắt buộc, không phải mục bị loại khỏi phạm vi. Suy từ
+   * tiền tố sẽ biến "không dùng ảnh khách hàng" thành một mục "ngoài phạm vi".
+   */
+  readonly exclusiveIds?: readonly string[]
 }
+
+/**
+ * Bảng ánh xạ trường brief → câu hỏi có cấu trúc.
+ *
+ * Vì sao cấu trúc nằm ở mã còn câu chữ nằm ở catalog i18n: `packages/i18n` giữ phần
+ * người dùng đọc, còn trường nào hỏi bằng chọn-một/chọn-nhiều và mã phương án nào hợp
+ * lệ là logic nghiệp vụ — server dùng chính mã đó để áp câu trả lời vào brief. Trộn hai
+ * thứ vào catalog sẽ khiến một lần sửa chữ có thể vô tình đổi cách server hiểu câu trả lời.
+ */
+const CLARIFY_SPEC: Readonly<Record<keyof Brief, ClarifyFieldSpec>> = {
+  objective: {
+    questionKey: 'clarify.objective.question',
+    helperKey: 'clarify.objective.helper',
+    inputMode: 'single',
+    optionIds: ['objective-trial', 'objective-lead', 'objective-cpl', 'objective-revenue', 'objective-brand', 'objective-other'],
+  },
+  kpi: {
+    questionKey: 'clarify.kpi.question',
+    helperKey: 'clarify.kpi.helper',
+    inputMode: 'single',
+    optionIds: ['kpi-leads', 'kpi-cpl', 'kpi-signups', 'kpi-traffic', 'kpi-engagement', 'kpi-other'],
+  },
+  scope: {
+    questionKey: 'clarify.scope.question',
+    helperKey: 'clarify.scope.helper',
+    inputMode: 'multi',
+    optionIds: [
+      'scope-facebook',
+      'scope-seo',
+      'scope-social-organic',
+      'scope-email',
+      'scope-no-tiktok',
+      'scope-no-influencer',
+      'scope-no-ads',
+      'scope-no-redesign',
+      'scope-no-video',
+      'scope-other',
+    ],
+    exclusiveIds: ['scope-no-tiktok', 'scope-no-influencer', 'scope-no-ads', 'scope-no-redesign', 'scope-no-video'],
+  },
+  deadline: {
+    questionKey: 'clarify.deadline.question',
+    helperKey: 'clarify.deadline.helper',
+    inputMode: 'single',
+    optionIds: ['deadline-30', 'deadline-60', 'deadline-90', 'deadline-quarter-end', 'deadline-year-end', 'deadline-unknown', 'deadline-other'],
+  },
+  budget: {
+    questionKey: 'clarify.budget.question',
+    helperKey: 'clarify.budget.helper',
+    inputMode: 'single',
+    optionIds: ['budget-under-20m', 'budget-20-50m', 'budget-50-100m', 'budget-over-100m', 'budget-hours-only', 'budget-unknown', 'budget-other'],
+  },
+  constraints: {
+    questionKey: 'clarify.constraints.question',
+    helperKey: 'clarify.constraints.helper',
+    inputMode: 'multi',
+    optionIds: [
+      'constraints-no-customer-photos',
+      'constraints-no-unverified-claims',
+      'constraints-brand-guidelines',
+      'constraints-legal-review',
+      'constraints-tone',
+      'constraints-none',
+      'constraints-other',
+    ],
+  },
+}
+
+/** Khoá catalog của nhãn/gợi ý một phương án; mã phương án giữ nguyên giữa hai ngôn ngữ. */
+function optionLabelKey(id: string): MessageKey {
+  return `clarify.${id}.label` as MessageKey
+}
+
+/** Gợi ý chỉ có ở một số phương án; thiếu bản dịch thì bỏ hẳn thay vì trả về chuỗi khoá. */
+function optionHint(locale: Locale, id: string): string | undefined {
+  const key = `clarify.${id}.hint`
+  if (!(key in vi)) return undefined
+  return translator(locale)(key as MessageKey)
+}
+
+/**
+ * Tầng 1 — dựng câu hỏi có cấu trúc, tất định, không gọi model.
+ *
+ * Vì sao luôn có tầng này: thẻ chọn rỗng vì model lỗi là kiểu hỏng im lặng khiến người
+ * dùng không biết phải làm gì. Bảng catalog cho ra câu hỏi dùng được ngay cả khi mọi
+ * lượt gọi model đều thất bại.
+ */
+export function buildClarification(
+  missing: readonly (keyof Brief)[],
+  locale: Locale,
+): ClarificationRequest {
+  const t = translator(locale)
+  const fields = [...new Set(missing)].slice(0, MAX_CLARIFICATION_QUESTIONS)
+  const questions: ClarificationQuestion[] = fields.map((field) => {
+    const spec = CLARIFY_SPEC[field]
+    const exclusive = new Set(spec.exclusiveIds ?? [])
+    return {
+      field,
+      question: t(spec.questionKey),
+      helper: t(spec.helperKey),
+      inputMode: spec.inputMode,
+      options: spec.optionIds.map((id) => {
+        const hint = optionHint(locale, id)
+        return {
+          id,
+          label: t(optionLabelKey(id)),
+          ...(hint === undefined ? {} : { hint }),
+          ...(exclusive.has(id) ? { exclusive: true } : {}),
+        }
+      }),
+      allowCustom: true,
+    }
+  })
+  return { intro: t('clarify.intro'), questions }
+}
+
+/* --------------------------------------- áp câu trả lời tất định */
+
+/** Câu chữ nối cho phần "trong/ngoài phạm vi" và phần bổ sung; chỉ hai ngôn ngữ đang hỗ trợ. */
+const CLARIFY_APPLY_TEXT: Readonly<Record<Locale, { inScope: string; outOfScope: string; addition: string }>> = {
+  vi: { inScope: 'TRONG phạm vi', outOfScope: 'NGOÀI phạm vi', addition: 'Bổ sung từ người dùng' },
+  en: { inScope: 'IN SCOPE', outOfScope: 'OUT OF SCOPE', addition: 'User addition' },
+}
+
+function isBriefField(value: string): value is keyof Brief {
+  return (BRIEF_FIELDS as readonly string[]).includes(value)
+}
+
+/**
+ * Áp câu trả lời của thẻ chọn vào brief một cách tất định.
+ *
+ * Vì sao KHÔNG đoán từ câu chữ: người dùng chọn "Không chạy TikTok" mà brief ghi "chạy
+ * TikTok" là lỗi nguy hiểm — nội dung sẽ đi sai hướng. Mã phương án do catalog định nghĩa
+ * nên ánh xạ là tất định, và trường nào đã có giá trị từ lượt trước thì giữ nguyên (chỉ
+ * điền chỗ trống qua `mergeBriefFields`).
+ */
+export function applyClarificationAnswers(
+  brief: Partial<Brief> | undefined,
+  answers: readonly ClarificationAnswer[],
+  locale: Locale,
+): Brief {
+  const t = translator(locale)
+  const phrases = CLARIFY_APPLY_TEXT[locale]!
+  const found: Partial<Record<keyof Brief, string>> = {}
+
+  for (const answer of answers) {
+    if (!answer || typeof answer.field !== 'string' || !isBriefField(answer.field)) continue
+    const field = answer.field
+    const spec = CLARIFY_SPEC[field]
+    const exclusive = new Set(spec.exclusiveIds ?? [])
+    // Mã lạ bị bỏ qua riêng lẻ: một lựa chọn sai không được làm hỏng cả câu trả lời.
+    const chosen = (Array.isArray(answer.optionIds) ? answer.optionIds : []).filter((id) =>
+      spec.optionIds.includes(id),
+    )
+
+    let main = ''
+    if (exclusive.size > 0) {
+      const inScope = chosen.filter((id) => !exclusive.has(id)).map((id) => t(optionLabelKey(id)))
+      const outOfScope = chosen.filter((id) => exclusive.has(id)).map((id) => t(optionLabelKey(id)))
+      const clauses: string[] = []
+      if (inScope.length > 0) clauses.push(`${phrases.inScope}: ${inScope.join(', ')}.`)
+      if (outOfScope.length > 0) clauses.push(`${phrases.outOfScope}: ${outOfScope.join(', ')}.`)
+      main = clauses.join(' ')
+    } else {
+      main = chosen.map((id) => t(optionLabelKey(id))).join(' · ')
+    }
+
+    const custom = typeof answer.custom === 'string' ? answer.custom.trim() : ''
+    const segments: string[] = []
+    if (main.length > 0) segments.push(main.endsWith('.') ? main : `${main}.`)
+    if (custom.length > 0) segments.push(`${phrases.addition}: ${custom}`)
+    const value = segments.join(' ').trim()
+    if (value.length >= 3) found[field] = truncate(value, 600)
+  }
+
+  return mergeBriefFields(brief, found)
+}
+
+/* ------------------------------- tầng 2: nhờ model viết lại phương án */
+
+/** Dấu nhận dạng prompt tầng 2, để test và log phân biệt được với lượt trích brief. */
+export const CLARIFY_REWRITE_MARKER = 'clarify.rewrite'
+
+/** Hướng dẫn cho model khi viết lại phương án theo ngữ cảnh công ty. */
+export function buildClarificationRewriteInstruction(base: ClarificationRequest): string {
+  return [
+    'Bạn đang giúp Leader hỏi lại người dùng cho đủ brief marketing.',
+    `(mã tác vụ: ${CLARIFY_REWRITE_MARKER})`,
+    'Hãy viết lại câu hỏi và nhãn phương án cho ĐÚNG ngữ cảnh công ty; dùng kb.search nếu cần.',
+    '',
+    'QUY TẮC BẮT BUỘC:',
+    '1. Giữ nguyên `field`, `inputMode`, `allowCustom` và MỌI `id` phương án — id là khoá server dùng để áp câu trả lời.',
+    '2. Chỉ được đổi `question`, `helper`, và `label`/`hint` của phương án. Không thêm, không bớt phương án.',
+    '3. Trả về DUY NHẤT một object JSON, không thêm chữ nào khác, không dùng markdown fence.',
+    '4. Chữ trong JSON phải bằng ngôn ngữ của cuộc trao đổi.',
+    '',
+    '## Câu hỏi tất định cần viết lại (JSON)',
+    truncate(JSON.stringify(base, null, 2), 8_000),
+    '',
+    'Định dạng trả về:',
+    '{"questions":[{"field":"...","question":"...","helper":"...","options":[{"id":"...","label":"...","hint":"..."}]}]}',
+  ].join('\n')
+}
+
+interface RewriteOptionShape {
+  readonly id?: unknown
+  readonly label?: unknown
+  readonly hint?: unknown
+}
+
+/**
+ * Đọc JSON viết lại của model và ghép vào bản tất định.
+ *
+ * Vì sao ghép thay vì dùng thẳng: model không được phép đổi cấu trúc — nếu nó bỏ một
+ * phương án hay đổi `inputMode`, câu trả lời sau này sẽ không áp được vào brief. Hàm này
+ * chỉ nhận phần chữ, và trả `undefined` khi JSON hỏng để nơi gọi im lặng dùng tầng 1.
+ */
+export function parseClarificationRewrite(
+  output: string,
+  base: ClarificationRequest,
+  locale: Locale,
+): ClarificationRequest | undefined {
+  const candidate = extractJsonObject(output)
+  if (!candidate) return undefined
+  const questions = candidate['questions']
+  if (!Array.isArray(questions)) return undefined
+
+  const byField = new Map<string, Record<string, unknown>>()
+  for (const entry of questions) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const record = entry as Record<string, unknown>
+    const field = record['field']
+    if (typeof field === 'string' && !byField.has(field)) byField.set(field, record)
+  }
+  if (byField.size === 0) return undefined
+
+  let changed = false
+  const rewritten: ClarificationQuestion[] = base.questions.map((question) => {
+    const rewrite = byField.get(question.field)
+    if (!rewrite) return question
+
+    const newQuestion = readText(rewrite['question'], 500)
+    const helperValue = rewrite['helper']
+    const newHelper =
+      typeof helperValue === 'string' && helperValue.trim().length > 0
+        ? helperValue.trim().slice(0, 300)
+        : question.helper
+
+    const optionRewrites = new Map<string, RewriteOptionShape>()
+    const rawOptions = rewrite['options']
+    if (Array.isArray(rawOptions)) {
+      for (const raw of rawOptions) {
+        if (typeof raw !== 'object' || raw === null) continue
+        const record = raw as RewriteOptionShape
+        if (typeof record.id === 'string') optionRewrites.set(record.id, record)
+      }
+    }
+
+    const options = question.options.map((option) => {
+      const rewriteOption = optionRewrites.get(option.id)
+      if (!rewriteOption) return option
+      const label = readText(rewriteOption.label, 200)
+      const hintValue = rewriteOption.hint
+      const hint =
+        typeof hintValue === 'string' && hintValue.trim().length > 0
+          ? hintValue.trim().slice(0, 300)
+          : option.hint
+      if (label === undefined && hint === option.hint) return option
+      changed = true
+      return {
+        ...option,
+        ...(label === undefined ? {} : { label }),
+        ...(hint === undefined ? {} : { hint }),
+      }
+    })
+
+    if (
+      (newQuestion !== undefined && newQuestion !== question.question) ||
+      (typeof helperValue === 'string' && helperValue.trim().length > 0 && newHelper !== question.helper)
+    ) {
+      changed = true
+    }
+    return {
+      ...question,
+      ...(newQuestion === undefined ? {} : { question: newQuestion }),
+      ...(newHelper === undefined ? {} : { helper: newHelper }),
+      options,
+    }
+  })
+
+  if (!changed) return undefined
+  return { intro: `${base.intro}\n\n${translator(locale)('clarify.improved')}`, questions: rewritten }
+}
+
+function readText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length === 0 ? undefined : trimmed.slice(0, maxLength)
+}
+
+/** Trích object JSON đầu tiên trong câu trả lời của model, chấp nhận cả markdown fence. */
+function extractJsonObject(output: string): Record<string, unknown> | undefined {
+  const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(output)
+  const text = (fence?.[1] ?? output).trim()
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start < 0 || end <= start) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text.slice(start, end + 1))
+  } catch {
+    return undefined
+  }
+  return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : undefined
+}
+
 
 /** Kế hoạch thô mà Leader đề xuất, trước khi kiểm tra. */
 export interface RawPlan {

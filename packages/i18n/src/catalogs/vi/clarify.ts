@@ -89,6 +89,13 @@ export const vi_clarify = {
   'clarify.constraints-other.label': 'Ràng buộc khác (tôi sẽ ghi rõ)',
 
   /* ------------------------------------------- nhãn ô ý kiến */
+  /* ------------------------------------------- nhãn 6 trường brief */
+  'clarify.field.objective': 'Mục tiêu (kết quả kinh doanh mong muốn)',
+  'clarify.field.kpi': 'KPI (chỉ số đo được + mốc thời gian)',
+  'clarify.field.scope': 'Phạm vi (làm gì, và KHÔNG làm gì)',
+  'clarify.field.deadline': 'Thời hạn',
+  'clarify.field.budget': 'Ngân sách (tiền và/hoặc số giờ người)',
+  'clarify.field.constraints': 'Ràng buộc (thương hiệu, pháp lý, kênh bắt buộc)',
   'clarify.customLabel': 'Ý kiến khác của bạn',
   'clarify.customPlaceholder': 'Ghi rõ ý của bạn cho câu hỏi này…',
   'clarify.customHint': 'Không bắt buộc. Có thể chọn gợi ý ở trên và vẫn thêm ý riêng.',

@@ -90,6 +90,13 @@ export const en_clarify = {
   'clarify.constraints-other.label': 'A different constraint (I will describe it)',
 
   /* --------------------------------------------------- free-text box */
+  /* --------------------------------------------- the six brief fields */
+  'clarify.field.objective': 'Objective (the business result you want)',
+  'clarify.field.kpi': 'KPI (a measurable metric plus its target)',
+  'clarify.field.scope': 'Scope (what is in, and what is NOT)',
+  'clarify.field.deadline': 'Deadline',
+  'clarify.field.budget': 'Budget (money and/or people’s time)',
+  'clarify.field.constraints': 'Constraints (brand, legal, mandatory channels)',
   'clarify.customLabel': 'Your own answer',
   'clarify.customPlaceholder': 'Describe your answer to this question…',
   'clarify.customHint': 'Optional. You can pick a suggestion above and still add your own note.',

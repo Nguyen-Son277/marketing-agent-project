@@ -12,9 +12,20 @@
  * 3. Tách rõ ba hành động không thể hoàn tác: lập kế hoạch, chạy kế hoạch, viết báo
  *    cáo. Mỗi hành động là một nút riêng để người dùng biết mình đang cho phép gì.
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import type { MessageKey, Translate } from '@marketing-agent/i18n'
 import type {
+  ClarificationAnswer,
+  ClarificationRequest,
   ConversationDetailResponse,
   ConversationPhase,
   ConversationView,
@@ -24,6 +35,7 @@ import type {
 import { api, ApiError, openConversationStream, type StreamEvent } from '../lib/api.ts'
 import { useI18n } from '../lib/i18n.tsx'
 import { Markdown } from '../components/Markdown.tsx'
+import { TheChonPhuongAn } from '../components/TheChonPhuongAn.tsx'
 import {
   Card,
   DangTai,
@@ -52,6 +64,14 @@ const KHONG_CO = '\u2014'
 const BIEU_TUONG_NGUOI_DUNG = '\u{1F9D1}'
 const BIEU_TUONG_HE_THONG = '\u2699\uFE0F'
 const BIEU_TUONG_LEADER = '\u{1F3AF}'
+
+/**
+ * Khoảng cách tới đáy còn được coi là "đang ở dưới cùng".
+ *
+ * Vì sao cần ngưỡng: nếu hễ có tin mới là cuộn xuống đáy thì người dùng vừa cuộn lên đọc
+ * tin cũ sẽ bị giật xuống giữa lúc agent đang chạy — đúng lúc họ cần đọc nhất.
+ */
+const NGUONG_GAN_DAY = 80
 
 /**
  * Khoá dịch cho từng trường brief.
@@ -89,6 +109,14 @@ interface DongSuKien {
   readonly at: number
 }
 
+/** Trạng thái hiển thị của một thẻ chọn phương án trong dòng tin nhắn. */
+interface TrangThaiThe {
+  /** Câu trả lời đã gửi, nếu thẻ đã được trả lời. */
+  readonly daTraLoi?: ClarificationAnswer[]
+  /** Thẻ đã cũ (người dùng đã trả lời ở chỗ khác) nên không cho gửi nữa. */
+  readonly disabled: boolean
+}
+
 export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   const { t, formatDateTime, formatCurrencyUsd } = useI18n()
   const [danhSach, setDanhSach] = useState<ConversationView[]>([])
@@ -101,9 +129,19 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   const [dangGui, setDangGui] = useState(false)
   const [dangChay, setDangChay] = useState<'plan' | 'run' | 'report' | null>(null)
   const [baoKetQua, setBaoKetQua] = useState<string | null>(null)
+  const [coTinMoi, setCoTinMoi] = useState(false)
+  /**
+   * Thẻ vừa được trả lời trong phiên này, theo id tin nhắn.
+   *
+   * Vì sao cần ngoài `meta.answers`: sau khi gửi, giao diện tải lại chi tiết, nhưng bản
+   * tải lại chỉ có dấu vết câu trả lời nếu server kịp ghi vào `meta`. Giữ thêm ở đây để
+   * thẻ chuyển ngay sang chỉ đọc và không cho gửi trùng trong lúc chờ server.
+   */
+  const [traLoiCucBo, setTraLoiCucBo] = useState<ReadonlyMap<string, ClarificationAnswer[]>>(new Map())
 
   const cuonRef = useRef<HTMLDivElement>(null)
   const demSuKien = useRef(0)
+  const oGanDayRef = useRef(true)
 
   /** Tải danh sách cuộc trao đổi; chọn cuộc mới nhất nếu chưa chọn gì. */
   useEffect(() => {
@@ -125,6 +163,11 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
       cancelled = true
     }
   }, [companyId, t])
+
+  /** Đổi cuộc thì bỏ dấu vết câu trả lời của cuộc trước để không hiện nhầm trạng thái. */
+  useEffect(() => {
+    setTraLoiCucBo(new Map())
+  }, [dangChon])
 
   /** Tải chi tiết cuộc đang chọn. */
   const taiChiTiet = useCallback(async (conversationId: string) => {
@@ -175,11 +218,52 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
     return dong
   }, [dangChon, taiChiTiet, t])
 
-  /** Tự cuộn xuống cuối khi có nội dung mới. */
+  const idDangMo = chiTiet?.conversation.id ?? null
+
+  /**
+   * Cuộn xuống đáy ngay khi mở một cuộc khác.
+   *
+   * Vì sao `useLayoutEffect` chứ không `useEffect`: cuộn phải xong TRƯỚC khi trình duyệt
+   * vẽ khung hình đầu, nếu không người dùng thấy tin nhắn nhảy từ trên xuống. Chỉ phụ
+   * thuộc id cuộc đang mở để bản tải lại giữa lượt chạy (cùng cuộc) không kéo khung nhìn
+   * xuống khi người dùng đang đọc tin cũ.
+   */
+  useLayoutEffect(() => {
+    const khung = cuonRef.current
+    if (!khung) return
+    khung.scrollTop = khung.scrollHeight
+    oGanDayRef.current = true
+    setCoTinMoi(false)
+  }, [idDangMo])
+
+  /** Có nội dung mới: chỉ tự cuộn khi người dùng đang ở gần đáy, nếu không thì báo có tin. */
   useEffect(() => {
     const khung = cuonRef.current
-    if (khung) khung.scrollTop = khung.scrollHeight
+    if (!khung) return
+    if (oGanDayRef.current) {
+      khung.scrollTop = khung.scrollHeight
+    } else {
+      setCoTinMoi(true)
+    }
   }, [chiTiet?.messages.length, suKien.length])
+
+  /** Ghi nhớ người dùng đang ở đâu để quyết định có tự cuộn hay không. */
+  function khiCuon(): void {
+    const khung = cuonRef.current
+    if (!khung) return
+    const cachDay = khung.scrollHeight - khung.scrollTop - khung.clientHeight
+    const ganDay = cachDay <= NGUONG_GAN_DAY
+    oGanDayRef.current = ganDay
+    if (ganDay) setCoTinMoi(false)
+  }
+
+  function xuongDay(hanhVi: ScrollBehavior = 'smooth'): void {
+    const khung = cuonRef.current
+    if (!khung) return
+    khung.scrollTo({ top: khung.scrollHeight, behavior: hanhVi })
+    oGanDayRef.current = true
+    setCoTinMoi(false)
+  }
 
   async function taoCuocMoi(): Promise<void> {
     setLoi(null)
@@ -192,15 +276,14 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
     }
   }
 
-  async function gui(): Promise<void> {
-    const content = noiDung.trim()
-    if (content.length === 0 || !dangChon) return
+  /** Gửi một lượt tin; trả về `true` khi server nhận. `answers` chỉ có khi gửi từ thẻ chọn. */
+  async function guiNoiDung(content: string, answers?: ClarificationAnswer[]): Promise<boolean> {
+    if (!dangChon || content.trim().length === 0) return false
     setLoi(null)
     setBaoKetQua(null)
     setDangGui(true)
-    setNoiDung('')
     try {
-      const ketQua = await api.sendMessage(dangChon, { content })
+      const ketQua = await api.sendMessage(dangChon, answers ? { content, answers } : { content })
       setBaoKetQua(
         ketQua.briefComplete
           ? t('chat.briefCompleteHint')
@@ -209,12 +292,48 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
             }),
       )
       await taiChiTiet(dangChon)
+      return true
     } catch (error) {
       setLoi(error instanceof ApiError ? error.message : t('chat.errorSendMessage'))
-      setNoiDung(content)
+      return false
     } finally {
       setDangGui(false)
     }
+  }
+
+  async function gui(): Promise<void> {
+    const content = noiDung.trim()
+    if (content.length === 0) return
+    // Xoá ô nhập trước khi gửi để bấm gửi lần nữa không tạo tin trùng; hỏng thì khôi phục.
+    setNoiDung('')
+    const thanhCong = await guiNoiDung(content)
+    if (!thanhCong) setNoiDung(content)
+  }
+
+  /** Gửi câu trả lời của thẻ chọn: kèm bản chữ để đọc lại, và `answers` để server điền brief. */
+  async function guiCauTraLoi(
+    messageId: string,
+    clarify: ClarificationRequest,
+    answers: ClarificationAnswer[],
+  ): Promise<void> {
+    const content = dungNoiDungTraLoi(clarify, answers, t)
+    if (content.trim().length === 0) return
+    const thanhCong = await guiNoiDung(content, answers)
+    if (thanhCong) {
+      setTraLoiCucBo((truoc) => {
+        const sau = new Map(truoc)
+        sau.set(messageId, answers)
+        return sau
+      })
+    }
+  }
+
+  /** Bỏ qua thẻ chọn: gửi nội dung đã gõ ở ô nhập, hoặc một câu báo sẽ trả lời tự do. */
+  async function boQuaThe(): Promise<void> {
+    const tuNhap = noiDung.trim()
+    if (tuNhap.length > 0) setNoiDung('')
+    const thanhCong = await guiNoiDung(tuNhap.length > 0 ? tuNhap : t('chat.skipAnswersMessage'))
+    if (!thanhCong && tuNhap.length > 0) setNoiDung(tuNhap)
   }
 
   async function chayBuoc(buoc: 'plan' | 'run' | 'report'): Promise<void> {
@@ -241,6 +360,36 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
     }
   }
 
+  /**
+   * Với mỗi thẻ chọn: đã được trả lời chưa, và còn dùng được không.
+   *
+   * Duyệt lịch sử theo thứ tự vì thẻ thuộc về tin nhắn HỎI, còn câu trả lời nằm ở tin nhắn
+   * người dùng kế tiếp. Thẻ bị bỏ qua bằng chữ tự do cũng tính là đã dùng: cho gửi lại nữa
+   * sẽ tạo hai câu trả lời cho cùng một câu hỏi.
+   */
+  const theTraLoi = useMemo(() => {
+    const ketQua = new Map<string, TrangThaiThe>()
+    let dangCho: string[] = []
+    for (const message of chiTiet?.messages ?? []) {
+      if (message.clarify) {
+        dangCho.push(message.id)
+        ketQua.set(message.id, { disabled: false })
+        continue
+      }
+      if (message.authorKind !== 'user') continue
+      const traLoi = docCauTraLoi(message.meta)
+      const cuoi = dangCho.pop()
+      if (cuoi !== undefined) {
+        ketQua.set(cuoi, traLoi ? { daTraLoi: traLoi, disabled: true } : { disabled: true })
+      }
+      // Thẻ nào còn treo phía trước cũng đã cũ: người dùng đã trả lời ở chỗ khác.
+      for (const id of dangCho) ketQua.set(id, { disabled: true })
+      dangCho = []
+    }
+    for (const [id, traLoi] of traLoiCucBo) ketQua.set(id, { daTraLoi: [...traLoi], disabled: true })
+    return ketQua
+  }, [chiTiet, traLoiCucBo])
+
   if (dangTai) {
     return (
       <Trang>
@@ -250,22 +399,131 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   }
 
   return (
-    <Trang rong>
-      <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: 16, alignItems: 'start' }}>
-        {/* Danh sách cuộc trao đổi */}
-        <Card
-          tieuDe={t('chat.conversations')}
-          hanhDong={
+    <Trang rong caoDay>
+      {/*
+        Bố cục cao-đầy-đủ: `.the--cao-day` là flex column và CHỈ thẻ chat được là `.card`
+        con trực tiếp để nhận `flex: 1`. Phần đầu được bọc thêm một `div` để nó không khớp
+        `.the--cao-day > .card` — nếu khớp, nó cũng giãn hết chiều cao và đẩy khung nhập ra
+        ngoài màn hình, đúng lỗi đang sửa.
+      */}
+      <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {loi ? <ThongBao loai="loi">{loi}</ThongBao> : null}
+        {baoKetQua ? <ThongBao loai="thong-tin">{baoKetQua}</ThongBao> : null}
+
+        {chiTiet ? (
+          <Card>
+            <div className="hang" style={{ justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontWeight: 650 }}>{chiTiet.conversation.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
+                  {t('chat.metaLine', {
+                    phase: t(KHOA_GIAI_DOAN[chiTiet.conversation.phase]),
+                    cost: formatCurrencyUsd(chiTiet.costUsd),
+                    runs: chiTiet.usage.runs,
+                  })}
+                </div>
+              </div>
+              <div className="hang">
+                <Nut
+                  nho
+                  bien="phu"
+                  dangTai={dangChay === 'plan'}
+                  onClick={() => void chayBuoc('plan')}
+                  title={t('chat.planHint')}
+                >
+                  {t('chat.plan')}
+                </Nut>
+                <Nut
+                  nho
+                  bien="phu"
+                  dangTai={dangChay === 'run'}
+                  disabled={chiTiet.tasks.length === 0}
+                  onClick={() => void chayBuoc('run')}
+                  title={chiTiet.tasks.length === 0 ? t('chat.runNeedsPlan') : t('chat.runHint')}
+                >
+                  {t('chat.run')}
+                </Nut>
+                <Nut
+                  nho
+                  dangTai={dangChay === 'report'}
+                  disabled={chiTiet.tasks.length === 0}
+                  onClick={() => void chayBuoc('report')}
+                  title={t('chat.reportHint')}
+                >
+                  {t('chat.report')}
+                </Nut>
+              </div>
+            </div>
+
+            {chiTiet.conversation.briefComplete ? null : (
+              <div style={{ marginTop: 12 }}>
+                <ThongBao loai="canh-bao">
+                  {t('chat.briefMissingPrefix')}{' '}
+                  <strong>
+                    {chiTiet.conversation.missingFields
+                      .map((field) => nhanTruongBrief(field, t))
+                      .join(', ') || t('chat.briefMissingUnknown')}
+                  </strong>
+                  {t('chat.briefMissingSuffix')}
+                </ThongBao>
+              </div>
+            )}
+          </Card>
+        ) : null}
+      </div>
+
+      {/* Bảng kế hoạch cũng là phần đầu: cao tối đa rồi tự cuộn, không được chiếm chỗ chat. */}
+      {chiTiet && chiTiet.tasks.length > 0 ? (
+        <div style={{ flex: '0 0 auto', maxHeight: 'min(35vh, 320px)', overflowY: 'auto' }}>
+          <Card tieuDe={t('chat.planTitle')} phu={t('chat.planSubtitle')}>
+            <table className="bang">
+              <thead>
+                <tr>
+                  <th>{t('chat.tableTask')}</th>
+                  <th>{t('chat.tableSpecialist')}</th>
+                  <th>{t('chat.tableDependsOn')}</th>
+                  <th>{t('common.status')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chiTiet.tasks.map((task: TaskView) => {
+                  const nhan = nhanTrangThai(task.status, t)
+                  return (
+                    <tr key={task.id}>
+                      <td>{task.title}</td>
+                      <td>{task.assigneeName ?? task.assigneeRole ?? KHONG_CO}</td>
+                      <td>{task.dependsOn.length > 0 ? task.dependsOn.length : KHONG_CO}</td>
+                      <td>
+                        <Nhan loai={nhan.loai}>{nhan.nhan}</Nhan>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      ) : null}
+
+      {/*
+        Thẻ chat là `.card` con trực tiếp DUY NHẤT của `.the--cao-day`, nhờ đó nhận
+        `flex: 1` rồi truyền chiều cao xuống `.chat` → `.chat__khung` (vùng cuộn duy nhất)
+        → `.chat__nhap` luôn nằm trong tầm nhìn.
+      */}
+      <div className="card" style={{ flexDirection: 'row', gap: 16 }}>
+        {/* Danh sách cuộc trao đổi: cột trái, tự cuộn khi có nhiều cuộc. */}
+        <div className="cot" style={{ flex: '0 0 250px', minWidth: 0, minHeight: 0, gap: 8 }}>
+          <div className="hang" style={{ justifyContent: 'space-between' }}>
+            <div style={{ fontWeight: 650 }}>{t('chat.conversations')}</div>
             <Nut nho bien="phu" onClick={() => void taoCuocMoi()} title={t('chat.newConversation')}>
               +
             </Nut>
-          }
-        >
-          {danhSach.length === 0 ? (
-            <p style={{ color: 'var(--mau-chu-mo)', fontSize: 14, margin: 0 }}>{t('chat.emptyList')}</p>
-          ) : (
-            <div className="cot" style={{ gap: 4 }}>
-              {danhSach.map((cuoc) => (
+          </div>
+          <div className="cot" style={{ flex: 1, minHeight: 0, overflowY: 'auto', gap: 4 }}>
+            {danhSach.length === 0 ? (
+              <p style={{ color: 'var(--mau-chu-mo)', fontSize: 14, margin: 0 }}>{t('chat.emptyList')}</p>
+            ) : (
+              danhSach.map((cuoc) => (
                 <button
                   key={cuoc.id}
                   type="button"
@@ -281,146 +539,78 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                     })}
                   </div>
                 </button>
-              ))}
-            </div>
-          )}
-        </Card>
+              ))
+            )}
+          </div>
+        </div>
 
-        {/* Khung chat */}
-        <div className="cot">
-          {loi ? <ThongBao loai="loi">{loi}</ThongBao> : null}
-          {baoKetQua ? <ThongBao loai="thong-tin">{baoKetQua}</ThongBao> : null}
-
-          {chiTiet ? (
-            <>
-              <Card>
-                <div className="hang" style={{ justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontWeight: 650 }}>{chiTiet.conversation.title}</div>
-                    <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
-                      {t('chat.metaLine', {
-                        phase: t(KHOA_GIAI_DOAN[chiTiet.conversation.phase]),
-                        cost: formatCurrencyUsd(chiTiet.costUsd),
-                        runs: chiTiet.usage.runs,
-                      })}
-                    </div>
-                  </div>
-                  <div className="hang">
-                    <Nut
-                      nho
-                      bien="phu"
-                      dangTai={dangChay === 'plan'}
-                      onClick={() => void chayBuoc('plan')}
-                      title={t('chat.planHint')}
-                    >
-                      {t('chat.plan')}
-                    </Nut>
-                    <Nut
-                      nho
-                      bien="phu"
-                      dangTai={dangChay === 'run'}
-                      disabled={chiTiet.tasks.length === 0}
-                      onClick={() => void chayBuoc('run')}
-                      title={chiTiet.tasks.length === 0 ? t('chat.runNeedsPlan') : t('chat.runHint')}
-                    >
-                      {t('chat.run')}
-                    </Nut>
-                    <Nut
-                      nho
-                      dangTai={dangChay === 'report'}
-                      disabled={chiTiet.tasks.length === 0}
-                      onClick={() => void chayBuoc('report')}
-                      title={t('chat.reportHint')}
-                    >
-                      {t('chat.report')}
-                    </Nut>
-                  </div>
-                </div>
-
-                {chiTiet.conversation.briefComplete ? null : (
-                  <div style={{ marginTop: 12 }}>
-                    <ThongBao loai="canh-bao">
-                      {t('chat.briefMissingPrefix')}{' '}
-                      <strong>
-                        {chiTiet.conversation.missingFields
-                          .map((field) => nhanTruongBrief(field, t))
-                          .join(', ') || t('chat.briefMissingUnknown')}
-                      </strong>
-                      {t('chat.briefMissingSuffix')}
-                    </ThongBao>
-                  </div>
-                )}
-              </Card>
-
-              {chiTiet.tasks.length > 0 ? (
-                <Card tieuDe={t('chat.planTitle')} phu={t('chat.planSubtitle')}>
-                  <table className="bang">
-                    <thead>
-                      <tr>
-                        <th>{t('chat.tableTask')}</th>
-                        <th>{t('chat.tableSpecialist')}</th>
-                        <th>{t('chat.tableDependsOn')}</th>
-                        <th>{t('common.status')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {chiTiet.tasks.map((task: TaskView) => {
-                        const nhan = nhanTrangThai(task.status, t)
-                        return (
-                          <tr key={task.id}>
-                            <td>{task.title}</td>
-                            <td>{task.assigneeName ?? task.assigneeRole ?? KHONG_CO}</td>
-                            <td>{task.dependsOn.length > 0 ? task.dependsOn.length : KHONG_CO}</td>
-                            <td>
-                              <Nhan loai={nhan.loai}>{nhan.nhan}</Nhan>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </Card>
+        {chiTiet ? (
+          <div className="chat" style={{ minWidth: 0 }}>
+            <div className="chat__khung" ref={cuonRef} onScroll={khiCuon}>
+              {chiTiet.messages.length === 0 && suKien.length === 0 ? (
+                <div className="trong">{t('chat.emptyChat')}</div>
               ) : null}
 
-              <div className="card">
-                <div className="chat">
-                  <div className="chat__khung" ref={cuonRef}>
-                    {chiTiet.messages.length === 0 && suKien.length === 0 ? (
-                      <div className="trong">{t('chat.emptyChat')}</div>
+              {chiTiet.messages.map((message: MessageView) => {
+                const clarify = message.clarify
+                const trangThai = theTraLoi.get(message.id)
+                return (
+                  <Fragment key={message.id}>
+                    <TinNhan message={message} />
+                    {clarify ? (
+                      <TheChonPhuongAn
+                        clarify={clarify}
+                        disabled={(trangThai?.disabled ?? false) || dangGui}
+                        daTraLoi={trangThai?.daTraLoi}
+                        onTraLoi={(answers) => void guiCauTraLoi(message.id, clarify, answers)}
+                        onBoQua={() => void boQuaThe()}
+                      />
                     ) : null}
+                  </Fragment>
+                )
+              })}
 
-                    {chiTiet.messages.map((message: MessageView) => (
-                      <TinNhan key={message.id} message={message} />
-                    ))}
-
-                    {suKien.map((dong) => (
-                      <div key={dong.id} className="su-kien">
-                        {dong.text}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="chat__nhap">
-                    <OVanBan
-                      value={noiDung}
-                      onChange={setNoiDung}
-                      rows={2}
-                      disabled={dangGui}
-                      placeholder={t('chat.placeholder')}
-                    />
-                    <Nut dangTai={dangGui} onClick={() => void gui()} disabled={noiDung.trim().length === 0}>
-                      {t('chat.send')}
-                    </Nut>
-                  </div>
+              {suKien.map((dong) => (
+                <div key={dong.id} className="su-kien">
+                  {dong.text}
                 </div>
-              </div>
-            </>
-          ) : (
-            <Card>
-              <div className="trong">{t('chat.chooseConversation')}</div>
-            </Card>
-          )}
-        </div>
+              ))}
+
+              {/*
+                Nút nằm trong chính vùng cuộn và dùng `position: sticky; bottom` để luôn
+                nổi ở đáy tầm nhìn khi người dùng đã cuộn lên — không cần thêm CSS, và chỉ
+                hiện khi thật sự có tin mới.
+              */}
+              {coTinMoi ? (
+                <button
+                  type="button"
+                  className="btn btn--phu btn--nho"
+                  style={{ position: 'sticky', bottom: 8, alignSelf: 'center' }}
+                  onClick={() => xuongDay()}
+                >
+                  {t('chat.scrollToLatest')}
+                </button>
+              ) : null}
+            </div>
+
+            <div className="chat__nhap">
+              <OVanBan
+                value={noiDung}
+                onChange={setNoiDung}
+                rows={2}
+                disabled={dangGui}
+                placeholder={t('chat.placeholder')}
+              />
+              <Nut dangTai={dangGui} onClick={() => void gui()} disabled={noiDung.trim().length === 0}>
+                {t('chat.send')}
+              </Nut>
+            </div>
+          </div>
+        ) : (
+          <div className="trong" style={{ flex: 1 }}>
+            {t('chat.chooseConversation')}
+          </div>
+        )}
       </div>
     </Trang>
   )
@@ -555,4 +745,59 @@ export function moTaSuKien(event: StreamEvent, t: Translate): string | null {
 function nhanTruongBrief(field: string, t: Translate): string {
   const khoa = KHOA_TRUONG_BRIEF[field]
   return khoa ? t(khoa) : field
+}
+
+/**
+ * Đọc câu trả lời có cấu trúc từ `meta` của tin nhắn người dùng.
+ *
+ * Vì sao phải kiểm tra hình dạng: `meta` là `unknown` và còn được dùng cho việc khác, nên
+ * đọc thẳng `meta.answers` rồi tin đó là mảng đúng kiểu sẽ vỡ im lặng mỗi khi hình dạng đổi.
+ */
+function docCauTraLoi(meta: unknown): ClarificationAnswer[] | undefined {
+  if (typeof meta !== 'object' || meta === null) return undefined
+  const answers = (meta as { answers?: unknown }).answers
+  if (!Array.isArray(answers) || answers.length === 0) return undefined
+  const ketQua: ClarificationAnswer[] = []
+  for (const item of answers) {
+    if (typeof item !== 'object' || item === null) continue
+    const ban = item as { field?: unknown; optionIds?: unknown; custom?: unknown }
+    if (typeof ban.field !== 'string' || ban.field.length === 0) continue
+    const optionIds = Array.isArray(ban.optionIds)
+      ? ban.optionIds.filter((id): id is string => typeof id === 'string')
+      : []
+    const custom = typeof ban.custom === 'string' && ban.custom.length > 0 ? ban.custom : undefined
+    ketQua.push(custom === undefined ? { field: ban.field, optionIds } : { field: ban.field, optionIds, custom })
+  }
+  return ketQua.length > 0 ? ketQua : undefined
+}
+
+/**
+ * Dựng bản chữ người đọc được cho lượt gửi câu trả lời.
+ *
+ * Vì sao vẫn cần bản chữ khi đã có `answers`: `answers` là dữ liệu để server điền brief tất
+ * định, còn lịch sử chat là thứ người dùng đọc lại. Nhãn câu hỏi và phương án lấy từ chính
+ * thẻ (đã ở ngôn ngữ của cuộc trao đổi lúc hỏi), không hard-code ở đây.
+ */
+function dungNoiDungTraLoi(
+  clarify: ClarificationRequest,
+  answers: readonly ClarificationAnswer[],
+  t: Translate,
+): string {
+  // Chú thích kiểu tuple tường minh: nếu để TypeScript suy từ mảng literal, `new Map` sẽ
+  // nhận `(string | ClarificationQuestion)[][]` và báo lỗi kiểu.
+  const cauHoiTheoField = new Map<string, ClarificationRequest['questions'][number]>(
+    clarify.questions.map((cauHoi): [string, ClarificationRequest['questions'][number]] => [cauHoi.field, cauHoi]),
+  )
+  return answers
+    .map((traLoi) => {
+      const cauHoi = cauHoiTheoField.get(traLoi.field)
+      const nhan = traLoi.optionIds
+        .map((id) => cauHoi?.options.find((option) => option.id === id)?.label)
+        .filter((value): value is string => value !== undefined)
+      const dong = [cauHoi?.question ?? traLoi.field, nhan.join(', ')]
+        .filter((phan) => phan.length > 0)
+        .join(': ')
+      return traLoi.custom ? `${dong}\n${t('clarify.customLabel')}: ${traLoi.custom}` : dong
+    })
+    .join('\n')
 }

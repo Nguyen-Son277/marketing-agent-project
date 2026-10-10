@@ -18,7 +18,6 @@ import type { ChatAdapter } from '@marketing-agent/agent-runtime'
 import { buildToolRegistry } from '@marketing-agent/tools'
 import {
   checkBrief,
-  clarifyingQuestions,
   composeReport,
   dispatchPlan,
   mechanicalChecks,
@@ -122,12 +121,6 @@ describe('BriefGate', () => {
     expect(check.complete).toBe(false)
     // `objective` dài 21 ký tự nên hợp lệ; chỉ `kpi` ("ok") bị coi là chưa điền.
     expect(check.missing).toEqual(['kpi'])
-  })
-
-  it('sinh tối đa 3 câu hỏi, ưu tiên trường thiếu đầu tiên', () => {
-    const questions = clarifyingQuestions(['objective', 'kpi', 'scope', 'deadline', 'budget'])
-    expect(questions).toHaveLength(3)
-    expect(questions[0]).toContain('Mục tiêu')
   })
 
   it('hỏi lại thay vì lập kế hoạch khi brief còn thiếu', async () => {
