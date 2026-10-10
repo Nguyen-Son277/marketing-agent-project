@@ -276,12 +276,14 @@ export function settingsRoutes() {
           const companyId = request.params.companyId!
           const provider = requireOwnedProvider(repos, companyId, request.params.providerId!)
           const input = parseOrThrow(fetchModelsSchema, await request.body(), 'danh sách model')
-          if (input.keyId && !repos.llm.findProviderKey(input.keyId)) throw notFound('Không tìm thấy khoá API')
+          // `requireOwnedKey` buộc khoá phải thuộc ĐÚNG provider này. Nếu chỉ tra theo id,
+          // một công ty có thể mượn khoá của công ty khác để gọi URL của mình.
+          const chosenKey = input.keyId ? requireOwnedKey(repos, provider, input.keyId) : undefined
           const result = await probeProvider({
             baseUrl: provider.baseUrl,
             kind: provider.kind,
             timeoutMs: 15_000,
-            ...(input.keyId ? { apiKey: resolveKeyValue(repos, input.keyId) } : resolveProbeKey(repos, provider)),
+            ...(chosenKey ? { apiKey: resolveKeyValue(repos, chosenKey.id) } : resolveProbeKey(repos, provider)),
           })
           const existing = new Set(
             repos.llm

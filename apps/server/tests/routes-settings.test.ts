@@ -205,6 +205,32 @@ describe('settings routes', () => {
     ).toEqual(['alpha'])
   })
 
+  it('không cho dùng khoá của provider khác để fetch model', async () => {
+    const { ownerCookie, company } = await tenant(ctx, 'set-key-scope@example.com', 'Settings Key Scope')
+    const base = `/api/companies/${company.id}`
+    const first = await ctx.client.request('POST', `${base}/providers`, {
+      headers: ownerCookie,
+      body: {
+        name: 'Provider A',
+        kind: 'openai_compatible',
+        baseUrl: 'http://127.0.0.1:1/v1',
+        apiKey: 'sk-a-1234567890',
+      },
+    })
+    const firstProvider = first.json<{ provider: { keys: { id: string }[] } }>().provider
+    const second = await ctx.client.request('POST', `${base}/providers`, {
+      headers: ownerCookie,
+      body: { name: 'Provider B', kind: 'openai_compatible', baseUrl: 'http://127.0.0.1:1/v1' },
+    })
+    const secondId = second.json<{ provider: { id: string } }>().provider.id
+
+    const crossed = await ctx.client.request('POST', `${base}/providers/${secondId}/fetch-models`, {
+      headers: ownerCookie,
+      body: { keyId: firstProvider.keys[0]!.id },
+    })
+    expect(crossed.status).toBe(404)
+  })
+
   it('không bao giờ trả khoá API đã mã hoá', async () => {
     const { ownerCookie, company } = await tenant(ctx, 'set-secret@example.com', 'Settings Secret')
     await ctx.client.request('POST', `/api/companies/${company.id}/providers`, {

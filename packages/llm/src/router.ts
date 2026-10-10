@@ -117,11 +117,11 @@ export class ModelRouter {
       out.push({ model, source, reason })
     }
 
-    if (agent.preset.modelFk) {
-      const explicit = this.registry.findModel(agent.preset.modelFk)
-      if (explicit) {
-        push(explicit, 'preset', `Preset của ${agent.displayName} chỉ định model ${explicit.label}`)
-      }
+    // Model chính: chỉ định trong preset, nếu không có (hoặc đã bị tắt) thì route theo
+    // tier hiện tại. Không có cả hai thì chuỗi rỗng và `chooseForAgent` báo cần cấu hình.
+    const explicit = agent.preset.modelFk ? this.registry.findModel(agent.preset.modelFk) : undefined
+    if (explicit && explicit.enabled) {
+      push(explicit, 'preset', `Preset của ${agent.displayName} chỉ định model ${explicit.label}`)
     } else {
       const routed = this.routeModel(agent, agent.preset.tier)
       if (routed) push(routed, 'route', `Route tier ${agent.preset.tier} của ${agent.role}`)
