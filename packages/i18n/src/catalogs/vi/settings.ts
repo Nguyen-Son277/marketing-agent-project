@@ -38,6 +38,9 @@ export const vi_settings = {
   'settings.providers.test': 'Kiểm tra',
   'settings.providers.testResult': '{{message}} · {{ms}} ms',
   'settings.providers.testModelsSeen': '· thấy {{count}} model',
+  // Nhãn nút mở hộp thoại ở đầu mục. Tách khỏi `form.createTitle` vì hai chỗ có thể đổi
+  // câu chữ vào lúc khác nhau: một cái là hành động, một cái là tiêu đề trong hộp thoại.
+  'settings.providers.add': 'Thêm nhà cung cấp',
   'settings.providers.form.editTitle': 'Sửa nhà cung cấp',
   'settings.providers.form.createTitle': 'Thêm nhà cung cấp',
   'settings.providers.form.namePlaceholder': 'Tên, ví dụ: Gateway nội bộ',
@@ -225,4 +228,36 @@ export const vi_settings = {
   'settings.limits.submit': 'Lưu giới hạn',
   'settings.limits.saved': 'Đã lưu giới hạn.',
   'settings.limits.saveFailed': 'Không lưu được giới hạn.',
+
+  /* --------------------------- hộp thoại lấy model (đặt ở mục Model) */
+  // Khoá riêng, KHÔNG dùng lại `settings.providers.fetch.*`: khối fetch cũ nằm trong bảng
+  // khoá của nhà cung cấp sẽ được gỡ, còn hộp thoại này là nơi duy nhất còn lại.
+  'settings.models.fetch.open': 'Lấy danh sách model',
+  'settings.models.fetch.title': 'Lấy danh sách model từ nhà cung cấp',
+  'settings.models.fetch.hint':
+    'Gọi /models bằng khoá đã chọn để xem nhà cung cấp có những model nào. Chưa lưu gì cho tới khi bạn chọn.',
+  'settings.models.fetch.providerLabel': 'Nhà cung cấp',
+  'settings.models.fetch.keyLabel': 'Dùng khoá',
+  'settings.models.fetch.keyAuto': 'Tự dùng khoá đầu tiên dùng được',
+  'settings.models.fetch.keyHint':
+    'Để trống nghĩa là server tự chọn khoá đầu tiên dùng được của nhà cung cấp này.',
+  'settings.models.fetch.action': 'Lấy danh sách',
+  'settings.models.fetch.result': '{{message}} · {{ms}} ms',
+  'settings.models.fetch.failed': 'Không lấy được danh sách model.',
+  'settings.models.fetch.searchPlaceholder': 'Tìm theo mã hoặc tên model…',
+  'settings.models.fetch.onlyNew': 'Chỉ hiện model chưa thêm',
+  'settings.models.fetch.selectVisible': 'Chọn tất cả đang hiện',
+  'settings.models.fetch.clearVisible': 'Bỏ chọn tất cả đang hiện',
+  'settings.models.fetch.showing': 'Đang hiện {{hien}}/{{tong}} model',
+  'settings.models.fetch.alreadyAdded': 'Đã thêm',
+  'settings.models.fetch.noMatch': 'Không có model nào khớp bộ lọc hiện tại.',
+  'settings.models.fetch.noProviders':
+    'Chưa có nhà cung cấp nào. Thêm nhà cung cấp ở mục Nhà cung cấp trước.',
+  'settings.models.fetch.selectedCount': 'Đã chọn {{n}} model',
+  'settings.models.fetch.import': 'Thêm {{n}} model',
+  'settings.models.fetch.imported': 'Đã thêm {{created}} model, bỏ qua {{skipped}} model đã có.',
+  'settings.models.fetch.importFailed': 'Không thêm được model đã chọn.',
+  // Tiêu đề cho hộp thoại xác nhận thay `window.confirm` ở mục Model.
+  'settings.models.deleteTitle': 'Xoá model',
+  'settings.models.purgeTitle': 'Xoá model không dùng',
 } as const

@@ -38,6 +38,7 @@ export const en_settings = {
   'settings.providers.test': 'Test',
   'settings.providers.testResult': '{{message}} · {{ms}} ms',
   'settings.providers.testModelsSeen': '· saw {{count}} models',
+  'settings.providers.add': 'Add provider',
   'settings.providers.form.editTitle': 'Edit provider',
   'settings.providers.form.createTitle': 'Add provider',
   'settings.providers.form.namePlaceholder': 'Name, e.g. Internal gateway',
@@ -218,4 +219,34 @@ export const en_settings = {
   'settings.limits.submit': 'Save limits',
   'settings.limits.saved': 'Limits saved.',
   'settings.limits.saveFailed': 'Could not save the limits.',
+
+  /* -------------------------------- fetch-model dialog (Models section) */
+  // Dedicated keys rather than `settings.providers.fetch.*`: the old fetch block inside a
+  // provider key table is being removed, and this dialog is the only place left.
+  'settings.models.fetch.open': 'Fetch the model list',
+  'settings.models.fetch.title': 'Fetch the model list from the provider',
+  'settings.models.fetch.hint':
+    'Calls /models with the chosen key to show which models the provider offers. Nothing is saved until you pick.',
+  'settings.models.fetch.providerLabel': 'Provider',
+  'settings.models.fetch.keyLabel': 'Use key',
+  'settings.models.fetch.keyAuto': 'Use the first available key automatically',
+  'settings.models.fetch.keyHint':
+    'Leave this empty and the server uses the first available key of the provider.',
+  'settings.models.fetch.action': 'Fetch list',
+  'settings.models.fetch.result': '{{message}} · {{ms}} ms',
+  'settings.models.fetch.failed': 'Could not fetch the model list.',
+  'settings.models.fetch.searchPlaceholder': 'Search by model ID or name…',
+  'settings.models.fetch.onlyNew': 'Only show models not added yet',
+  'settings.models.fetch.selectVisible': 'Select all shown',
+  'settings.models.fetch.clearVisible': 'Clear all shown',
+  'settings.models.fetch.showing': 'Showing {{hien}}/{{tong}} models',
+  'settings.models.fetch.alreadyAdded': 'Added',
+  'settings.models.fetch.noMatch': 'No models match the current filter.',
+  'settings.models.fetch.noProviders': 'No providers yet. Add a provider in the Providers section first.',
+  'settings.models.fetch.selectedCount': '{{n}} models selected',
+  'settings.models.fetch.import': 'Add {{n}} models',
+  'settings.models.fetch.imported': 'Added {{created}} models, skipped {{skipped}} already present.',
+  'settings.models.fetch.importFailed': 'Could not add the selected models.',
+  'settings.models.deleteTitle': 'Delete model',
+  'settings.models.purgeTitle': 'Delete unused models',
 } as const

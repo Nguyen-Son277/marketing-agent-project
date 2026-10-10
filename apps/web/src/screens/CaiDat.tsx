@@ -9,7 +9,6 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type {
-  FetchedModelView,
   IntegrationKind,
   IntegrationTestResponse,
   IntegrationView,
@@ -26,6 +25,8 @@ import type { MessageKey } from '@marketing-agent/i18n'
 import { api, ApiError } from '../lib/api.ts'
 import { useI18n } from '../lib/i18n.tsx'
 import { useSession } from '../lib/session.tsx'
+import { HopThoai, HopThoaiXacNhan } from '../components/HopThoai.tsx'
+import { HopThoaiChonModel } from '../components/HopThoaiChonModel.tsx'
 import {
   Card,
   DangTai,
@@ -137,8 +138,21 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
   /** Provider đang mở bảng quản lý khoá/model. Một lúc chỉ mở một cái cho dễ đọc. */
   const [moProvider, setMoProvider] = useState<string | null>(null)
 
+  /**
+   * Hộp thoại thêm/sửa provider. Một hộp thoại phục vụ cả hai chế độ vì biểu mẫu gần như
+   * giống hệt nhau; tách làm hai thì mỗi lần thêm một trường phải sửa hai chỗ và chắc chắn
+   * sẽ có lúc lệch.
+   */
+  const [hopMo, setHopMo] = useState(false)
+  /** Provider đang chờ xác nhận xoá; `null` nghĩa là không có hộp thoại xác nhận nào. */
+  const [choXoa, setChoXoa] = useState<ProviderView | null>(null)
+  const [dangXoa, setDangXoa] = useState(false)
+
   const [dangLuu, setDangLuu] = useState(false)
+  /** Lỗi của biểu mẫu trong hộp thoại — phải hiện ngay trong hộp thoại, xem chú thích dưới. */
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
+  /** Lỗi của thao tác xoá — xảy ra ngoài hộp thoại nên hiện ở đầu mục. */
+  const [loiXoa, setLoiXoa] = useState<string | null>(null)
   const [thongBao, setThongBao] = useState<string | null>(null)
 
   const [dangTest, setDangTest] = useState<string | null>(null)
@@ -177,9 +191,19 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     setApiKeyLabel('')
     setBat(provider.enabled)
     setLoiLuu(null)
-    setThongBao(null)
+    // `setThongBao` cố ý KHÔNG xoá ở đây: thông báo thành công của lần lưu trước phải còn
+    // đọc được, còn dữ liệu biểu mẫu thì đã được nạp đè bằng dữ liệu của provider này.
+    setHopMo(true)
   }
 
+  /** Mở hộp thoại ở chế độ tạo mới, luôn bắt đầu từ biểu mẫu trắng. */
+  function moTaoMoi(): void {
+    xoaBieuMau()
+    setThongBao(null)
+    setHopMo(true)
+  }
+
+  /** Xoá trắng biểu mẫu nhưng không đóng hộp thoại và không đụng tới thông báo. */
   function xoaBieuMau(): void {
     setSuaId(null)
     setTen('')
@@ -189,21 +213,39 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     setApiKeyLabel('')
     setBat(true)
     setLoiLuu(null)
-    setThongBao(null)
   }
 
-  /** Xoá provider kéo theo toàn bộ khoá/model và route trỏ tới model của nó. */
-  async function xoaProvider(provider: ProviderView): Promise<void> {
-    if (!window.confirm(t('settings.providers.deleteConfirm', { name: provider.name }))) return
-    setLoiLuu(null)
+  /**
+   * Đóng hộp thoại và xoá sạch biểu mẫu.
+   *
+   * Vì sao phải xoá: trạng thái biểu mẫu sống ngoài hộp thoại, nên nếu chỉ ẩn hộp thoại thì
+   * lần sau bấm "Thêm nhà cung cấp" người dùng thấy nguyên dữ liệu của lần trước và rất dễ
+   * gửi nhầm. Hàm này cũng là `onDong`, nên nó chạy cho cả `Esc` lẫn bấm ra ngoài.
+   */
+  function dongHopThoai(): void {
+    setHopMo(false)
+    xoaBieuMau()
+  }
+
+  /** Xoá provider đang chờ xác nhận; kéo theo toàn bộ khoá/model và route trỏ tới model của nó. */
+  async function xacNhanXoa(): Promise<void> {
+    const provider = choXoa
+    if (!provider) return
+    setLoiXoa(null)
     setThongBao(null)
+    setDangXoa(true)
     try {
       await api.deleteProvider(companyId, provider.id)
       if (moProvider === provider.id) setMoProvider(null)
       setThongBao(t('settings.providers.deleted'))
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : t('settings.providers.deleteFailed'))
+      setLoiXoa(error instanceof ApiError ? error.message : t('settings.providers.deleteFailed'))
+    } finally {
+      setDangXoa(false)
+      // Đóng dù thành công hay thất bại: hộp thoại xác nhận chỉ có một câu, không có chỗ
+      // hiện lỗi, mà để nó mở tiếp thì lỗi ở đầu mục bị lớp phủ che.
+      setChoXoa(null)
     }
   }
 
@@ -240,7 +282,9 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
         })
         setThongBao(t('settings.providers.created'))
       }
-      xoaBieuMau()
+      // Đóng hộp thoại sau khi lưu xong: giữ nó mở sẽ khiến người dùng bấm Lưu lần nữa và
+      // tạo bản ghi trùng.
+      dongHopThoai()
       taiLai()
     } catch (error) {
       setLoiLuu(error instanceof ApiError ? error.message : t('settings.providers.saveFailed'))
@@ -274,11 +318,19 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
           <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
         </div>
       ) : null}
-      {loiLuu ? (
+      {loiXoa ? (
         <div style={{ marginBottom: 10 }}>
-          <ThongBao loai="loi">{loiLuu}</ThongBao>
+          <ThongBao loai="loi">{loiXoa}</ThongBao>
         </div>
       ) : null}
+
+      {/* Nút mở hộp thoại đặt ngay trên bảng: mắt đi từ "danh sách" sang "thêm" theo một
+          chiều, thay vì phải cuộn xuống cuối mục như khi biểu mẫu luôn hiện. */}
+      <div className="hang" style={{ marginBottom: 10 }}>
+        <Nut nho onClick={moTaoMoi}>
+          {t('settings.providers.add')}
+        </Nut>
+      </div>
 
       {danhSach && danhSach.length === 0 ? <Trong>{t('settings.providers.empty')}</Trong> : null}
 
@@ -350,7 +402,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
                     <Nut
                       bien="nguy-hiem"
                       nho
-                      onClick={() => void xoaProvider(provider)}
+                      onClick={() => setChoXoa(provider)}
                     >
                       {t('settings.providers.delete')}
                     </Nut>
@@ -388,50 +440,78 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
         ) : null,
       )}
 
-      <h3 className="card__tieu-de" style={{ marginTop: 18 }}>
-        {suaId ? t('settings.providers.form.editTitle') : t('settings.providers.form.createTitle')}
-      </h3>
-      <div className="luoi luoi--2">
-        <ONhap value={ten} onChange={setTen} placeholder={t('settings.providers.form.namePlaceholder')} />
-        <OChon
-          value={kind}
-          onChange={(giaTri) => {
-            if (laProviderKind(giaTri)) setKind(giaTri)
-          }}
-          options={PROVIDER_KINDS.map((item) => ({ value: item, label: NHAN_PROVIDER[item] }))}
-        />
-        <ONhap value={baseUrl} onChange={setBaseUrl} placeholder={t('settings.providers.form.baseUrlPlaceholder')} />
-        {suaId === null ? (
+      {/*
+        Một hộp thoại cho cả tạo mới và sửa: `suaId` quyết định tiêu đề và việc có hiện ô
+        khoá API hay không.
+      */}
+      <HopThoai
+        mo={hopMo}
+        tieuDe={suaId ? t('settings.providers.form.editTitle') : t('settings.providers.form.createTitle')}
+        onDong={dongHopThoai}
+        chanDung={
           <>
-            <ONhap
-              value={apiKeyLabel}
-              onChange={setApiKeyLabel}
-              placeholder={t('settings.providers.keys.labelPlaceholder')}
-            />
-            <ONhap
-              value={apiKey}
-              onChange={setApiKey}
-              type="password"
-              placeholder={t('settings.providers.keys.keyPlaceholder')}
-            />
+            <Nut bien="phu" nho onClick={dongHopThoai} disabled={dangLuu}>
+              {t('common.cancel')}
+            </Nut>
+            <Nut nho onClick={() => void luu()} dangTai={dangLuu}>
+              {suaId ? t('settings.providers.form.submitEdit') : t('settings.providers.form.submitCreate')}
+            </Nut>
           </>
-        ) : null}
-      </div>
-      <label className="hang" style={{ gap: 6, marginTop: 10, fontSize: 14 }}>
-        <input type="checkbox" checked={bat} onChange={(event) => setBat(event.target.checked)} />
-        {t('settings.providers.form.enable')}
-      </label>
-      <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.providers.form.keyNote')}</p>
-      <div className="hang">
-        <Nut onClick={() => void luu()} dangTai={dangLuu}>
-          {suaId ? t('settings.providers.form.submitEdit') : t('settings.providers.form.submitCreate')}
-        </Nut>
-        {suaId ? (
-          <Nut bien="phu" onClick={xoaBieuMau}>
-            {t('settings.providers.form.cancelEdit')}
-          </Nut>
-        ) : null}
-      </div>
+        }
+      >
+        <div className="cot" style={{ gap: 10 }}>
+          <div className="luoi luoi--2">
+            <ONhap value={ten} onChange={setTen} placeholder={t('settings.providers.form.namePlaceholder')} />
+            <OChon
+              value={kind}
+              onChange={(giaTri) => {
+                if (laProviderKind(giaTri)) setKind(giaTri)
+              }}
+              options={PROVIDER_KINDS.map((item) => ({ value: item, label: NHAN_PROVIDER[item] }))}
+            />
+            <ONhap value={baseUrl} onChange={setBaseUrl} placeholder={t('settings.providers.form.baseUrlPlaceholder')} />
+            {/* Chỉ nhập khoá khi TẠO MỚI: provider đã có khoá riêng từng cái ở bảng bên dưới,
+                nhập ở đây nữa sẽ thành hai đường sửa cùng một thứ. */}
+            {suaId === null ? (
+              <>
+                <ONhap
+                  value={apiKeyLabel}
+                  onChange={setApiKeyLabel}
+                  placeholder={t('settings.providers.keys.labelPlaceholder')}
+                />
+                <ONhap
+                  value={apiKey}
+                  onChange={setApiKey}
+                  type="password"
+                  placeholder={t('settings.providers.keys.keyPlaceholder')}
+                />
+              </>
+            ) : null}
+          </div>
+          <label className="hang" style={{ gap: 6, fontSize: 14 }}>
+            <input type="checkbox" checked={bat} onChange={(event) => setBat(event.target.checked)} />
+            {t('settings.providers.form.enable')}
+          </label>
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--mau-chu-mo)' }}>
+            {t('settings.providers.form.keyNote')}
+          </p>
+          {/* Lỗi lưu phải nằm TRONG hộp thoại: hiện ở đầu mục thì bị lớp phủ che, người dùng
+              chỉ thấy nút Lưu không phản hồi. */}
+          {loiLuu ? <ThongBao loai="loi">{loiLuu}</ThongBao> : null}
+        </div>
+      </HopThoai>
+
+      <HopThoaiXacNhan
+        mo={choXoa !== null}
+        tieuDe={t('settings.providers.delete')}
+        moTa={choXoa ? t('settings.providers.deleteConfirm', { name: choXoa.name }) : ''}
+        nhanXacNhan={t('settings.providers.delete')}
+        dangXuLy={dangXoa}
+        onXacNhan={() => void xacNhanXoa()}
+        onHuy={() => {
+          if (!dangXoa) setChoXoa(null)
+        }}
+      />
     </Card>
   )
 }
@@ -460,16 +540,11 @@ function PhanKhoaProvider({
   const [thongBao, setThongBao] = useState<string | null>(null)
   const [dangTest, setDangTest] = useState<string | null>(null)
   const [ketQuaTest, setKetQuaTest] = useState<Record<string, ProviderTestResponse>>({})
-  const [fetchKeyId, setFetchKeyId] = useState('')
-  const [dangFetch, setDangFetch] = useState(false)
-  const [fetchResult, setFetchResult] = useState<{
-    ok: boolean
-    message: string
-    models: readonly FetchedModelView[]
-  } | null>(null)
-  const [chon, setChon] = useState<readonly string[]>([])
-  const [dangNhap, setDangNhap] = useState(false)
+  /** Đang mở hộp thoại chọn model dùng chung, khoá sẵn vào provider này. */
+  const [chonModelMo, setChonModelMo] = useState(false)
   const [dangPurge, setDangPurge] = useState(false)
+  /** Đang mở hộp thoại xác nhận xoá model không dùng của provider này. */
+  const [xacNhanPurge, setXacNhanPurge] = useState(false)
 
   function moThemKhoa(): void {
     setKeyForm({
@@ -554,55 +629,8 @@ function PhanKhoaProvider({
     }
   }
 
-  async function fetchModels(): Promise<void> {
-    setDangFetch(true)
-    setLoi(null)
-    try {
-      const ketQua = await api.fetchProviderModels(companyId, provider.id, fetchKeyId || undefined)
-      setFetchResult({ ok: ketQua.ok, message: ketQua.message, models: ketQua.models })
-      setChon([])
-      if (!ketQua.ok) setLoi(ketQua.message)
-    } catch (error) {
-      setLoi(error instanceof ApiError ? error.message : t('settings.providers.fetch.failed'))
-    } finally {
-      setDangFetch(false)
-    }
-  }
-
-  async function nhapModels(): Promise<void> {
-    if (!fetchResult || chon.length === 0) return
-    setDangNhap(true)
-    setLoi(null)
-    try {
-      const ketQua = await api.importProviderModels(companyId, provider.id, {
-        models: fetchResult.models
-          .filter((model) => chon.includes(model.modelId))
-          .map((model) => ({ modelId: model.modelId, label: model.label })),
-      })
-      setThongBao(
-        t('settings.providers.fetch.imported', {
-          created: formatNumber(ketQua.created.length),
-          skipped: formatNumber(ketQua.skipped.length),
-        }),
-      )
-      const added = new Set(ketQua.created.map((model) => model.modelId))
-      setFetchResult({
-        ...fetchResult,
-        models: fetchResult.models.map((model) =>
-          added.has(model.modelId) ? { ...model, alreadyAdded: true } : model,
-        ),
-      })
-      setChon([])
-      onChanged()
-    } catch (error) {
-      setLoi(error instanceof ApiError ? error.message : t('settings.providers.fetch.importFailed'))
-    } finally {
-      setDangNhap(false)
-    }
-  }
-
+  /** Chạy sau khi người dùng xác nhận trong hộp thoại; hộp thoại thay `window.confirm`. */
   async function purgeModels(): Promise<void> {
-    if (!window.confirm(t('settings.models.purgeConfirm', { name: provider.name }))) return
     setDangPurge(true)
     setLoi(null)
     try {
@@ -613,10 +641,11 @@ function PhanKhoaProvider({
       setLoi(error instanceof ApiError ? error.message : t('settings.models.purgeFailed'))
     } finally {
       setDangPurge(false)
+      // Đóng cả khi lỗi: hộp thoại xác nhận không có chỗ hiện lỗi, mà để nó mở tiếp thì
+      // thông báo lỗi ở trên bị lớp phủ che.
+      setXacNhanPurge(false)
     }
   }
-
-  const selectable = (fetchResult?.models ?? []).filter((model) => !model.alreadyAdded)
 
   return (
     <div className="card" style={{ marginTop: 14 }}>
@@ -741,82 +770,43 @@ function PhanKhoaProvider({
         </div>
       )}
 
+      {/*
+        Khối lấy/import model cũ (chọn khoá, gọi /models, tích từng dòng) đã chuyển vào
+        `HopThoaiChonModel`. Ở đây chỉ còn một nút mở hộp thoại đó với `providerId` đã
+        khoá sẵn, nên người dùng không phải chọn lại nhà cung cấp; nhờ vậy chỉ còn MỘT nơi
+        làm việc này thay vì hai bản dễ lệch nhau.
+      */}
       <div style={{ marginTop: 16, borderTop: '1px solid var(--mau-vien)', paddingTop: 12 }}>
-        <h4 className="card__tieu-de">{t('settings.providers.fetch.title')}</h4>
-        <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.providers.fetch.hint')}</p>
         <div className="hang" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <OChon
-            value={fetchKeyId}
-            onChange={setFetchKeyId}
-            options={[
-              { value: '', label: t('settings.providers.fetch.keyLabel') },
-              ...provider.keys.map((key) => ({ value: key.id, label: key.label })),
-            ]}
-          />
-          <Nut bien="phu" nho onClick={() => void fetchModels()} dangTai={dangFetch}>
-            {t('settings.providers.fetch.action')}
+          <Nut bien="phu" nho onClick={() => setChonModelMo(true)}>
+            {t('settings.models.fetch.open')}
           </Nut>
-          <Nut bien="phu" nho onClick={() => void purgeModels()} dangTai={dangPurge}>
+          <Nut bien="phu" nho onClick={() => setXacNhanPurge(true)} dangTai={dangPurge}>
             {t('settings.models.purge')}
           </Nut>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)', marginTop: 4 }}>
-          {t('settings.providers.fetch.pickKeyHint')}
-        </div>
-
-        {fetchResult ? (
-          <div style={{ marginTop: 10 }}>
-            <ThongBao loai={fetchResult.ok ? 'thanh-cong' : 'loi'}>{fetchResult.message}</ThongBao>
-            {fetchResult.ok && fetchResult.models.length === 0 ? (
-              <div style={{ marginTop: 8 }}>
-                <Trong>{t('settings.providers.fetch.noModels')}</Trong>
-              </div>
-            ) : null}
-            {fetchResult.models.length > 0 ? (
-              <>
-                <div className="hang" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  <Nut
-                    bien="phu"
-                    nho
-                    onClick={() => setChon(selectable.map((model) => model.modelId))}
-                  >
-                    {t('settings.providers.fetch.selectAll')}
-                  </Nut>
-                  <Nut bien="phu" nho onClick={() => setChon([])}>
-                    {t('settings.providers.fetch.clear')}
-                  </Nut>
-                  <Nut nho onClick={() => void nhapModels()} dangTai={dangNhap} disabled={chon.length === 0}>
-                    {t('settings.providers.fetch.import', { count: formatNumber(chon.length) })}
-                  </Nut>
-                </div>
-                <div className="cot" style={{ gap: 4, marginTop: 8 }}>
-                  {fetchResult.models.map((model) => (
-                    <label key={model.modelId} className="hang" style={{ gap: 8, fontSize: 13 }}>
-                      <input
-                        type="checkbox"
-                        disabled={model.alreadyAdded}
-                        checked={model.alreadyAdded || chon.includes(model.modelId)}
-                        onChange={(event) => {
-                          setChon((truoc) =>
-                            event.target.checked
-                              ? [...truoc, model.modelId]
-                              : truoc.filter((id) => id !== model.modelId),
-                          )
-                        }}
-                      />
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{model.modelId}</span>
-                      <span>{model.label}</span>
-                      {model.alreadyAdded ? (
-                        <Nhan loai="mo">{t('settings.providers.fetch.alreadyAdded')}</Nhan>
-                      ) : null}
-                    </label>
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </div>
-        ) : null}
       </div>
+
+      <HopThoaiChonModel
+        mo={chonModelMo}
+        companyId={companyId}
+        providerId={provider.id}
+        // `onDaNhap` tải lại danh sách provider để bảng model bên ngoài thấy model vừa thêm.
+        onDaNhap={onChanged}
+        onDong={() => setChonModelMo(false)}
+      />
+
+      <HopThoaiXacNhan
+        mo={xacNhanPurge}
+        tieuDe={t('settings.models.purge')}
+        moTa={t('settings.models.purgeConfirm', { name: provider.name })}
+        nhanXacNhan={t('settings.models.purge')}
+        dangXuLy={dangPurge}
+        onXacNhan={() => void purgeModels()}
+        onHuy={() => {
+          if (!dangPurge) setXacNhanPurge(false)
+        }}
+      />
     </div>
   )
 }
@@ -842,6 +832,16 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
   const [thongBao, setThongBao] = useState<string | null>(null)
   const [dangPurge, setDangPurge] = useState<string | null>(null)
+
+  // Hộp thoại lấy model đặt ngay trong mục Model: đây mới là chỗ người dùng tìm khi cần
+  // thêm model, còn khối fetch cũ nằm trong bảng khoá của nhà cung cấp thì không ai thấy.
+  const [moChonModel, setMoChonModel] = useState(false)
+
+  // Hộp thoại xác nhận giữ ĐỐI TƯỢNG cần xoá thay vì một cờ boolean: nhờ vậy câu xác nhận
+  // luôn nhắc đúng tên model/nhà cung cấp, kể cả khi danh sách đã được tải lại sau đó.
+  const [choXoaModel, setChoXoaModel] = useState<ModelOptionView | null>(null)
+  const [dangXoaModel, setDangXoaModel] = useState(false)
+  const [choPurge, setChoPurge] = useState<ProviderView | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -902,37 +902,58 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     }
   }
 
-  async function xoaModel(model: ModelOptionView): Promise<void> {
-    if (!window.confirm(t('settings.models.deleteConfirm', { label: model.label }))) return
+  async function xoaModel(): Promise<void> {
+    const model = choXoaModel
+    if (!model) return
+    setDangXoaModel(true)
     setLoiLuu(null)
     setThongBao(null)
     try {
       await api.deleteModel(companyId, model.id)
       setThongBao(t('settings.models.deleted'))
+      setChoXoaModel(null)
       taiLai()
     } catch (error) {
       setLoiLuu(error instanceof ApiError ? error.message : t('settings.models.deleteFailed'))
+      // Đóng hộp thoại cả khi lỗi: câu lỗi hiện trên mục Model, để hộp thoại mở lại thì
+      // lớp phủ che mất chính thông báo đó.
+      setChoXoaModel(null)
+    } finally {
+      setDangXoaModel(false)
     }
   }
 
-  async function xoaModelKhongDung(provider: ProviderView): Promise<void> {
-    if (!window.confirm(t('settings.models.purgeConfirm', { name: provider.name }))) return
+  async function xoaModelKhongDung(): Promise<void> {
+    const provider = choPurge
+    if (!provider) return
     setDangPurge(provider.id)
     setLoiLuu(null)
     setThongBao(null)
     try {
       const ketQua = await api.purgeProviderModels(companyId, provider.id)
       setThongBao(t('settings.models.purged', { count: formatNumber(ketQua.deleted) }))
+      setChoPurge(null)
       taiLai()
     } catch (error) {
       setLoiLuu(error instanceof ApiError ? error.message : t('settings.models.purgeFailed'))
+      setChoPurge(null)
     } finally {
       setDangPurge(null)
     }
   }
 
   return (
-    <Card tieuDe={t('settings.models.title')} phu={t('settings.models.subtitle')}>
+    <Card
+      tieuDe={t('settings.models.title')}
+      phu={t('settings.models.subtitle')}
+      // Nút mở hộp thoại đặt cạnh tiêu đề mục Model — đúng chỗ người dùng đi tìm khi
+      // muốn thêm model, thay vì phải mở một dòng nhà cung cấp rồi cuộn xuống bảng khoá.
+      hanhDong={
+        <Nut nho onClick={() => setMoChonModel(true)}>
+          {t('settings.models.fetch.open')}
+        </Nut>
+      }
+    >
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
       {thongBao ? (
@@ -961,7 +982,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
                 key={provider.id}
                 bien="phu"
                 nho
-                onClick={() => void xoaModelKhongDung(provider)}
+                onClick={() => setChoPurge(provider)}
                 dangTai={dangPurge === provider.id}
               >
                 {t('settings.models.purge')} · {provider.name}
@@ -1014,7 +1035,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
                     nho
                     disabled={model.usedByAgentCount > 0}
                     title={model.usedByAgentCount > 0 ? t('settings.models.deleteFailed') : undefined}
-                    onClick={() => void xoaModel(model)}
+                    onClick={() => setChoXoaModel(model)}
                   >
                     {t('settings.models.delete')}
                   </Nut>
@@ -1054,6 +1075,40 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
           {t('settings.models.form.submit')}
         </Nut>
       </div>
+
+      {/* Không truyền `providerId`: người dùng chọn nhà cung cấp ngay trong hộp thoại, vì
+          mục Model gom model của mọi nhà cung cấp. */}
+      <HopThoaiChonModel
+        mo={moChonModel}
+        companyId={companyId}
+        onDong={() => setMoChonModel(false)}
+        // Bảng model bên ngoài phải tải lại, nếu không model vừa thêm không xuất hiện.
+        onDaNhap={() => void taiLai()}
+      />
+
+      <HopThoaiXacNhan
+        mo={choXoaModel !== null}
+        tieuDe={t('settings.models.deleteTitle')}
+        moTa={choXoaModel ? t('settings.models.deleteConfirm', { label: choXoaModel.label }) : ''}
+        nhanXacNhan={t('common.delete')}
+        dangXuLy={dangXoaModel}
+        onXacNhan={() => void xoaModel()}
+        onHuy={() => {
+          if (!dangXoaModel) setChoXoaModel(null)
+        }}
+      />
+
+      <HopThoaiXacNhan
+        mo={choPurge !== null}
+        tieuDe={t('settings.models.purgeTitle')}
+        moTa={choPurge ? t('settings.models.purgeConfirm', { name: choPurge.name }) : ''}
+        nhanXacNhan={t('settings.models.purge')}
+        dangXuLy={dangPurge !== null}
+        onXacNhan={() => void xoaModelKhongDung()}
+        onHuy={() => {
+          if (dangPurge === null) setChoPurge(null)
+        }}
+      />
     </Card>
   )
 }

@@ -1092,3 +1092,137 @@ a {
   border-top: 1px dashed var(--mau-vien);
   padding-top: 12px;
 }
+
+/* ------------------------------------------------ hộp thoại dùng chung */
+/* Dùng `<dialog>` gốc nên không cần lớp phủ tự vẽ: `::backdrop` là của trình duyệt, và
+   việc bẫy tiêu điểm bằng Tab đã có sẵn. Ở đây chỉ định dạng. */
+
+.ht {
+  /* Bỏ khung và nền mặc định của `<dialog>` để toàn quyền kiểm soát phần trong. */
+  border: 0;
+  padding: 0;
+  background: none;
+  max-width: none;
+  max-height: none;
+  color: var(--mau-chu);
+}
+
+.ht::backdrop {
+  background: rgb(15 23 20 / 45%);
+}
+
+.ht__hop {
+  /* Trần chiều cao để hộp thoại không vượt khỏi màn hình trên màn hình thấp; `dvh` để
+     đúng khi thanh địa chỉ trên di động hiện/ẩn. */
+  max-height: min(85vh, 60rem);
+  max-height: min(85dvh, 60rem);
+  display: flex;
+  flex-direction: column;
+  width: min(92vw, 34rem);
+  background: var(--mau-be-mat);
+  border: 1px solid var(--mau-vien);
+  border-radius: var(--ban-kinh);
+  box-shadow: var(--bong-lon);
+  overflow: hidden;
+}
+
+.ht--rong .ht__hop {
+  width: min(94vw, 52rem);
+}
+
+.ht__dau {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--mau-vien);
+}
+
+.ht__tieu-de {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ht__dong {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: var(--ban-kinh-nho);
+  color: var(--mau-chu-mo);
+}
+
+.ht__dong:hover {
+  background: var(--mau-phu);
+  color: var(--mau-chu);
+}
+
+/* Thân hộp thoại là vùng cuộn: với danh sách dài (hàng trăm model) thì cuộn ở đây chứ
+   không đẩy phần đáy ra khỏi tầm nhìn. */
+.ht__than {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.ht__chan {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-top: 1px solid var(--mau-vien);
+  background: var(--mau-nen);
+}
+
+/* ------------------------------------- hộp thoại chọn model */
+.htm__dong {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--ban-kinh-nho);
+  cursor: pointer;
+}
+
+.htm__dong:hover {
+  background: var(--mau-phu);
+}
+
+.htm__dong.is-da-co {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.htm__ma {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.htm__nhan {
+  font-size: 13px;
+  color: var(--mau-chu-mo);
+}
+
+.htm__danh-sach {
+  max-height: min(46dvh, 26rem);
+  overflow-y: auto;
+  border: 1px solid var(--mau-vien);
+  border-radius: var(--ban-kinh-nho);
+  margin-top: 10px;
+}
+
+.htm__loc {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 13px;
+}
