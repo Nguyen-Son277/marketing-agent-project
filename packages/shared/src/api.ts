@@ -79,6 +79,11 @@ export interface TeamMemberView {
   readonly modelId: string | null
   readonly modelLabel: string | null
   readonly providerName: string | null
+  /**
+   * Model dự phòng theo thứ tự dùng khi model chính lỗi. Rỗng nghĩa là không cấu hình;
+   * hệ thống KHÔNG tự chọn hộ.
+   */
+  readonly fallbackModelFks: readonly string[]
   readonly reasoningEffort: string | null
   readonly maxTokens: number | null
   readonly contextBudgetTokens: number
@@ -101,11 +106,16 @@ export interface ModelOptionView {
   readonly id: string
   readonly modelId: string
   readonly label: string
+  /** `id` của nhà cung cấp. Nhờ nó giao diện tách được hai model trùng mã khác URL. */
+  readonly providerId: string
   readonly providerName: string
+  readonly enabled: boolean
   readonly contextWindow: number
   readonly supportsTools: boolean
   readonly costInPerMtok: number
   readonly costOutPerMtok: number
+  /** Số route/preset/fallback đang tham chiếu model; > 0 thì không xoá được. */
+  readonly usedByAgentCount: number
 }
 
 /**
@@ -116,10 +126,80 @@ export interface CreateProviderBody {
   readonly name: string
   readonly kind: ProviderKind
   readonly baseUrl: string
-  /** Chỉ gửi khi tạo hoặc khi muốn thay khoá; server không bao giờ trả lại giá trị này. */
+  /** Khoá đầu tiên, tuỳ chọn. Chỉ gửi khi tạo; server không bao giờ trả lại giá trị này. */
   readonly apiKey?: string
+  readonly apiKeyLabel?: string
   readonly extra?: Record<string, unknown>
   readonly enabled?: boolean
+}
+
+/** Sửa provider không nhận khoá: khoá được quản lý riêng, từng khoá một. */
+export interface UpdateProviderBody {
+  readonly name?: string
+  readonly kind?: ProviderKind
+  readonly baseUrl?: string
+  readonly extra?: Record<string, unknown>
+  readonly enabled?: boolean
+}
+
+/** Khoá API như giao diện thấy: có nhãn và gợi ý, không bao giờ có giá trị gốc. */
+export interface ProviderKeyView {
+  readonly id: string
+  readonly label: string
+  readonly hint: string | null
+  readonly priority: number
+  readonly enabled: boolean
+}
+
+export interface CreateProviderKeyBody {
+  readonly label: string
+  readonly apiKey: string
+  readonly priority?: number
+  readonly enabled?: boolean
+}
+
+export interface UpdateProviderKeyBody {
+  readonly label?: string
+  readonly apiKey?: string
+  readonly priority?: number
+  readonly enabled?: boolean
+}
+
+/** Một model đọc được từ `GET {baseUrl}/models`, chưa lưu vào DB. */
+export interface FetchedModelView {
+  readonly modelId: string
+  readonly label: string
+  /** Đã có trong DB của nhà cung cấp này chưa, để giao diện khoá lựa chọn trùng. */
+  readonly alreadyAdded: boolean
+}
+
+export interface FetchModelsResponse {
+  readonly ok: boolean
+  readonly message: string
+  readonly latencyMs: number
+  readonly models: readonly FetchedModelView[]
+}
+
+export interface ImportModelsBody {
+  readonly models: readonly {
+    readonly modelId: string
+    readonly label?: string
+    readonly contextWindow?: number
+    readonly maxOutput?: number
+    readonly supportsTools?: boolean
+    readonly supportsVision?: boolean
+    readonly costInPerMtok?: number
+    readonly costOutPerMtok?: number
+  }[]
+}
+
+export interface ImportModelsResponse {
+  readonly created: readonly ModelOptionView[]
+  readonly skipped: readonly string[]
+}
+
+export interface PurgeModelsResponse {
+  readonly deleted: number
 }
 
 export interface CreateModelBody {
@@ -148,6 +228,8 @@ export interface UpsertRouteBody {
 export interface UpdateTeamMemberBody {
   readonly enabled?: boolean
   readonly modelFk?: string | null
+  /** Danh sách model dự phòng theo thứ tự dùng; gửi `[]` để xoá hết. */
+  readonly fallbackModelFks?: readonly string[]
   readonly tier?: ModelTier
   readonly reasoningEffort?: string | null
   readonly maxTokens?: number | null
@@ -221,10 +303,67 @@ export interface MessageView {
   readonly authorAgent: string | null
   readonly contentMd: string
   readonly meta: unknown
+  /**
+   * Thẻ chọn phương án, nếu tin nhắn này là một câu hỏi làm rõ.
+   *
+   * Suy ra từ `meta` ở tầng API thay vì để giao diện tự đọc `meta`: `meta` là `unknown`
+   * và đã được dùng cho việc khác, nên giao diện đọc thẳng vào đó sẽ vỡ im lặng mỗi khi
+   * hình dạng đổi. Tầng API là nơi kiểm tra hình dạng và trả `undefined` nếu không khớp.
+   */
+  readonly clarify?: ClarificationRequest
   readonly tokensIn: number
   readonly tokensOut: number
   readonly costUsd: number
   readonly createdAt: string
+}
+
+/* ---------------------------------------------- hỏi lại có cấu trúc */
+
+/** Cách người dùng trả lời một câu hỏi: chọn một, hay chọn nhiều phương án. */
+export type ClarificationInputMode = 'single' | 'multi'
+
+export interface ClarificationOption {
+  /**
+   * Mã ổn định để gửi lại khi người dùng chọn.
+   *
+   * Vì sao tách mã khỏi nhãn: nhãn là câu chữ hiển thị và có thể đổi (sửa lỗi chính tả,
+   * đổi ngôn ngữ), còn mã là thứ server dùng để ánh xạ câu trả lời vào đúng trường brief.
+   * Gửi nhãn làm khoá thì một lần sửa chữ sẽ làm hỏng mọi câu trả lời đang chờ.
+   */
+  readonly id: string
+  /** Nhãn hiển thị, ĐÃ Ở NGÔN NGỮ CỦA CUỘC TRAO ĐỔI tại thời điểm hỏi. */
+  readonly label: string
+  readonly hint?: string
+  /** Chỉ có nghĩa khi `inputMode` là `multi`: phương án này nói về việc KHÔNG làm. */
+  readonly exclusive?: boolean
+}
+
+export interface ClarificationQuestion {
+  /** Trường brief mà câu trả lời sẽ điền vào, để server áp tất định. */
+  readonly field: string
+  readonly question: string
+  readonly helper?: string
+  readonly inputMode: ClarificationInputMode
+  readonly options: readonly ClarificationOption[]
+  /**
+   * Luôn là `true` trong thực tế: người dùng phải luôn còn đường nói ý của mình, kể cả
+   * khi danh sách gợi ý không có phương án nào đúng.
+   */
+  readonly allowCustom: boolean
+}
+
+/** Yêu cầu làm rõ của Leader, đi kèm tin nhắn để giao diện vẽ thẻ chọn. */
+export interface ClarificationRequest {
+  readonly intro: string
+  readonly questions: readonly ClarificationQuestion[]
+}
+
+/** Câu trả lời của người dùng cho một câu hỏi. */
+export interface ClarificationAnswer {
+  readonly field: string
+  readonly optionIds: readonly string[]
+  /** Ý kiến riêng, nối thêm vào câu trả lời của câu hỏi này. */
+  readonly custom?: string
 }
 
 /** Kết quả một lượt gửi tin: câu trả lời của Leader kèm trạng thái brief. */
@@ -235,6 +374,8 @@ export interface SendMessageResponse {
   readonly missingFields: readonly string[]
   readonly phase: ConversationPhase
   readonly costUsd: number
+  /** Câu hỏi làm rõ của lượt này, nếu brief vẫn còn thiếu trường. */
+  readonly clarify?: ClarificationRequest
 }
 
 export interface ConversationDetailResponse {
@@ -321,6 +462,8 @@ export interface ProviderView {
   readonly isGlobal: boolean
   readonly apiKeyConfigured: boolean
   readonly apiKeyHint: string | null
+  /** Toàn bộ khoá của URL này, để giao diện quản lý từng khoá một. */
+  readonly keys: readonly ProviderKeyView[]
   readonly models: readonly ModelOptionView[]
 }
 
@@ -513,6 +656,17 @@ export const API_ROUTES = {
   providers: (id: string) => `/api/companies/${id}/providers`,
   provider: (id: string, providerId: string) => `/api/companies/${id}/providers/${providerId}`,
   providerTest: (id: string, providerId: string) => `/api/companies/${id}/providers/${providerId}/test`,
+  providerKeys: (id: string, providerId: string) => `/api/companies/${id}/providers/${providerId}/keys`,
+  providerKey: (id: string, providerId: string, keyId: string) =>
+    `/api/companies/${id}/providers/${providerId}/keys/${keyId}`,
+  providerKeyTest: (id: string, providerId: string, keyId: string) =>
+    `/api/companies/${id}/providers/${providerId}/keys/${keyId}/test`,
+  providerFetchModels: (id: string, providerId: string) =>
+    `/api/companies/${id}/providers/${providerId}/fetch-models`,
+  providerImportModels: (id: string, providerId: string) =>
+    `/api/companies/${id}/providers/${providerId}/import-models`,
+  providerPurgeModels: (id: string, providerId: string) =>
+    `/api/companies/${id}/providers/${providerId}/purge-models`,
   models: (id: string) => `/api/companies/${id}/models`,
   model: (id: string, modelId: string) => `/api/companies/${id}/models/${modelId}`,
   routes: (id: string) => `/api/companies/${id}/routes`,

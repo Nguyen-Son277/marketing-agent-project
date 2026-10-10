@@ -71,8 +71,8 @@ const repos = createRepos({ file, appSecret: resolveAppSecret() })
 try {
   const catalog = seedCatalog(repos)
   console.log(
-    `✓ Catalog: ${catalog.agentDefs} định nghĩa agent · ${catalog.skills} kỹ năng · ` +
-      `${catalog.providers} nhà cung cấp · ${catalog.models} model`,
+    `✓ Catalog: ${catalog.agentDefs} định nghĩa agent · ${catalog.skills} kỹ năng. ` +
+      'Nhà cung cấp, API key và model khai báo trong giao diện Cài đặt.',
   )
 
   if (args.company) {
@@ -88,7 +88,7 @@ try {
     })
     console.log(
       `✓ Công ty "${result.company.name}" (${result.company.slug}): ` +
-        `${result.presets} agent · ${result.routes} route model · ${result.aclEntries} quyền tri thức · ` +
+        `${result.presets} agent · ${result.aclEntries} quyền tri thức · ` +
         `${result.documents} tài liệu mẫu`,
     )
     if (result.owner) console.log(`  Chủ sở hữu: ${result.owner.email}`)

@@ -53,30 +53,44 @@ export interface MembershipRecord {
 
 /* ----------------------------------------------------------------- providers */
 
+/**
+ * Một nhà cung cấp = một URL. Khoá API KHÔNG nằm ở đây mà ở `LlmProviderKeyRecord`:
+ * một URL có thể có nhiều khoá, và khoá hỏng thì hệ thống tự chuyển sang khoá kế tiếp.
+ *
+ * Vì sao không còn `apiKeyRef`: khoá qua biến môi trường là nguồn lỗi thật — người dùng
+ * cài đặt xong nhưng quên điền `.env`, và mọi lượt chạy đều hỏng. Khoá do người dùng
+ * nhập trực tiếp trong giao diện mới là nguồn sự thật.
+ */
 export interface LlmProviderRecord {
   readonly id: string
   readonly companyId: string | null
   readonly name: string
   readonly kind: ProviderKind
   readonly baseUrl: string
-  readonly apiKeyEnc: string | null
-  readonly apiKeyIv: string | null
-  readonly apiKeyRef: string | null
   readonly extraJson: string | null
   readonly enabled: boolean
   readonly createdAt: string
 }
 
-/** Provider as exposed to clients: presence of a key, never the key itself. */
-export interface PublicProvider {
+/** Một khoá API của provider. Giá trị gốc chỉ tồn tại lúc ghi, DB chỉ giữ bản mã hoá. */
+export interface LlmProviderKeyRecord {
   readonly id: string
-  readonly name: string
-  readonly kind: ProviderKind
-  readonly baseUrl: string
+  readonly providerId: string
+  readonly label: string
+  /** Vài ký tự đầu/cuối của khoá để người dùng nhận ra, không đủ để tái tạo khoá. */
+  readonly hint: string | null
+  readonly priority: number
   readonly enabled: boolean
-  readonly isGlobal: boolean
-  readonly apiKeyConfigured: boolean
-  readonly apiKeyHint: string | null
+  readonly createdAt: string
+}
+
+/** Model dự phòng của một agent, theo thứ tự dùng khi model chính lỗi. */
+export interface ModelFallbackRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly agentDefId: string
+  readonly position: number
+  readonly modelFk: string
 }
 
 export interface LlmModelRecord {

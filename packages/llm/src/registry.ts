@@ -29,6 +29,16 @@ export interface ModelQuery {
 /** Model kèm provider, dạng mà `LlmRepo.listModels` trả về. */
 export type ModelWithProvider = LlmModelRecord & { readonly provider: LlmProviderRecord }
 
+/**
+ * Một cách gọi model: adapter đã dựng với đúng một khoá API. Nhiều ứng viên cho cùng
+ * một model nghĩa là model đó có nhiều khoá — vòng lặp agent sẽ thử lần lượt.
+ */
+export interface ModelAdapterCandidate {
+  readonly keyId: string | null
+  readonly keyLabel: string | null
+  readonly adapter: ProviderAdapter
+}
+
 export class ModelRegistry {
   constructor(private readonly llm: LlmRepo) {}
 
@@ -63,30 +73,43 @@ export class ModelRegistry {
   }
 
   /**
-   * Dựng adapter cho một model. Khoá được giải mã ở đây, theo từng request, để việc
-   * xoay khoá trong UI có hiệu lực ngay mà không cần khởi động lại tiến trình.
+   * Dựng adapter cho một model, MỘT adapter cho mỗi khoá API đang bật, theo thứ tự
+   * `priority`. Khoá được giải mã ở đây, theo từng request, để việc đổi khoá trong UI
+   * có hiệu lực ngay mà không cần khởi động lại tiến trình.
+   *
+   * Provider không có khoá nào vẫn hợp lệ (gateway nội bộ): trả đúng một adapter không
+   * khoá. Không còn nhánh đọc khoá từ biến môi trường.
    */
-  adapterFor(model: LlmModelRecord): ProviderAdapter {
+  adaptersFor(model: LlmModelRecord): ModelAdapterCandidate[] {
     const provider = this.providerOf(model)
-    const apiKey = this.llm.resolveApiKey(provider)
-    // Provider trỏ tới biến môi trường nhưng biến đó trống là lỗi cấu hình, không phải
-    // gateway mở: báo sớm để người vận hành biết cần đặt gì.
-    if (apiKey === undefined && provider.apiKeyRef) {
-      throw needsConfiguration(
-        `Chưa có khoá API cho nhà cung cấp ${provider.name}: hãy đặt biến môi trường ${provider.apiKeyRef}`,
-      )
-    }
     const extra = parseProviderExtra(provider.extraJson)
-    const config = {
-      baseUrl: provider.baseUrl,
-      apiKey,
-      headers: extra.headers,
-      anthropicVersion: extra.anthropicVersion,
-      includeStreamUsage: extra.includeStreamUsage,
+    const build = (apiKey: string | undefined): ProviderAdapter => {
+      const config = {
+        baseUrl: provider.baseUrl,
+        apiKey,
+        headers: extra.headers,
+        anthropicVersion: extra.anthropicVersion,
+        includeStreamUsage: extra.includeStreamUsage,
+      }
+      return provider.kind === 'anthropic'
+        ? new AnthropicAdapter(config)
+        : new OpenAiCompatibleAdapter(config)
     }
-    return provider.kind === 'anthropic'
-      ? new AnthropicAdapter(config)
-      : new OpenAiCompatibleAdapter(config)
+
+    const keys = this.llm.resolveProviderKeys(provider)
+    if (keys.length === 0) return [{ keyId: null, keyLabel: null, adapter: build(undefined) }]
+    return keys.map((key) => ({
+      keyId: key.id,
+      keyLabel: key.label,
+      adapter: build(key.apiKey.length > 0 ? key.apiKey : undefined),
+    }))
+  }
+
+  /** Adapter đầu tiên (khoá ưu tiên cao nhất), dùng cho chỗ chỉ cần một cách gọi. */
+  adapterFor(model: LlmModelRecord): ProviderAdapter {
+    const [first] = this.adaptersFor(model)
+    if (!first) throw needsConfiguration(`Không dựng được adapter cho model ${model.label}`)
+    return first.adapter
   }
 
   /** Model rẻ nhất theo giá token vào, tie-break bằng giá token ra rồi tên. */

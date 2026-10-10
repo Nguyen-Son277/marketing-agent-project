@@ -80,7 +80,7 @@ export function registerAuthRoutes(router: Router, repos: Repos, sessionTtlDays:
       company: result.company,
       role: result.role,
       presets: result.presets,
-      routes: result.routes,
+      aclEntries: result.aclEntries,
     })
   })
 

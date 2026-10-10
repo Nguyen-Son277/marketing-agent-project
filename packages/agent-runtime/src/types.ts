@@ -101,6 +101,12 @@ export interface ChatAdapter {
 /** Dựng adapter cho model; `ModelRegistry` của gói llm thoả mãn nó. */
 export interface AdapterResolver {
   adapterFor(model: LlmModelRecord): ChatAdapter
+  /**
+   * Mọi cách gọi model này, theo thứ tự ưu tiên — thường là một adapter cho mỗi API
+   * key của nhà cung cấp. Vòng lặp thử lần lượt khi một khoá lỗi. Bỏ trống thì chỉ
+   * dùng `adapterFor` (test cũ giữ nguyên hành vi).
+   */
+  adaptersFor?(model: LlmModelRecord): readonly ChatAdapter[]
 }
 
 /** Tham số mở một run để ghi nhận chi phí. */

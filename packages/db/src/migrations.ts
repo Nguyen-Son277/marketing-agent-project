@@ -424,4 +424,64 @@ ALTER TABLE conversations ADD COLUMN language TEXT NOT NULL DEFAULT 'vi';
 CREATE INDEX idx_conversations_language ON conversations(language);
 `,
   },
+  {
+    id: '0008_provider_keys_and_agent_fallbacks',
+    sql: `
+-- Một URL có nhiều API key, và mỗi agent có danh sách model dự phòng.
+--
+-- Vì sao tách khoá ra bảng riêng thay vì giữ một cột trên llm_providers:
+--  - người dùng cần khai nhiều khoá cho cùng một URL để khoá hỏng còn khoá khác chạy;
+--  - mỗi khoá có nhãn, thứ tự dùng và trạng thái bật/tắt riêng;
+--  - khoá vẫn được mã hoá AES-GCM như trước, chỉ đổi chỗ lưu.
+CREATE TABLE llm_provider_keys (
+  id           TEXT PRIMARY KEY,
+  provider_id  TEXT NOT NULL REFERENCES llm_providers(id) ON DELETE CASCADE,
+  label        TEXT NOT NULL,
+  api_key_enc  TEXT,
+  api_key_iv   TEXT,
+  api_key_hint TEXT,
+  priority     INTEGER NOT NULL DEFAULT 100,
+  enabled      INTEGER NOT NULL DEFAULT 1,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX idx_provider_keys_provider ON llm_provider_keys(provider_id, priority);
+
+-- Model dự phòng của agent, theo thứ tự dùng khi model chính lỗi.
+CREATE TABLE agent_model_fallbacks (
+  id           TEXT PRIMARY KEY,
+  company_id   TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  agent_def_id TEXT NOT NULL REFERENCES agent_defs(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL,
+  model_fk     TEXT NOT NULL REFERENCES llm_models(id) ON DELETE CASCADE,
+  UNIQUE (company_id, agent_def_id, position),
+  UNIQUE (company_id, agent_def_id, model_fk)
+);
+CREATE INDEX idx_model_fallbacks_agent ON agent_model_fallbacks(company_id, agent_def_id);
+
+-- Chuyển khoá cấp provider cũ (nếu có) thành khoá đầu tiên của bảng mới, rồi bỏ
+-- tham chiếu biến môi trường. Khoá qua env là nguồn lỗi thật: cài xong mà quên điền
+-- .env thì mọi lượt chạy hỏng, còn giao diện không có gì để sửa.
+INSERT INTO llm_provider_keys (id, provider_id, label, api_key_enc, api_key_iv, api_key_hint, priority, enabled, created_at)
+SELECT
+  'key_' || lower(hex(randomblob(12))),
+  id,
+  'Key 1',
+  api_key_enc,
+  api_key_iv,
+  api_key_hint,
+  100,
+  1,
+  created_at
+FROM llm_providers
+WHERE api_key_enc IS NOT NULL;
+
+UPDATE llm_providers
+   SET api_key_enc = NULL, api_key_iv = NULL, api_key_hint = NULL, api_key_ref = NULL;
+
+-- Provider toàn cục chỉ có thể do seed cũ tạo (API công ty không tạo được provider
+-- company_id NULL). Xoá chúng để không còn cấu hình mặc định chết: model cascade,
+-- route cascade, agent_presets.model_fk về NULL — đúng trạng thái "chưa gắn cho agent".
+DELETE FROM llm_providers WHERE company_id IS NULL;
+`,
+  },
 ]

@@ -19,12 +19,14 @@ import type {
   KbDocumentRecord,
   KnowledgeDocumentView,
   LlmModelRecord,
+  LlmProviderKeyRecord,
   LlmProviderRecord,
   MessageRecord,
   MessageView,
   ModelOptionView,
   ModelRouteRecord,
   ModelRouteView,
+  ProviderKeyView,
   ProviderView,
   RunRecord,
   RunView,
@@ -72,16 +74,22 @@ export function briefState(briefJson: string | null | undefined): {
 
 /* --------------------------------------------------------------------- team */
 
-export function toModelOptionView(model: LlmModelRecord): ModelOptionView {
+export function toModelOptionView(
+  model: LlmModelRecord,
+  options: { providerName?: string; usedByAgentCount?: number } = {},
+): ModelOptionView {
   return {
     id: model.id,
     modelId: model.modelId,
     label: model.label,
-    providerName: '',
+    providerId: model.providerId,
+    providerName: options.providerName ?? '',
+    enabled: model.enabled,
     contextWindow: model.contextWindow,
     supportsTools: model.supportsTools,
     costInPerMtok: model.costInPerMtok,
     costOutPerMtok: model.costOutPerMtok,
+    usedByAgentCount: options.usedByAgentCount ?? 0,
   }
 }
 
@@ -107,6 +115,7 @@ export function toTeamMemberView(input: {
     modelId: model?.id ?? null,
     modelLabel: model?.label ?? null,
     providerName: provider?.name ?? null,
+    fallbackModelFks: repos.llm.listModelFallbacks(companyId, def.id).map((fallback) => fallback.modelFk),
     reasoningEffort: preset.reasoningEffort,
     maxTokens: preset.maxTokens,
     contextBudgetTokens: preset.contextBudgetTokens,
@@ -126,8 +135,9 @@ export function toTeamMemberView(input: {
 }
 
 /**
- * Model hiệu lực của một preset: model gán trực tiếp, rồi route theo tier, cuối
- * cùng là model rẻ nhất của công ty. Khớp thứ tự ưu tiên trong `TeamRepo`.
+ * Model hiệu lực của một preset: model gán trực tiếp, rồi route theo tier. Không có
+ * bước "model rẻ nhất" — hệ thống không tự gắn model cho agent; chưa chọn thì trả
+ * `undefined` và giao diện hiển thị đúng trạng thái đó.
  */
 export function resolvePresetModel(
   repos: Repos,
@@ -147,7 +157,7 @@ export function resolvePresetModel(
     const routed = repos.llm.findModel(route.modelFk)
     if (routed && routed.enabled) return routed
   }
-  return repos.llm.defaultModel(companyId)
+  return undefined
 }
 
 /* ---------------------------------------------------------------- knowledge */
@@ -348,10 +358,18 @@ export function toRunView(run: RunRecord): RunView {
 
 export function toProviderView(
   provider: LlmProviderRecord,
-  hint: string | null,
+  keys: readonly LlmProviderKeyRecord[],
   models: readonly LlmModelRecord[],
   providerNameById: ReadonlyMap<string, string>,
+  modelUsage: ReadonlyMap<string, number>,
 ): ProviderView {
+  const keyViews: ProviderKeyView[] = keys.map((key) => ({
+    id: key.id,
+    label: key.label,
+    hint: key.hint,
+    priority: key.priority,
+    enabled: key.enabled,
+  }))
   return {
     id: provider.id,
     name: provider.name,
@@ -359,9 +377,15 @@ export function toProviderView(
     baseUrl: provider.baseUrl,
     enabled: provider.enabled,
     isGlobal: provider.companyId === null,
-    apiKeyConfigured: Boolean(provider.apiKeyEnc ?? provider.apiKeyRef),
-    apiKeyHint: hint,
-    models: models.map((model) => ({ ...toModelOptionView(model), providerName: providerNameById.get(model.providerId) ?? '' })),
+    apiKeyConfigured: keyViews.length > 0,
+    apiKeyHint: keyViews[0]?.hint ?? null,
+    keys: keyViews,
+    models: models.map((model) => ({
+      ...toModelOptionView(model, {
+        providerName: providerNameById.get(model.providerId) ?? '',
+        usedByAgentCount: modelUsage.get(model.id) ?? 0,
+      }),
+    })),
   }
 }
 

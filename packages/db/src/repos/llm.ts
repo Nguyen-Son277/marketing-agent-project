@@ -1,4 +1,4 @@
-/** Providers, models and per-agent tier routes. Secrets are stored encrypted. */
+/** Providers, models, per-provider API keys and per-agent fallbacks. Secrets encrypted. */
 import {
   newId,
   notFound,
@@ -6,11 +6,12 @@ import {
   round,
   type AgentRole,
   type LlmModelRecord,
+  type LlmProviderKeyRecord,
   type LlmProviderRecord,
+  type ModelFallbackRecord,
   type ModelRouteRecord,
   type ModelTier,
   type ProviderKind,
-  type PublicProvider,
 } from '@marketing-agent/shared'
 import type { Database } from '../database.ts'
 import type { SecretBox } from '../crypto.ts'
@@ -22,11 +23,19 @@ interface ProviderRow {
   name: string
   kind: ProviderKind
   base_url: string
+  extra_json: string | null
+  enabled: number
+  created_at: string
+}
+
+interface ProviderKeyRow {
+  id: string
+  provider_id: string
+  label: string
   api_key_enc: string | null
   api_key_iv: string | null
   api_key_hint: string | null
-  api_key_ref: string | null
-  extra_json: string | null
+  priority: number
   enabled: number
   created_at: string
 }
@@ -56,16 +65,31 @@ interface RouteRow {
   priority: number
 }
 
+interface FallbackRow {
+  id: string
+  company_id: string
+  agent_def_id: string
+  position: number
+  model_fk: string
+}
+
 const toProvider = (row: ProviderRow): LlmProviderRecord => ({
   id: row.id,
   companyId: row.company_id,
   name: row.name,
   kind: row.kind,
   baseUrl: row.base_url,
-  apiKeyEnc: row.api_key_enc,
-  apiKeyIv: row.api_key_iv,
-  apiKeyRef: row.api_key_ref,
   extraJson: row.extra_json,
+  enabled: row.enabled === 1,
+  createdAt: row.created_at,
+})
+
+const toProviderKey = (row: ProviderKeyRow): LlmProviderKeyRecord => ({
+  id: row.id,
+  providerId: row.provider_id,
+  label: row.label,
+  hint: row.api_key_hint,
+  priority: row.priority,
   enabled: row.enabled === 1,
   createdAt: row.created_at,
 })
@@ -95,19 +119,13 @@ const toRoute = (row: RouteRow): ModelRouteRecord => ({
   priority: row.priority,
 })
 
-/** Provider as the UI sees it: configuration facts, never the secret. */
-export function toPublicProvider(provider: LlmProviderRecord, hint?: string | null): PublicProvider {
-  return {
-    id: provider.id,
-    name: provider.name,
-    kind: provider.kind,
-    baseUrl: provider.baseUrl,
-    enabled: provider.enabled,
-    isGlobal: provider.companyId === null,
-    apiKeyConfigured: Boolean(provider.apiKeyEnc ?? provider.apiKeyRef),
-    apiKeyHint: hint ?? null,
-  }
-}
+const toFallback = (row: FallbackRow): ModelFallbackRecord => ({
+  id: row.id,
+  companyId: row.company_id,
+  agentDefId: row.agent_def_id,
+  position: row.position,
+  modelFk: row.model_fk,
+})
 
 export class LlmRepo {
   constructor(
@@ -122,28 +140,19 @@ export class LlmRepo {
     name: string
     kind: ProviderKind
     baseUrl: string
-    apiKey?: string
-    apiKeyRef?: string
     extra?: Record<string, unknown>
     enabled?: boolean
   }): LlmProviderRecord {
     const id = newId()
-    const encrypted = input.apiKey ? this.secrets.encrypt(input.apiKey) : undefined
     this.db.run(
-      `INSERT INTO llm_providers
-         (id, company_id, name, kind, base_url, api_key_enc, api_key_iv, api_key_hint, api_key_ref, extra_json, enabled, created_at)
-       VALUES
-         (@id, @companyId, @name, @kind, @baseUrl, @enc, @iv, @hint, @ref, @extra, @enabled, @createdAt)`,
+      `INSERT INTO llm_providers (id, company_id, name, kind, base_url, extra_json, enabled, created_at)
+       VALUES (@id, @companyId, @name, @kind, @baseUrl, @extra, @enabled, @createdAt)`,
       {
         id,
         companyId: input.companyId,
         name: input.name,
         kind: input.kind,
         baseUrl: input.baseUrl.replace(/\/+$/, ''),
-        enc: encrypted?.enc ?? null,
-        iv: encrypted?.iv ?? null,
-        hint: input.apiKey ? keyHint(input.apiKey) : null,
-        ref: input.apiKeyRef ?? null,
         extra: input.extra ? JSON.stringify(input.extra) : null,
         enabled: (input.enabled ?? true) ? 1 : 0,
         createdAt: nowIso(),
@@ -158,7 +167,6 @@ export class LlmRepo {
       name?: string
       kind?: ProviderKind
       baseUrl?: string
-      apiKey?: string
       extra?: Record<string, unknown>
       enabled?: boolean
     },
@@ -176,13 +184,6 @@ export class LlmRepo {
     if (patch.baseUrl !== undefined) {
       sets.push('base_url = @baseUrl')
       params.baseUrl = patch.baseUrl.replace(/\/+$/, '')
-    }
-    if (patch.apiKey !== undefined) {
-      const encrypted = this.secrets.encrypt(patch.apiKey)
-      sets.push('api_key_enc = @enc', 'api_key_iv = @iv', 'api_key_hint = @hint')
-      params.enc = encrypted.enc
-      params.iv = encrypted.iv
-      params.hint = keyHint(patch.apiKey)
     }
     if (patch.extra !== undefined) {
       sets.push('extra_json = @extra')
@@ -225,16 +226,114 @@ export class LlmRepo {
     return rows.map(toProvider)
   }
 
-  /** Decrypt the API key for one request. Called per call so rotation is immediate. */
-  resolveApiKey(provider: LlmProviderRecord): string | undefined {
-    if (provider.apiKeyEnc && provider.apiKeyIv) {
-      return this.secrets.decrypt(provider.apiKeyEnc, provider.apiKeyIv)
+  /* ------------------------------------------------------------------ keys */
+
+  /**
+   * Thêm một khoá cho provider. Khoá được mã hoá ngay tại đây; chỉ `hint` (vài ký tự
+   * đầu/cuối) được lưu dạng đọc được để người dùng nhận ra khoá nào là khoá nào.
+   */
+  createProviderKey(input: {
+    providerId: string
+    label: string
+    apiKey: string
+    priority?: number
+    enabled?: boolean
+  }): LlmProviderKeyRecord {
+    const id = newId()
+    const encrypted = this.secrets.encrypt(input.apiKey)
+    this.db.run(
+      `INSERT INTO llm_provider_keys
+         (id, provider_id, label, api_key_enc, api_key_iv, api_key_hint, priority, enabled, created_at)
+       VALUES
+         (@id, @providerId, @label, @enc, @iv, @hint, @priority, @enabled, @createdAt)`,
+      {
+        id,
+        providerId: input.providerId,
+        label: input.label,
+        enc: encrypted.enc,
+        iv: encrypted.iv,
+        hint: keyHint(input.apiKey),
+        priority: input.priority ?? 100,
+        enabled: (input.enabled ?? true) ? 1 : 0,
+        createdAt: nowIso(),
+      },
+    )
+    return this.requireProviderKey(id)
+  }
+
+  updateProviderKey(
+    id: string,
+    patch: { label?: string; apiKey?: string; priority?: number; enabled?: boolean },
+  ): LlmProviderKeyRecord {
+    const sets: string[] = []
+    const params: Record<string, unknown> = { id }
+    if (patch.label !== undefined) {
+      sets.push('label = @label')
+      params.label = patch.label
     }
-    if (provider.apiKeyRef) {
-      const value = process.env[provider.apiKeyRef]
-      return value && value.length > 0 ? value : undefined
+    if (patch.apiKey !== undefined) {
+      const encrypted = this.secrets.encrypt(patch.apiKey)
+      sets.push('api_key_enc = @enc', 'api_key_iv = @iv', 'api_key_hint = @hint')
+      params.enc = encrypted.enc
+      params.iv = encrypted.iv
+      params.hint = keyHint(patch.apiKey)
     }
-    return undefined
+    if (patch.priority !== undefined) {
+      sets.push('priority = @priority')
+      params.priority = patch.priority
+    }
+    if (patch.enabled !== undefined) {
+      sets.push('enabled = @enabled')
+      params.enabled = patch.enabled ? 1 : 0
+    }
+    if (sets.length > 0) {
+      this.db.run(`UPDATE llm_provider_keys SET ${sets.join(', ')} WHERE id = @id`, params)
+    }
+    return this.requireProviderKey(id)
+  }
+
+  deleteProviderKey(id: string): void {
+    this.db.run('DELETE FROM llm_provider_keys WHERE id = ?', [id])
+  }
+
+  findProviderKey(id: string): LlmProviderKeyRecord | undefined {
+    const row = this.db.get<ProviderKeyRow>('SELECT * FROM llm_provider_keys WHERE id = ?', [id])
+    return row ? toProviderKey(row) : undefined
+  }
+
+  requireProviderKey(id: string): LlmProviderKeyRecord {
+    const key = this.findProviderKey(id)
+    if (!key) throw notFound('Không tìm thấy khoá API')
+    return key
+  }
+
+  /** Khoá của một provider, sắp theo thứ tự dùng (priority tăng dần). */
+  listProviderKeys(providerId: string, options: { includeDisabled?: boolean } = {}): LlmProviderKeyRecord[] {
+    const rows = this.db.all<ProviderKeyRow>(
+      `SELECT * FROM llm_provider_keys
+        WHERE provider_id = ? ${options.includeDisabled ? '' : 'AND enabled = 1'}
+        ORDER BY priority ASC, created_at ASC`,
+      [providerId],
+    )
+    return rows.map(toProviderKey)
+  }
+
+  /**
+   * Khoá đã giải mã cho MỘT lượt gọi, theo thứ tự thử. Trả về mảng rỗng khi provider
+   * không có khoá nào — gateway nội bộ có thể không cần khoá, nên đây không phải lỗi.
+   */
+  resolveProviderKeys(provider: LlmProviderRecord): { id: string; label: string; apiKey: string }[] {
+    const rows = this.db.all<ProviderKeyRow>(
+      `SELECT * FROM llm_provider_keys
+        WHERE provider_id = ? AND enabled = 1
+        ORDER BY priority ASC, created_at ASC`,
+      [provider.id],
+    )
+    return rows.map((row) => ({
+      id: row.id,
+      label: row.label,
+      apiKey: row.api_key_enc && row.api_key_iv ? this.secrets.decrypt(row.api_key_enc, row.api_key_iv) : '',
+    }))
   }
 
   /* ---------------------------------------------------------------- models */
@@ -353,18 +452,115 @@ export class LlmRepo {
     })
   }
 
-  /** First enabled model of a company, used as the default when none is configured. */
-  defaultModel(companyId: string): LlmModelRecord | undefined {
-    const row = this.db.get<ModelRow>(
-      `SELECT m.* FROM llm_models m
-         JOIN llm_providers p ON p.id = m.provider_id
-        WHERE (p.company_id IS NULL OR p.company_id = ?)
-          AND m.enabled = 1 AND p.enabled = 1
-        ORDER BY m.cost_in_per_mtok ASC, m.label ASC
-        LIMIT 1`,
+  /**
+   * Số agent (khác nhau) đang tham chiếu mỗi model, gộp từ preset, route và fallback.
+   *
+   * Vì sao cần: giao diện chỉ nên cho xoá model không còn ai dùng. Đếm theo agent chứ
+   * không theo số bản ghi, vì một agent có thể có nhiều route cùng trỏ một model.
+   */
+  modelUsage(companyId: string): Map<string, number> {
+    const agentsByModel = new Map<string, Set<string>>()
+    const add = (modelFk: string | null, agentDefId: string): void => {
+      if (!modelFk) return
+      const bucket = agentsByModel.get(modelFk) ?? new Set<string>()
+      bucket.add(agentDefId)
+      agentsByModel.set(modelFk, bucket)
+    }
+    for (const row of this.db.all<{ model_fk: string; agent_def_id: string }>(
+      'SELECT model_fk, agent_def_id FROM model_routes WHERE company_id = ?',
       [companyId],
+    )) {
+      add(row.model_fk, row.agent_def_id)
+    }
+    for (const row of this.db.all<{ model_fk: string | null; agent_def_id: string }>(
+      'SELECT model_fk, agent_def_id FROM agent_presets WHERE company_id = ? AND model_fk IS NOT NULL',
+      [companyId],
+    )) {
+      add(row.model_fk, row.agent_def_id)
+    }
+    for (const row of this.db.all<{ model_fk: string; agent_def_id: string }>(
+      'SELECT model_fk, agent_def_id FROM agent_model_fallbacks WHERE company_id = ?',
+      [companyId],
+    )) {
+      add(row.model_fk, row.agent_def_id)
+    }
+    return new Map([...agentsByModel].map(([modelFk, agents]) => [modelFk, agents.size]))
+  }
+
+  /**
+   * Tập model đang được tham chiếu ở BẤT KỲ công ty nào. Dùng cho thao tác xoá: xoá
+   * một model còn được route trỏ tới sẽ kéo theo route đó biến mất trong im lặng.
+   */
+  referencedModelIds(): Set<string> {
+    const rows = this.db.all<{ model_fk: string }>(
+      `SELECT model_fk FROM model_routes
+        UNION SELECT model_fk FROM agent_presets WHERE model_fk IS NOT NULL
+        UNION SELECT model_fk FROM agent_model_fallbacks`,
     )
-    return row ? toModel(row) : undefined
+    return new Set(rows.map((row) => row.model_fk))
+  }
+
+  /** Xoá mọi model của một provider không còn được tham chiếu; trả về số đã xoá. */
+  deleteUnusedModels(providerId: string): number {
+    const referenced = this.referencedModelIds()
+    const models = this.db.all<ModelRow>('SELECT * FROM llm_models WHERE provider_id = ?', [providerId])
+    let deleted = 0
+    for (const model of models) {
+      if (referenced.has(model.id)) continue
+      this.deleteModel(model.id)
+      deleted += 1
+    }
+    return deleted
+  }
+
+  /* -------------------------------------------------------------- fallbacks */
+
+  /** Model dự phòng của một agent, theo thứ tự dùng. */
+  listModelFallbacks(companyId: string, agentDefId: string): ModelFallbackRecord[] {
+    return this.db
+      .all<FallbackRow>(
+        'SELECT * FROM agent_model_fallbacks WHERE company_id = ? AND agent_def_id = ? ORDER BY position ASC',
+        [companyId, agentDefId],
+      )
+      .map(toFallback)
+  }
+
+  /** Toàn bộ fallback của một công ty, gom theo agent — tránh N+1 khi dựng danh sách đội. */
+  fallbacksByAgent(companyId: string): Map<string, ModelFallbackRecord[]> {
+    const map = new Map<string, ModelFallbackRecord[]>()
+    for (const row of this.db
+      .all<FallbackRow>(
+        'SELECT * FROM agent_model_fallbacks WHERE company_id = ? ORDER BY agent_def_id ASC, position ASC',
+        [companyId],
+      )
+      .map(toFallback)) {
+      const bucket = map.get(row.agentDefId)
+      if (bucket) bucket.push(row)
+      else map.set(row.agentDefId, [row])
+    }
+    return map
+  }
+
+  /**
+   * Thay toàn bộ danh sách fallback của một agent bằng danh sách mới, giữ đúng thứ tự.
+   * Ghi trong một transaction: nửa danh sách cũ nửa danh sách mới là cấu hình sai.
+   */
+  setModelFallbacks(companyId: string, agentDefId: string, modelFks: readonly string[]): ModelFallbackRecord[] {
+    const unique = [...new Set(modelFks)]
+    this.db.tx(() => {
+      this.db.run('DELETE FROM agent_model_fallbacks WHERE company_id = ? AND agent_def_id = ?', [
+        companyId,
+        agentDefId,
+      ])
+      unique.forEach((modelFk, position) => {
+        this.db.run(
+          `INSERT INTO agent_model_fallbacks (id, company_id, agent_def_id, position, model_fk)
+           VALUES (@id, @companyId, @agentDefId, @position, @modelFk)`,
+          { id: newId(), companyId, agentDefId, position, modelFk },
+        )
+      })
+    })
+    return this.listModelFallbacks(companyId, agentDefId)
   }
 
   /* ---------------------------------------------------------------- routes */

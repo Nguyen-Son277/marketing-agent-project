@@ -20,7 +20,11 @@ export function createRuntimeDeps(repos: RuntimeRepos): AgentRuntimeDeps {
 
   return {
     router,
-    adapters: { adapterFor: (model) => registry.adapterFor(model) },
+    adapters: {
+      adapterFor: (model) => registry.adapterFor(model),
+      // Một adapter cho mỗi API key: vòng lặp thử lần lượt khi khoá hỏng.
+      adaptersFor: (model) => registry.adaptersFor(model).map((candidate) => candidate.adapter),
+    },
     meterFactory: (input) => {
       const meter = new CostMeter(repos.accounting)
       meter.open(input)

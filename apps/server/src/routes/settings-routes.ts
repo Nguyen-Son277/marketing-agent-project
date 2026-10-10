@@ -13,30 +13,39 @@
  */
 import { z } from 'zod'
 import {
+  conflict,
   notFound,
   parseOrThrow,
   upsertIntegrationSchema,
   upsertRouteSchema,
   createModelSchema,
   createProviderSchema,
+  createProviderKeySchema,
+  fetchModelsSchema,
+  importModelsSchema,
   updateModelSchema,
+  updateProviderKeySchema,
   updateProviderSchema,
 } from '@marketing-agent/shared'
 import type {
+  FetchModelsResponse,
+  ImportModelsResponse,
   IntegrationTestResponse,
   IntegrationView,
   LimitsView,
   ModelOptionView,
   ModelRouteView,
+  ProviderKeyView,
   ProvidersResponse,
   ProviderView,
+  PurgeModelsResponse,
   IntegrationKind,
   ModelTier,
 } from '@marketing-agent/shared'
-import type { LlmProviderRecord } from '@marketing-agent/shared'
+import type { LlmProviderKeyRecord, LlmProviderRecord } from '@marketing-agent/shared'
 import type { AppContext } from '../context.ts'
 import { requireManage, requireMembership } from '../http/middleware.ts'
-import type { Router } from '../http/router.ts'
+import type { RequestContext, Router } from '../http/router.ts'
 import { invalidateOrchestrators, probeProvider } from '../services/agent-services.ts'
 import { readLimitsView, saveLimits } from '../services/company-settings.ts'
 import { toIntegrationView, toModelOptionView, toModelRouteView, toProviderView } from '../services/view-mappers.ts'
@@ -81,13 +90,15 @@ export function settingsRoutes() {
           const providers = repos.llm.listProviders(companyId, { includeDisabled: true })
           const models = repos.llm.listModels(companyId, { includeDisabled: true })
           const providerNames = new Map(providers.map((provider) => [provider.id, provider.name]))
+          const usage = repos.llm.modelUsage(companyId)
           const response: ProvidersResponse = {
             providers: providers.map((provider) =>
               toProviderView(
                 provider,
-                providerHint(repos, provider.id),
+                repos.llm.listProviderKeys(provider.id, { includeDisabled: true }),
                 models.filter((model) => model.providerId === provider.id),
                 providerNames,
+                usage,
               ),
             ),
           }
@@ -102,14 +113,26 @@ export function settingsRoutes() {
           const companyId = request.params.companyId!
           const body = normalizeProviderBody(await request.body())
           const input = parseOrThrow(createProviderSchema, body, 'nhà cung cấp model')
-          const provider = repos.llm.createProvider({
-            companyId,
-            name: input.name,
-            kind: input.kind ?? 'openai_compatible',
-            baseUrl: input.baseUrl,
-            ...(input.apiKey ? { apiKey: input.apiKey } : {}),
-            ...(input.extraJson ? { extra: input.extraJson } : {}),
-            enabled: input.enabled,
+          // Tạo provider và khoá đầu tiên trong MỘT transaction: provider không có khoá
+          // vì lỗi nửa chừng là cấu hình chết mà người dùng không hiểu vì sao.
+          const provider = repos.db.tx(() => {
+            const created = repos.llm.createProvider({
+              companyId,
+              name: input.name,
+              kind: input.kind ?? 'openai_compatible',
+              baseUrl: input.baseUrl,
+              ...(input.extraJson ? { extra: input.extraJson } : {}),
+              enabled: input.enabled,
+            })
+            if (input.apiKey) {
+              repos.llm.createProviderKey({
+                providerId: created.id,
+                label: input.apiKeyLabel ?? 'Key 1',
+                apiKey: input.apiKey,
+                priority: 100,
+              })
+            }
+            return created
           })
           repos.accounting.audit({ companyId, action: 'provider.create', target: input.name })
           request.json(201, { provider: providerView(repos, companyId, provider) })
@@ -128,7 +151,6 @@ export function settingsRoutes() {
             ...(input.name === undefined ? {} : { name: input.name }),
             ...(input.kind === undefined ? {} : { kind: input.kind }),
             ...(input.baseUrl === undefined ? {} : { baseUrl: input.baseUrl }),
-            ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
             ...(input.extraJson === undefined ? {} : { extra: input.extraJson }),
             ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
           })
@@ -155,13 +177,177 @@ export function settingsRoutes() {
         async (request) => {
           const companyId = request.params.companyId!
           const provider = requireOwnedProvider(repos, companyId, request.params.providerId!)
-          const apiKey = repos.llm.resolveApiKey(provider)
+          const body = (await request.body()) as { keyId?: unknown } | undefined
+          const keyId = typeof body?.keyId === 'string' ? body.keyId : undefined
           const result = await probeProvider({
             baseUrl: provider.baseUrl,
             kind: provider.kind,
-            ...(apiKey ? { apiKey } : {}),
+            ...resolveProbeKey(repos, provider, keyId),
           })
           request.json(200, result)
+        },
+        [requireMembership(repos), requireManage],
+      )
+
+      /* ------------------------------------------------------------ api keys */
+
+      router.get(
+        '/api/companies/:companyId/providers/:providerId/keys',
+        async (request) => {
+          const companyId = request.params.companyId!
+          const provider = requireOwnedProvider(repos, companyId, request.params.providerId!)
+          request.json(200, { keys: providerKeyViews(repos, provider) })
+        },
+        [requireMembership(repos)],
+      )
+
+      router.post(
+        '/api/companies/:companyId/providers/:providerId/keys',
+        async (request) => {
+          const companyId = request.params.companyId!
+          const provider = requireOwnedProvider(repos, companyId, request.params.providerId!)
+          const input = parseOrThrow(createProviderKeySchema, await request.body(), 'khoá API')
+          const key = repos.llm.createProviderKey({
+            providerId: provider.id,
+            label: input.label,
+            apiKey: input.apiKey,
+            priority: input.priority,
+            enabled: input.enabled,
+          })
+          repos.accounting.audit({ companyId, action: 'provider.key.create', target: `${provider.name}:${input.label}` })
+          request.json(201, { key: toProviderKeyView(key) })
+        },
+        [requireMembership(repos), requireManage],
+      )
+
+      router.patch(
+        '/api/companies/:companyId/providers/:providerId/keys/:keyId',
+        async (request) => {
+          const companyId = request.params.companyId!
+          const provider = requireOwnedProvider(repos, companyId, request.params.providerId!)
+          const key = requireOwnedKey(repos, provider, request.params.keyId!)
+          const input = parseOrThrow(updateProviderKeySchema, await request.body(), 'cập nhật khoá API')
+          const updated = repos.llm.updateProviderKey(key.id, {
+            ...(input.label === undefined ? {} : { label: input.label }),
+            ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
+            ...(input.priority === undefined ? {} : { priority: input.priority }),
+            ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+          })
+          repos.accounting.audit({ companyId, action: 'provider.key.update', target: `${provider.name}:${updated.label}` })
+          request.json(200, { key: toProviderKeyView(updated) })
+        },
+        [requireMembership(repos), requireManage],
+      )
+
+      router.delete(
+        '/api/companies/:companyId/providers/:providerId/keys/:keyId',
+        async (request) => {
+          const companyId = request.params.companyId!
+          const provider = requireOwnedProvider(repos, companyId, request.params.providerId!)
+          const key = requireOwnedKey(repos, provider, request.params.keyId!)
+          repos.llm.deleteProviderKey(key.id)
+          repos.accounting.audit({ companyId, action: 'provider.key.delete', target: `${provider.name}:${key.label}` })
+          request.json(200, { deleted: true })
+        },
+        [requireMembership(repos), requireManage],
+      )
+
+      router.post(
+        '/api/companies/:companyId/providers/:providerId/keys/:keyId/test',
+        async (request) => {
+          const companyId = request.params.companyId!
+          const provider = requireOwnedProvider(repos, companyId, request.params.providerId!)
+          const key = requireOwnedKey(repos, provider, request.params.keyId!)
+          const result = await probeProvider({
+            baseUrl: provider.baseUrl,
+            kind: provider.kind,
+            apiKey: resolveKeyValue(repos, key.id),
+          })
+          request.json(200, result)
+        },
+        [requireMembership(repos), requireManage],
+      )
+
+      /* ----------------------------------------------------------- fetch model */
+
+      router.post(
+        '/api/companies/:companyId/providers/:providerId/fetch-models',
+        async (request) => {
+          const companyId = request.params.companyId!
+          const provider = requireOwnedProvider(repos, companyId, request.params.providerId!)
+          const input = parseOrThrow(fetchModelsSchema, await request.body(), 'danh sách model')
+          if (input.keyId && !repos.llm.findProviderKey(input.keyId)) throw notFound('Không tìm thấy khoá API')
+          const result = await probeProvider({
+            baseUrl: provider.baseUrl,
+            kind: provider.kind,
+            timeoutMs: 15_000,
+            ...(input.keyId ? { apiKey: resolveKeyValue(repos, input.keyId) } : resolveProbeKey(repos, provider)),
+          })
+          const existing = new Set(
+            repos.llm
+              .listModels(companyId, { includeDisabled: true })
+              .filter((model) => model.providerId === provider.id)
+              .map((model) => model.modelId),
+          )
+          const response: FetchModelsResponse = {
+            ok: result.ok,
+            message: result.message,
+            latencyMs: result.latencyMs,
+            models: (result.models ?? []).map((model) => ({
+              modelId: model.modelId,
+              label: model.label,
+              alreadyAdded: existing.has(model.modelId),
+            })),
+          }
+          request.json(200, response)
+        },
+        [requireMembership(repos), requireManage],
+      )
+
+      router.post(
+        '/api/companies/:companyId/providers/:providerId/import-models',
+        async (request) => {
+          const companyId = request.params.companyId!
+          const provider = requireOwnedProvider(repos, companyId, request.params.providerId!)
+          const input = parseOrThrow(importModelsSchema, await request.body(), 'model nhập về')
+          const created: ModelOptionView[] = []
+          const skipped: string[] = []
+          repos.db.tx(() => {
+            for (const item of input.models) {
+              if (repos.llm.findModelByModelId(provider.id, item.modelId)) {
+                skipped.push(item.modelId)
+                continue
+              }
+              const model = repos.llm.createModel({
+                providerId: provider.id,
+                modelId: item.modelId,
+                label: item.label ?? item.modelId,
+                contextWindow: item.contextWindow,
+                maxOutput: item.maxOutput,
+                supportsTools: item.supportsTools,
+                supportsVision: item.supportsVision,
+                costInPerMtok: item.costInPerMtok,
+                costOutPerMtok: item.costOutPerMtok,
+              })
+              created.push(toModelOptionView(model, { providerName: provider.name }))
+            }
+          })
+          repos.accounting.audit({ companyId, action: 'model.import', target: provider.name, payload: { created: created.length, skipped: skipped.length } })
+          const response: ImportModelsResponse = { created, skipped }
+          request.json(201, response)
+        },
+        [requireMembership(repos), requireManage],
+      )
+
+      router.post(
+        '/api/companies/:companyId/providers/:providerId/purge-models',
+        async (request) => {
+          const companyId = request.params.companyId!
+          const provider = requireOwnedProvider(repos, companyId, request.params.providerId!)
+          const deleted = repos.llm.deleteUnusedModels(provider.id)
+          repos.accounting.audit({ companyId, action: 'model.purge', target: provider.name, payload: { deleted } })
+          const response: PurgeModelsResponse = { deleted }
+          request.json(200, response)
         },
         [requireMembership(repos), requireManage],
       )
@@ -172,10 +358,13 @@ export function settingsRoutes() {
         '/api/companies/:companyId/models',
         async (request) => {
           const companyId = request.params.companyId!
-          const models = repos.llm.listModels(companyId, { includeDisabled: true }).map((model) => ({
-            ...toModelOptionView(model),
-            providerName: model.provider.name,
-          }))
+          const usage = repos.llm.modelUsage(companyId)
+          const models = repos.llm.listModels(companyId, { includeDisabled: true }).map((model) =>
+            toModelOptionView(model, {
+              providerName: model.provider.name,
+              usedByAgentCount: usage.get(model.id) ?? 0,
+            }),
+          )
           request.json(200, { models })
         },
         [requireMembership(repos)],
@@ -200,7 +389,7 @@ export function settingsRoutes() {
             enabled: input.enabled,
           })
           repos.accounting.audit({ companyId, action: 'model.create', target: input.label })
-          const view: ModelOptionView = { ...toModelOptionView(model), providerName: provider.name }
+          const view: ModelOptionView = { ...toModelOptionView(model, { providerName: provider.name }) }
           request.json(201, { model: view })
         },
         [requireMembership(repos), requireManage],
@@ -215,7 +404,11 @@ export function settingsRoutes() {
           const updated = repos.llm.updateModel(model.id, input)
           repos.accounting.audit({ companyId, action: 'model.update', target: updated.label })
           const provider = repos.llm.findProvider(updated.providerId)
-          const view: ModelOptionView = { ...toModelOptionView(updated), providerName: provider?.name ?? '' }
+          const usage = repos.llm.modelUsage(companyId)
+          const view: ModelOptionView = toModelOptionView(updated, {
+            providerName: provider?.name ?? '',
+            usedByAgentCount: usage.get(updated.id) ?? 0,
+          })
           request.json(200, { model: view })
         },
         [requireMembership(repos), requireManage],
@@ -226,6 +419,15 @@ export function settingsRoutes() {
         async (request) => {
           const companyId = request.params.companyId!
           const model = requireOwnedModel(repos, companyId, request.params.modelId!)
+          // Xoá model còn được route/preset/fallback trỏ tới sẽ khiến cấu hình của agent
+          // biến mất trong im lặng. Chặn lại và nói rõ cần gỡ ở đâu trước.
+          const usage = repos.llm.modelUsage(companyId).get(model.id) ?? 0
+          if (usage > 0 || repos.llm.referencedModelIds().has(model.id)) {
+            throw conflict(
+              `Model ${model.label} đang được ${usage > 0 ? `${usage} agent` : 'cấu hình'} sử dụng. ` +
+                'Hãy gỡ khỏi agent/route trước khi xoá, hoặc dùng "Xoá model không dùng".',
+            )
+          }
           repos.llm.deleteModel(model.id)
           repos.accounting.audit({ companyId, action: 'model.delete', target: model.label })
           request.json(200, { deleted: true })

@@ -496,7 +496,11 @@ export class TeamRepo {
     }
   }
 
-  /** Explicit preset model wins; then the company's tier route; then the cheapest model. */
+  /**
+   * Model hiệu lực của một preset: model gán trực tiếp, rồi route theo tier. KHÔNG có
+   * bước "model rẻ nhất" — hệ thống không tự gắn model cho agent. Chưa chọn thì trả
+   * `null` và lượt chạy sẽ báo cần cấu hình, đúng nơi người dùng sửa được.
+   */
   private resolveModelForPreset(companyId: string, preset: AgentPresetRecord, agentDefId: string) {
     if (preset.modelFk) {
       const model = this.llm.findModel(preset.modelFk)
@@ -512,7 +516,7 @@ export class TeamRepo {
       const model = this.llm.findModel(route.model_fk)
       if (model && model.enabled) return model
     }
-    return this.llm.defaultModel(companyId) ?? null
+    return null
   }
 }
 

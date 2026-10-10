@@ -18,6 +18,7 @@ import {
   withRetry,
   type LlmChatRequest,
   type LlmMessage,
+  type LlmModelRecord,
   type LlmToolCall,
   type LlmToolDefinition,
   type LlmUsage,
@@ -42,8 +43,12 @@ import type {
 const DEFAULT_MAX_STEPS = 12
 const DEFAULT_TOOL_TIMEOUT_MS = 30_000
 const RETRY_ATTEMPTS = 3
-/** Chỉ nâng model một lần mỗi run: nâng mãi sẽ đốt tiền mà không sửa được lỗi gốc. */
-const MAX_ESCALATIONS = 1
+/**
+ * Số model khác nhau tối đa được thử trong một run. Mỗi lần thử là một lần gọi thật,
+ * tốn thời gian và tiền, nên chuỗi dự phòng dù người dùng cấu hình bao nhiêu cũng bị
+ * chặn ở đây. Trong MỘT model, các API key được thử lần lượt trước khi đổi model.
+ */
+const MAX_MODEL_ATTEMPTS = 4
 
 const ZERO_USAGE: LlmUsage = { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }
 
@@ -75,6 +80,11 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
   // một bản ghi run treo ở trạng thái `running`.
   let choice = deps.router.chooseForAgent(agent, { needsTools })
   let modelId: string | null = choice.model.id
+  // Một model có thể có nhiều API key. Thử lần lượt từng khoá trước khi bỏ model, vì
+  // đổi model là thay đổi lớn hơn nhiều so với đổi khoá của cùng một nhà cung cấp.
+  let adapters = pickAdapters(deps, choice.model)
+  let keyIndex = 0
+  const triedModels = new Set<string>([choice.model.id])
 
   const meter = deps.meterFactory({
     companyId: agent.companyId,
@@ -96,7 +106,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
   let reasoningText = ''
   let stopReason: AgentStopReason = 'completed'
   let errorMessage: string | null = null
-  let escalations = 0
+  let modelAttempts = 0
 
   try {
     for (let step = 1; step <= maxSteps; step += 1) {
@@ -135,7 +145,8 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
       steps += 1
       let turn: ModelTurn
       try {
-        const adapter = deps.adapter ?? deps.adapters.adapterFor(choice.model)
+        const adapter = deps.adapter ?? adapters[keyIndex] ?? adapters[0]
+        if (!adapter) throw new Error('Không có adapter nào cho model đã chọn')
         turn = await withRetry(() => collectTurn(adapter, request, input.signal), {
           attempts: RETRY_ATTEMPTS,
           isRetryable: isRetryableProviderError,
@@ -146,15 +157,42 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
           errorMessage = 'Lượt chạy đã bị huỷ theo yêu cầu'
           break
         }
-        if (escalations < MAX_ESCALATIONS) {
-          escalations += 1
+
+        // 1) Còn API key khác của cùng model: thử khoá kế tiếp, chưa đổi model.
+        if (!deps.adapter && keyIndex + 1 < adapters.length) {
+          keyIndex += 1
+          input.context.log('Khoá API lỗi; thử khoá kế tiếp', {
+            model: choice.model.modelId,
+            keyIndex,
+          })
+          continue
+        }
+
+        // 2) Hết khoá: chuyển sang model dự phòng tiếp theo trong chuỗi đã cấu hình.
+        if (modelAttempts < MAX_MODEL_ATTEMPTS) {
+          modelAttempts += 1
           try {
-            choice = deps.router.escalate(agent, choice.model.id)
+            const previous = choice.model
+            const next = deps.router.escalate(agent, previous.id)
+            if (triedModels.has(next.model.id)) {
+              stopReason = 'model_error'
+              errorMessage = `Nhà cung cấp LLM thất bại: ${describeError(thrown)}`
+              break
+            }
+            triedModels.add(next.model.id)
+            choice = next
             modelId = choice.model.id
+            adapters = pickAdapters(deps, choice.model)
+            keyIndex = 0
+            input.context.log('Model lỗi; chuyển model dự phòng', {
+              from: previous.modelId,
+              to: choice.model.modelId,
+              reason: choice.reason,
+            })
             continue
           } catch (escalationError) {
             stopReason = 'model_error'
-            errorMessage = `Không thể nâng cấp model sau lỗi nhà cung cấp: ${describeError(escalationError)}`
+            errorMessage = `Không thể chuyển model sau lỗi nhà cung cấp: ${describeError(escalationError)}`
             break
           }
         }
@@ -263,6 +301,17 @@ export function statusFor(reason: AgentStopReason): RunStatus {
 /** Bỏ handler và metadata trước khi gửi tool cho model — model không cần hàm JS. */
 export function toLlmToolDefinition(tool: ToolDefinition): LlmToolDefinition {
   return { name: tool.name, description: tool.description, parameters: tool.parameters }
+}
+
+/**
+ * Danh sách adapter để thử cho một model, theo thứ tự ưu tiên. Ưu tiên adapter cố định
+ * khi test tiêm vào; sau đó tới danh sách nhiều khoá; cuối cùng là một adapter duy nhất.
+ */
+function pickAdapters(deps: AgentRuntimeDeps, model: LlmModelRecord): readonly ChatAdapter[] {
+  if (deps.adapter) return [deps.adapter]
+  const many = deps.adapters.adaptersFor?.(model)
+  if (many && many.length > 0) return many
+  return [deps.adapters.adapterFor(model)]
 }
 
 async function collectTurn(

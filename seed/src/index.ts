@@ -5,9 +5,10 @@
  * default provider and its models) and is safe to re-run: every write is an
  * upsert keyed by a natural key.
  *
- * `seedCompany` configures one company end to end — presets, model routes,
- * knowledge ACLs — and optionally creates an owner account and the demo
- * knowledge base. Re-running it repairs missing rows without duplicating any.
+ * `seedCompany` configures one company end to end — presets, knowledge ACLs — and
+ * optionally creates an owner account and the demo knowledge base. Re-running it
+ * repairs missing rows without duplicating any. Providers, API keys and models are
+ * NOT seeded: the user adds them in Settings.
  */
 import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -24,7 +25,6 @@ import {
 import type { Repos } from '@marketing-agent/db'
 import { AGENT_DEF_SEEDS, expandKnowledgeRead, type AgentDefSeed } from './agents.ts'
 import { SKILL_SEEDS } from './skills.ts'
-import { PROVIDER_SEEDS, DEFAULT_TIER_ROUTES } from './providers.ts'
 import { DEMO_KB_DOCUMENTS, type SeedDocument } from './knowledge.ts'
 
 const ALL_CATEGORIES: readonly string[] = KB_CATEGORIES.map((c) => c.code)
@@ -32,8 +32,6 @@ const ALL_CATEGORIES: readonly string[] = KB_CATEGORIES.map((c) => c.code)
 export interface SeedCatalogResult {
   readonly agentDefs: number
   readonly skills: number
-  readonly providers: number
-  readonly models: number
 }
 
 /** Install or repair the global catalog every company depends on. */
@@ -59,74 +57,10 @@ export function seedCatalog(repos: Repos): SeedCatalogResult {
     })
   }
 
-  let models = 0
-  for (const provider of PROVIDER_SEEDS) {
-    // Providers seeded locally are global (companyId null) so every company can use them.
-    const existing = findByBaseUrl(repos, provider.baseUrl, provider.name)
-    const record =
-      existing ??
-      repos.llm.createProvider({
-        companyId: null,
-        name: provider.name,
-        kind: provider.kind,
-        baseUrl: provider.baseUrl,
-        apiKeyRef: provider.apiKeyRef,
-        enabled: provider.enabled,
-      })
-    for (const model of provider.models) {
-      const already = repos.llm.findModelByModelId(record.id, model.modelId)
-      if (already) {
-        repos.llm.updateModel(already.id, {
-          label: model.label,
-          contextWindow: model.contextWindow,
-          maxOutput: model.maxOutput,
-          supportsTools: model.supportsTools,
-          supportsVision: model.supportsVision,
-          costInPerMtok: model.costInPerMtok,
-          costOutPerMtok: model.costOutPerMtok,
-          enabled: true,
-        })
-      } else {
-        repos.llm.createModel({
-          providerId: record.id,
-          modelId: model.modelId,
-          label: model.label,
-          contextWindow: model.contextWindow,
-          maxOutput: model.maxOutput,
-          supportsTools: model.supportsTools,
-          supportsVision: model.supportsVision,
-          costInPerMtok: model.costInPerMtok,
-          costOutPerMtok: model.costOutPerMtok,
-        })
-      }
-      models++
-    }
-  }
-
   return {
     agentDefs: AGENT_DEF_SEEDS.length,
     skills: SKILL_SEEDS.length,
-    providers: PROVIDER_SEEDS.length,
-    models,
   }
-}
-
-/**
- * Find a globally seeded provider by its canonical base URL, falling back to the
- * seeded name. Re-running the seed must reuse the row, never duplicate it.
- */
-function findByBaseUrl(repos: Repos, baseUrl: string, name: string) {
-  const normalized = baseUrl.replace(/\/+$/, '')
-  const byUrl = repos.db.get<{ id: string }>(
-    'SELECT id FROM llm_providers WHERE base_url = ? AND company_id IS NULL',
-    [normalized],
-  )
-  if (byUrl) return repos.llm.findProvider(byUrl.id)
-  const byName = repos.db.get<{ id: string }>(
-    'SELECT id FROM llm_providers WHERE name = ? AND company_id IS NULL',
-    [name],
-  )
-  return byName ? repos.llm.findProvider(byName.id) : undefined
 }
 
 export interface SeedCompanyOptions {
@@ -145,12 +79,11 @@ export interface SeedCompanyResult {
   readonly company: CompanyRecord
   readonly owner?: PublicUser
   readonly presets: number
-  readonly routes: number
   readonly aclEntries: number
   readonly documents: number
 }
 
-/** Configure a company: presets, tier routes, knowledge ACLs, optional content. */
+/** Configure a company: presets, knowledge ACLs, optional content. */
 export function seedCompany(repos: Repos, options: SeedCompanyOptions): SeedCompanyResult {
   const company = ensureCompany(repos, options.companyName)
 
@@ -159,8 +92,9 @@ export function seedCompany(repos: Repos, options: SeedCompanyOptions): SeedComp
     owner = ensureOwner(repos, company, options)
   }
 
-  // Presets first, so every agent can resolve a model. `ensurePresetsForCompany`
-  // applies each definition's preferred tier when it creates the row.
+  // Presets first, so every agent has a place to store its chosen model.
+  // `ensurePresetsForCompany` applies each definition's preferred tier when it creates
+  // the row. KHÔNG tạo route model: model do người dùng chọn trong giao diện.
   const presets = repos.team.ensurePresetsForCompany(company.id)
 
   for (const def of AGENT_DEF_SEEDS) {
@@ -169,23 +103,6 @@ export function seedCompany(repos: Repos, options: SeedCompanyOptions): SeedComp
     if (preset && preset.tier !== def.tier) {
       repos.team.updatePreset(company.id, agentDefId, { tier: def.tier })
     }
-  }
-  const modelByModelId = new Map<string, string>()
-  for (const record of repos.llm.listModels(company.id)) {
-    if (!modelByModelId.has(record.modelId)) modelByModelId.set(record.modelId, record.id)
-  }
-  let routes = 0
-  for (const route of DEFAULT_TIER_ROUTES) {
-    const modelFk = modelByModelId.get(route.modelId)
-    const agentDef = repos.team.findAgentDefByRole(route.role)
-    if (!modelFk || !agentDef) continue
-    repos.llm.upsertRoute({
-      companyId: company.id,
-      agentDefId: agentDef.id,
-      tier: route.tier,
-      modelFk,
-    })
-    routes++
   }
 
   // Knowledge ACL per agent definition, derived from the definition's reads.
@@ -214,7 +131,7 @@ export function seedCompany(repos: Repos, options: SeedCompanyOptions): SeedComp
     documents = seedKnowledge(repos, company.id, kbDir ? { kbDir } : {})
   }
 
-  return { company, owner, presets: presets.length, routes, aclEntries, documents }
+  return { company, owner, presets: presets.length, aclEntries, documents }
 }
 
 function requireDefId(repos: Repos, def: AgentDefSeed): string {
@@ -334,11 +251,4 @@ export { SKILL_SEEDS, SKILL_SEED_BY_NAME } from './skills.ts'
 export type { SkillSeed } from './skills.ts'
 export { DEMO_KB_DOCUMENTS } from './knowledge.ts'
 export type { SeedDocument } from './knowledge.ts'
-export {
-  PROVIDER_SEEDS,
-  DEFAULT_TIER_ROUTES,
-  DEFAULT_BUDGET,
-  DEFAULT_BASE_URL,
-  DEFAULT_API_KEY_REF,
-} from './providers.ts'
-export type { ProviderSeed, ModelSeed } from './providers.ts'
+export { DEFAULT_BUDGET } from './providers.ts'

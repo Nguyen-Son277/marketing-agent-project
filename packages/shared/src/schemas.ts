@@ -47,15 +47,64 @@ export const createProviderSchema = z.object({
   name: z.string().trim().min(1).max(80),
   kind: providerKindSchema.default('openai_compatible'),
   baseUrl: z.string().trim().url('URL không hợp lệ'),
-  /** Plaintext key accepted once on write, encrypted before storage. Never echoed back. */
+  /**
+   * Khoá đầu tiên, tuỳ chọn. Plaintext chỉ nhận một lần khi ghi rồi mã hoá ngay.
+   * Thêm khoá tiếp theo bằng endpoint `/providers/:id/keys`.
+   */
   apiKey: z.string().trim().min(1).max(500).optional(),
+  apiKeyLabel: z.string().trim().min(1).max(80).optional(),
   extraJson: z.record(z.unknown()).optional(),
   enabled: z.boolean().default(true),
 })
 export type CreateProviderInput = z.infer<typeof createProviderSchema>
 
-export const updateProviderSchema = createProviderSchema.partial()
+/**
+ * Sửa provider KHÔNG nhận khoá: đổi khoá là thao tác trên từng khoá, để một lần gõ
+ * nhầm không âm thầm thay khoá đang chạy và để nhiều khoá cùng tồn tại được.
+ */
+export const updateProviderSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  kind: providerKindSchema.optional(),
+  baseUrl: z.string().trim().url('URL không hợp lệ').optional(),
+  extraJson: z.record(z.unknown()).optional(),
+  enabled: z.boolean().optional(),
+})
 export type UpdateProviderInput = z.infer<typeof updateProviderSchema>
+
+export const createProviderKeySchema = z.object({
+  label: z.string().trim().min(1).max(80).default('Key'),
+  apiKey: z.string().trim().min(1).max(500),
+  /** Số nhỏ dùng trước. Khoá đầu tiên nên là 100, khoá dự phòng 200, 300, … */
+  priority: z.number().int().min(0).max(10_000).default(100),
+  enabled: z.boolean().default(true),
+})
+export type CreateProviderKeyInput = z.infer<typeof createProviderKeySchema>
+
+export const updateProviderKeySchema = createProviderKeySchema.partial()
+export type UpdateProviderKeyInput = z.infer<typeof updateProviderKeySchema>
+
+/** Fetch model: chọn khoá nào để gọi, bỏ trống thì dùng khoá đang bật có priority nhỏ nhất. */
+export const fetchModelsSchema = z.object({
+  keyId: z.string().min(1).optional(),
+})
+export type FetchModelsInput = z.infer<typeof fetchModelsSchema>
+
+export const importModelSchema = z.object({
+  modelId: z.string().trim().min(1).max(200),
+  label: z.string().trim().min(1).max(160).optional(),
+  contextWindow: z.number().int().positive().max(10_000_000).optional(),
+  maxOutput: z.number().int().positive().max(1_000_000).optional(),
+  supportsTools: z.boolean().optional(),
+  supportsVision: z.boolean().optional(),
+  costInPerMtok: z.number().min(0).optional(),
+  costOutPerMtok: z.number().min(0).optional(),
+})
+export type ImportModelInput = z.infer<typeof importModelSchema>
+
+export const importModelsSchema = z.object({
+  models: z.array(importModelSchema).min(1).max(200),
+})
+export type ImportModelsInput = z.infer<typeof importModelsSchema>
 
 export const createModelSchema = z.object({
   providerId: z.string().min(1),
@@ -88,6 +137,11 @@ export const updateTeamMemberSchema = z.object({
   enabled: z.boolean().optional(),
   displayName: z.string().trim().max(120).nullable().optional(),
   modelFk: z.string().min(1).nullable().optional(),
+  /**
+   * Danh sách model dự phòng theo thứ tự dùng. Giới hạn 5 để chuỗi thử vẫn ngắn:
+   * mỗi phần tử là một lần gọi model thật, tốn thời gian và tiền.
+   */
+  fallbackModelFks: z.array(z.string().min(1)).max(5).optional(),
   tier: modelTierSchema.optional(),
   reasoningEffort: z.string().trim().max(40).nullable().optional(),
   maxTokens: z.number().int().positive().max(1_000_000).nullable().optional(),
@@ -126,6 +180,23 @@ export const sendMessageSchema = z.object({
   content: z.string().trim().min(1, 'Cần nội dung').max(20_000),
   /** When true the leader plans and dispatches immediately instead of asking first. */
   autoPlan: z.boolean().default(false),
+  /**
+   * Câu trả lời cho thẻ chọn phương án, nếu lượt trước Leader có hỏi lại.
+   *
+   * Vì sao gửi kèm mã phương án thay vì chỉ gửi `content`: người dùng chọn "Không chạy
+   * TikTok" mà máy lại suy ra `scope` là "chạy TikTok" thì đó là lỗi nguy hiểm. Có mã
+   * phương án, server ánh xạ thẳng vào trường brief, không phải đoán từ câu chữ.
+   */
+  answers: z
+    .array(
+      z.object({
+        field: z.string().trim().min(1).max(40),
+        optionIds: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
+        custom: z.string().trim().max(2_000).optional(),
+      }),
+    )
+    .max(6)
+    .default([]),
 })
 export type SendMessageInput = z.infer<typeof sendMessageSchema>
 
