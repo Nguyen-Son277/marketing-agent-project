@@ -43,6 +43,27 @@ function parseArgs(argv: readonly string[]): Args {
   return args
 }
 
+/**
+ * Nạp `.env` trước khi đọc biến môi trường.
+ *
+ * Vì sao bắt buộc: tài liệu quick-start nói làm theo thứ tự `cp .env.example .env`
+ * rồi `pnpm db:seed`, nhưng nếu CLI không đọc `.env` thì lệnh đó luôn thất bại với
+ * "Thiếu APP_SECRET" — người dùng phải tự export biến, điều hướng dẫn không hề nói.
+ * Dùng `process.loadEnvFile` của Node 22 nên không cần thêm dependency dotenv.
+ * Biến môi trường thật vẫn được ưu tiên: `loadEnvFile` không ghi đè biến đã có.
+ */
+function loadDotEnv(): void {
+  const load = (process as unknown as { loadEnvFile?: (path?: string) => void }).loadEnvFile
+  if (typeof load !== 'function') return
+  try {
+    load()
+  } catch {
+    // .env là tuỳ chọn; biến môi trường thật vẫn dùng được.
+  }
+}
+
+loadDotEnv()
+
 const args = parseArgs(process.argv.slice(2))
 const file = process.env.DATABASE_PATH ?? 'data/marketing.db'
 const repos = createRepos({ file, appSecret: resolveAppSecret() })
@@ -61,6 +82,9 @@ try {
       ownerPassword: args.password,
       ownerName: args.ownerName,
       withDemoKnowledge: args.demo,
+      // Cùng gốc với `pnpm kb:index` và `config.kbRoot` của server, để tài liệu mẫu
+      // nằm đúng chỗ mà indexer và agent đọc.
+      ...(process.env.KB_ROOT ? { kbRoot: process.env.KB_ROOT } : {}),
     })
     console.log(
       `✓ Công ty "${result.company.name}" (${result.company.slug}): ` +

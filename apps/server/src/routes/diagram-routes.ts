@@ -28,7 +28,11 @@ const ROLE_LAYER: Readonly<Record<AgentRole, DiagramNode['layer']>> = {
   'social-media': 'channel',
   'paid-media': 'channel',
   'email-crm': 'channel',
-  'community-care': 'channel',
+  // `community-care` thuộc lớp đo lường & CHĂM SÓC, không phải lớp kênh: công việc
+  // của nó là giữ quan hệ với khách hàng và leo thang khủng hoảng, không phải đẩy
+  // nội dung ra kênh. Tài liệu `docs/so-do-doi-agent.md` và nhãn lớp trong giao diện
+  // đều đã xếp đúng như vậy; đây là chỗ code bị lệch.
+  'community-care': 'measure',
   analytics: 'measure',
 }
 

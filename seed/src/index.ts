@@ -10,6 +10,8 @@
  * knowledge base. Re-running it repairs missing rows without duplicating any.
  */
 import { createHash } from 'node:crypto'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import {
   KB_CATEGORIES,
   type AgentRole,
@@ -23,7 +25,7 @@ import type { Repos } from '@marketing-agent/db'
 import { AGENT_DEF_SEEDS, expandKnowledgeRead, type AgentDefSeed } from './agents.ts'
 import { SKILL_SEEDS } from './skills.ts'
 import { PROVIDER_SEEDS, DEFAULT_TIER_ROUTES } from './providers.ts'
-import { DEMO_KB_DOCUMENTS } from './knowledge.ts'
+import { DEMO_KB_DOCUMENTS, type SeedDocument } from './knowledge.ts'
 
 const ALL_CATEGORIES: readonly string[] = KB_CATEGORIES.map((c) => c.code)
 
@@ -133,8 +135,10 @@ export interface SeedCompanyOptions {
   readonly ownerEmail?: string
   readonly ownerPassword?: string
   readonly ownerName?: string
-  /** Install the demo knowledge base documents. */
+  /** Install the demo knowledge base documents (files on disk plus DB rows). */
   readonly withDemoKnowledge?: boolean
+  /** Root for the on-disk knowledge base, one directory per company slug. */
+  readonly kbRoot?: string
 }
 
 export interface SeedCompanyResult {
@@ -205,7 +209,9 @@ export function seedCompany(repos: Repos, options: SeedCompanyOptions): SeedComp
 
   let documents = 0
   if (options.withDemoKnowledge) {
-    documents = seedKnowledge(repos, company.id)
+    // `data/companies/<slug>/kb` — cùng quy ước với `pnpm kb:index` và `KB_ROOT`.
+    const kbDir = options.kbRoot ? join(options.kbRoot, company.slug, 'kb') : undefined
+    documents = seedKnowledge(repos, company.id, kbDir ? { kbDir } : {})
   }
 
   return { company, owner, presets: presets.length, routes, aclEntries, documents }
@@ -247,16 +253,30 @@ function ensureOwner(repos: Repos, company: CompanyRecord, options: SeedCompanyO
   return { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin }
 }
 
-/** Insert the demo documents. Chunking is the knowledge package's job, so this
- *  stores documents only when the caller has no indexer available; the CLI
- *  indexes them right after. */
-export function seedKnowledge(repos: Repos, companyId: string): number {
+/**
+ * Cài kho kiến thức mẫu cho một công ty.
+ *
+ * Ghi vào HAI nơi, và cả hai đều cần thiết:
+ *
+ * 1. **File Markdown trên đĩa** (`<kbRoot>/<slug>/kb/...`) — đây là bản gốc do người
+ *    quản lý, và là thứ `pnpm kb:index` đọc. Nếu chỉ ghi DB thì lệnh index được gợi ý
+ *    sẽ báo "không có thư mục kiến thức", và người dùng tưởng hệ thống hỏng.
+ * 2. **Bản ghi trong DB** kèm một chunk toàn văn — để truy xuất chạy được ngay, trước
+ *    khi index tạo chunk theo heading và vector.
+ *
+ * Indexer sở hữu việc chia chunk thật; seed chỉ đảm bảo có nội dung để đọc.
+ */
+export function seedKnowledge(
+  repos: Repos,
+  companyId: string,
+  options: { kbDir?: string } = {},
+): number {
   let count = 0
   for (const doc of DEMO_KB_DOCUMENTS) {
+    if (options.kbDir) writeKbFile(options.kbDir, doc)
+
     const existing = repos.knowledge.findDocument(companyId, doc.path)
     if (existing && existing.checksum === checksumOf(doc.content)) continue
-    // Chunks are produced by the knowledge package's indexer; seed a single
-    // whole-document chunk so retrieval works even before an index run.
     repos.knowledge.upsertDocumentAndChunks(
       {
         companyId,
@@ -272,6 +292,26 @@ export function seedKnowledge(repos: Repos, companyId: string): number {
     count++
   }
   return count
+}
+
+/**
+ * Ghi một tài liệu thành file Markdown có frontmatter.
+ *
+ * Frontmatter là bắt buộc chứ không phải trang trí: indexer đọc `category` từ đó, và
+ * `category` chính là đơn vị phân quyền. Thiếu nó thì tài liệu không index được.
+ */
+function writeKbFile(kbDir: string, doc: SeedDocument): void {
+  const target = join(kbDir, doc.path)
+  mkdirSync(dirname(target), { recursive: true })
+  const frontmatter = [
+    '---',
+    `title: ${doc.title}`,
+    `category: ${doc.category}`,
+    `tags: [${doc.tags.join(', ')}]`,
+    '---',
+    '',
+  ].join('\n')
+  writeFileSync(target, frontmatter + doc.content, 'utf8')
 }
 
 function checksumOf(content: string): string {
