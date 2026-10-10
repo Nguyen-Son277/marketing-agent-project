@@ -1,0 +1,73 @@
+/**
+ * Standardized error vocabulary. Every layer throws `AppError` subclasses so the
+ * HTTP boundary can map failures to stable status codes without string matching.
+ */
+
+export type AppErrorCode =
+  | 'unauthorized'
+  | 'forbidden'
+  | 'not_found'
+  | 'validation'
+  | 'conflict'
+  | 'rate_limited'
+  | 'provider_error'
+  | 'tool_error'
+  | 'needs_configuration'
+  | 'budget_exceeded'
+  | 'internal'
+
+const STATUS_BY_CODE: Record<AppErrorCode, number> = {
+  unauthorized: 401,
+  forbidden: 403,
+  not_found: 404,
+  validation: 400,
+  conflict: 409,
+  rate_limited: 429,
+  provider_error: 502,
+  tool_error: 502,
+  needs_configuration: 424,
+  budget_exceeded: 429,
+  internal: 500,
+}
+
+export interface AppErrorOptions {
+  /** Non-sensitive diagnostic detail; never include secrets or raw API keys. */
+  readonly details?: unknown
+  readonly cause?: unknown
+}
+
+export class AppError extends Error {
+  readonly code: AppErrorCode
+  readonly status: number
+  readonly details: unknown
+
+  constructor(code: AppErrorCode, message: string, options: AppErrorOptions = {}) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause })
+    this.name = 'AppError'
+    this.code = code
+    this.status = STATUS_BY_CODE[code]
+    this.details = options.details
+  }
+}
+
+export const unauthorized = (m = 'Cần đăng nhập') => new AppError('unauthorized', m)
+export const forbidden = (m = 'Không có quyền truy cập') => new AppError('forbidden', m)
+export const notFound = (m = 'Không tìm thấy') => new AppError('not_found', m)
+export const validation = (m: string, details?: unknown) => new AppError('validation', m, { details })
+export const conflict = (m: string) => new AppError('conflict', m)
+export const needsConfiguration = (m: string, details?: unknown) =>
+  new AppError('needs_configuration', m, { details })
+export const providerError = (m: string, options?: AppErrorOptions) => new AppError('provider_error', m, options)
+export const toolError = (m: string, options?: AppErrorOptions) => new AppError('tool_error', m, options)
+export const budgetExceeded = (m: string, details?: unknown) => new AppError('budget_exceeded', m, { details })
+
+export function isAppError(e: unknown): e is AppError {
+  return e instanceof AppError
+}
+
+/** Normalize an unknown thrown value into an AppError-shaped result. */
+export function toAppError(e: unknown): AppError {
+  if (isAppError(e)) return e
+  if (e instanceof Error) return new AppError('internal', e.message, { cause: e })
+  return new AppError('internal', String(e))
+}
