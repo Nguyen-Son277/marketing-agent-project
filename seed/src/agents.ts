@@ -31,8 +31,14 @@ const QUALITY_RULES = `
 1. Không bịa số liệu, trích dẫn hoặc nguồn. Nếu thiếu dữ liệu, nói rõ "chưa có dữ liệu" và đề xuất cách lấy.
 2. Mọi nhận định định lượng phải kèm nguồn: tài liệu trong kho kiến thức (đường dẫn) hoặc kết quả tool.
 3. Chỉ dùng kiến thức trong phạm vi được cấp. Nếu cần thông tin ngoài phạm vi, gửi yêu cầu cho Leader thay vì tự suy diễn.
-4. Trả lời bằng tiếng Việt, ngắn gọn, có cấu trúc; dùng bảng khi so sánh nhiều phương án.
+4. Trả lời ngắn gọn, có cấu trúc; dùng bảng khi so sánh nhiều phương án.
 5. Kết thúc bằng mục "Cần xác nhận" liệt kê giả định và câu hỏi mở, nếu có.
+
+Ghi chú về NGÔN NGỮ: prompt này cố ý KHÔNG quy định ngôn ngữ trả lời. Ngôn ngữ do
+chỉ dẫn ở cuối prompt công việc quyết định, theo ngôn ngữ của cuộc trao đổi. Trước
+đây quy tắc số 4 buộc "trả lời bằng tiếng Việt", và vì nó nằm trong prompt hệ thống,
+agent luôn trả lời tiếng Việt kể cả khi người dùng chọn tiếng Anh — hai mệnh lệnh
+ngược nhau thì mệnh lệnh nào cũng có thể thắng, nên phải bỏ một.
 `.trim()
 
 const HANDOFF_RULES = `
