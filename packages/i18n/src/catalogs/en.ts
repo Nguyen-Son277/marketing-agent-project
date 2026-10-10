@@ -1,3 +1,4 @@
+import { en_errors } from './en/errors.ts'
 /**
  * English catalog.
  *
@@ -15,6 +16,13 @@
  *  - Imperatives are kept short ("Save", "Retry") because they sit in buttons.
  */
 import type { Catalog } from './vi.ts'
+import { en_chat } from './en/chat.ts'
+import { en_tasks } from './en/tasks.ts'
+import { en_team } from './en/team.ts'
+import { en_knowledge } from './en/knowledge.ts'
+import { en_settings } from './en/settings.ts'
+import { en_costs } from './en/costs.ts'
+import { en_diagram } from './en/diagram.ts'
 
 export const en = {
   /* ------------------------------------------------------------- general */
@@ -165,4 +173,14 @@ export const en = {
   'dashboard.viewTasks': 'View tasks',
   'dashboard.viewTasksHint': 'Press “View tasks” to open the full kanban board.',
   'dashboard.finishSetup': 'Open “Settings” to finish configuration before using this screen.',
+
+  /* ------------------------------------------- per-screen namespaces */
+  ...en_errors,
+  ...en_chat,
+  ...en_tasks,
+  ...en_team,
+  ...en_knowledge,
+  ...en_settings,
+  ...en_costs,
+  ...en_diagram,
 } as const satisfies Catalog

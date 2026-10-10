@@ -1,3 +1,12 @@
+import { vi_errors } from './vi/errors.ts'
+import { vi_chat } from './vi/chat.ts'
+import { vi_tasks } from './vi/tasks.ts'
+import { vi_team } from './vi/team.ts'
+import { vi_knowledge } from './vi/knowledge.ts'
+import { vi_settings } from './vi/settings.ts'
+import { vi_costs } from './vi/costs.ts'
+import { vi_diagram } from './vi/diagram.ts'
+
 /**
  * Catalog tiếng Việt — NGUỒN SỰ THẬT của mọi chuỗi giao diện.
  *
@@ -165,6 +174,17 @@ export const vi = {
   'dashboard.viewTasks': 'Xem công việc',
   'dashboard.viewTasksHint': 'Bấm “Xem công việc” để mở bảng kanban đầy đủ.',
   'dashboard.finishSetup': 'Vào mục “Cài đặt” để hoàn tất cấu hình trước khi dùng màn hình này.',
+
+  /* ------------------------------------- chuỗi riêng từng màn hình */
+  // Mỗi màn hình một file để nhiều người bổ sung song song mà không xung đột.
+  ...vi_errors,
+  ...vi_chat,
+  ...vi_tasks,
+  ...vi_team,
+  ...vi_knowledge,
+  ...vi_settings,
+  ...vi_costs,
+  ...vi_diagram,
 } as const
 
 /** Kiểu của catalog; dùng để bắt catalog tiếng Anh phải phủ đủ khoá. */
