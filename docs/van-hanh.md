@@ -33,6 +33,66 @@ curl -s localhost:3000/api/system/status
 
 ---
 
+## 0.1. Admin duyệt tài khoản
+
+User đăng ký mới ở trạng thái **chờ duyệt**. Họ đăng nhập được để kiểm tra trạng thái,
+nhưng mọi API nghiệp vụ bị chặn cho tới khi admin duyệt. Tài khoản có trước migration
+`0009_user_approval` giữ quyền sử dụng; dữ liệu công ty và mật khẩu không bị thay đổi.
+
+Để tạo admin đầu tiên:
+1. Đăng ký email admin trên website bằng mật khẩu của chính người quản trị.
+2. Trên server, dùng đúng `DATABASE_PATH` và `APP_SECRET` của ứng dụng rồi chạy:
+
+```bash
+pnpm admin:grant --email thehung020630@gmail.com
+```
+
+Lệnh chỉ nâng tài khoản **đã tồn tại**, đồng thời duyệt tài khoản đó; không tạo mật khẩu
+mặc định, không thay mật khẩu, không có endpoint cấp admin qua website. Nếu email chưa
+đăng ký, lệnh dừng và báo rõ. Chạy lại không ghi audit trùng.
+
+Admin đăng nhập sẽ thấy giao diện **Duyệt tài khoản**, không cần công ty. Có danh sách
+chờ duyệt/đã duyệt, tìm kiếm và xác nhận duyệt từng user. Quyền `admin` của một công ty
+không phải quyền admin hệ thống và không được duyệt user toàn hệ thống.
+
+Đợt này chưa có từ chối, khoá/xoá user hoặc thu hồi quyền đã duyệt. Sau khi admin duyệt,
+user bấm **Kiểm tra lại trạng thái** trên màn chờ hoặc đăng nhập lại để vào ứng dụng.
+
+## 0.2. Giao việc designer nhiều công ty
+
+1. Đăng nhập bằng user quản lý đã duyệt, có vai trò owner/admin tại các công ty cần giao việc.
+2. Mở **Giao việc nhân viên → Nhân viên → Tạo nhân viên**. Nhập tên/email/mật khẩu ban đầu và chọn cả 3 công ty. Không dùng chung tài khoản quản lý; email đã tồn tại sẽ bị từ chối, không tự chuyển quyền.
+3. Admin hệ thống duyệt tài khoản nhân viên. Designer đăng nhập bằng mật khẩu ban đầu và bắt buộc đổi mật khẩu trước khi nhận việc. Mật khẩu ban đầu không hiển thị lại, quản lý phải chuyển riêng cho nhân viên qua kênh tin cậy.
+4. Trên **Bảng công việc**, chọn Tất cả công ty để xem chung. Giao việc cần brief, người nhận, loại hình/video, tuần bắt đầu thứ Hai, ngày tuỳ chọn và deadline ngày/giờ Việt Nam. Lưu nháp sẽ chưa hiện cho nhân viên; xác nhận giao mới hiện.
+5. Designer dùng **Việc của tôi**, xem theo tuần/ngày, bắt đầu làm, báo cáo tiến độ/vướng mắc hoặc báo xong với link sản phẩm HTTP/HTTPS. Báo xong chỉ chuyển sang chờ duyệt; quản lý duyệt mới hoàn thành. Yêu cầu sửa/mở lại phải có lý do.
+6. Dùng mục **Việc quá hạn / tồn từ tuần trước** để tìm việc cũ còn mở. Chỉnh quyền công ty hoặc ngừng nhân viên cần xác nhận nếu còn việc chưa hoàn tất; việc cũ vẫn lưu lịch sử, nhân viên mất truy cập phạm vi thu hồi và phải đăng nhập lại.
+
+### Agent hỗ trợ giao việc
+Trong **Trao đổi**, chọn chế độ **Giao việc designer**. Leader chỉ hỏi thông tin công việc, không yêu cầu KPI/ngân sách của chiến dịch; cần model có tool-call và grant `employee_list`, `employee_task_draft`. Migration cấp grant một lần cho preset Leader/Design-Video đã có, seed cấp cho công ty mới; quản lý có thể tắt chúng.
+
+Công ty của nháp luôn là công ty cuộc chat hiện tại, không giao xuyên công ty từ một cuộc chat. Agent chỉ tạo nháp và không có tool xác nhận/duyệt. Mở thẻ nháp, kiểm tra người nhận, brief và deadline rồi **Xác nhận giao**. Giao thủ công không tốn token; chat tốn chi phí model theo cấu hình và trần hiện có.
+
+Bảng dùng timezone cố định Asia/Ho_Chi_Minh (UTC+7), không theo đồng hồ máy của nhân viên. Chưa hỗ trợ upload video trực tiếp, công việc tự lặp, reset mật khẩu từ quản lý hay email/push. Link đầu ra có thể là Drive/Figma/Canva; hệ thống không tự tải URL.
+
+## 0.3. Chế độ sáng / tối
+
+Giao diện có hai chế độ **Sáng** và **Tối**, đổi bằng nút cạnh bộ chọn ngôn ngữ. Nút có
+mặt ở mọi khung: đăng nhập/đăng ký, chờ duyệt, chọn công ty, đổi mật khẩu, Shell quản lý,
+màn admin duyệt tài khoản và màn nhân viên — nên người chưa đăng nhập vẫn chọn được.
+
+- Lựa chọn lưu ở `localStorage` khoá `ma.theme` theo TỪNG TRÌNH DUYỆT, không theo công ty
+  hay tài khoản; đăng xuất hoặc đổi công ty không làm mất lựa chọn.
+- Chưa chọn lần nào thì theo cài đặt hệ điều hành. Khi người dùng đã chọn, hệ điều hành
+  đổi cũng không ghi đè.
+- `index.html` đặt `data-theme` **trước** khi tải bundle, nên mở lại ở chế độ tối không bị
+  nháy nền sáng. Script này và `src/lib/theme-store.ts` phải dùng cùng khoá lưu.
+- Màu của hai chế độ nằm trong hai khối token ở đầu `src/styles.css`; quy tắc trong CSS
+  không được viết màu thẳng, nếu không màu đó sẽ không đổi theo chế độ. Test
+  `apps/web/tests/theme.test.ts` chặn cả việc viết màu thẳng lẫn việc thiếu token ở chế độ
+  tối, và kiểm tương phản chữ/nền tối thiểu 4,5:1.
+- Muốn thêm/bớt màu: sửa cả `:root` và `:root[data-theme='dark']`, chạy
+  `pnpm test`, rồi kiểm lại giao diện thật.
+
 ## 1. Yêu cầu hệ thống
 
 | Thành phần | Yêu cầu | Vì sao |

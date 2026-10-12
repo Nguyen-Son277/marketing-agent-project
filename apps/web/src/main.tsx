@@ -3,6 +3,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { SessionProvider } from './lib/session.tsx'
 import { I18nProvider, applyDocumentLang, createWebI18n } from './lib/i18n.tsx'
+import { ThemeProvider } from './lib/theme.tsx'
 import { App } from './App.tsx'
 import './styles.css'
 
@@ -17,9 +18,11 @@ applyDocumentLang(i18n.language === 'en' ? 'en' : 'vi')
 createRoot(container).render(
   <StrictMode>
     <I18nProvider instance={i18n}>
-      <SessionProvider>
-        <App />
-      </SessionProvider>
+      <ThemeProvider>
+        <SessionProvider>
+          <App />
+        </SessionProvider>
+      </ThemeProvider>
     </I18nProvider>
   </StrictMode>,
 )

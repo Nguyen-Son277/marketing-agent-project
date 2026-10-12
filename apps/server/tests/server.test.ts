@@ -43,6 +43,14 @@ async function register(email: string, name = 'Người dùng'): Promise<Respons
   const response = await client.request('POST', '/api/auth/register', {
     body: { email, password: 'matkhau-rat-dai-123', name },
   })
+  const user = repos.auth.findUserByEmail(email)
+  if (user) {
+    const reviewer = repos.auth.findUserByEmail('fixture-admin@example.com') ?? repos.auth.createUser({
+      email: 'fixture-admin@example.com', password: 'fixture-password-123', name: 'Fixture admin',
+      isAdmin: true, approvalStatus: 'approved',
+    })
+    repos.auth.approveUser(user.id, reviewer.id)
+  }
   return { response, cookie: cookieHeader(response, SESSION_COOKIE) }
 }
 

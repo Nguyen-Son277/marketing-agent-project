@@ -60,7 +60,7 @@ export const AGENT_DEF_SEEDS: readonly AgentDefSeed[] = [
     // đọc kế hoạch từ BẢNG Markdown mà Leader trình bày. Nếu Leader cũng có quyền tạo
     // task, nó sẽ gọi công cụ thay vì trả về bảng, và bước lập kế hoạch nhận câu trả
     // lời rỗng — đã gặp thật khi chạy với gateway. Một chủ sở hữu cho mỗi hành động.
-    defaultTools: ['kb_search', 'kb_read', 'artifact_publish', 'agent_ask', 'blocker_report',],
+    defaultTools: ['kb_search', 'kb_read', 'artifact_publish', 'agent_ask', 'blocker_report', 'employee_list', 'employee_task_draft'],
     knowledgeRead: ['*'],
     knowledgeWrite: ['90-ket-qua'],
     basePrompt: `
@@ -300,7 +300,7 @@ Sau đó là toàn văn từng email trong code block.
     description: 'Chuyển thông điệp thành brief thiết kế, storyboard video và đặc tả kích thước cho từng kênh.',
     tier: 'standard',
     defaultSkills: ['creative-brief', 'storyboarding'],
-    defaultTools: ['kb_search', 'kb_read', 'files_write', 'artifact_publish', 'agent_ask', 'agent_escalate',],
+    defaultTools: ['kb_search', 'kb_read', 'files_write', 'artifact_publish', 'agent_ask', 'agent_escalate', 'employee_list', 'employee_task_draft'],
     knowledgeRead: ['00-cong-ty', '10-brand', '30-kenh'],
     knowledgeWrite: [],
     basePrompt: `

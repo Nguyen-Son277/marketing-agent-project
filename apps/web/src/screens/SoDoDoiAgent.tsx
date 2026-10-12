@@ -171,7 +171,10 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
                           ) : doc ? (
                             <Nhan loai="thanh-cong">{t('diagram.permissions.read')}</Nhan>
                           ) : (
-                            <span style={{ color: 'var(--mau-vien)' }}>{t('diagram.permissions.none')}</span>
+                            // `--mau-chu-mo` chứ không phải `--mau-vien`: màu viền gần bằng
+                            // màu nền nên dùng làm chữ thì gần như không đọc được ở cả hai
+                            // chế độ.
+                            <span style={{ color: 'var(--mau-chu-mo)' }}>{t('diagram.permissions.none')}</span>
                           )}
                         </td>
                       )

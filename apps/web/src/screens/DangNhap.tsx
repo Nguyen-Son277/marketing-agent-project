@@ -4,6 +4,7 @@ import { api } from '../lib/api.ts'
 import { useSession } from '../lib/session.tsx'
 import { useI18n } from '../lib/i18n.tsx'
 import { LocaleSwitcher } from '../components/LocaleSwitcher.tsx'
+import { ThemeSwitcher } from '../components/ThemeSwitcher.tsx'
 import { Nut, ONhap, ThongBao, Truong } from '../components/ui.tsx'
 
 export function DangNhapScreen(): ReactNode {
@@ -50,12 +51,14 @@ export function DangNhapScreen(): ReactNode {
     <div className="dang-nhap">
       {/* Nút chuyển ngôn ngữ đặt ở đây chứ không chỉ trong Shell: người chưa đăng nhập
           vẫn phải đọc được màn hình này bằng ngôn ngữ mình chọn. */}
-      <div className="dang-nhap__ngon-ngu">
+      <div className="dang-nhap__cong-cu">
         <LocaleSwitcher />
+        <ThemeSwitcher />
       </div>
       <div className="dang-nhap__hop">
         <h1 className="dang-nhap__tieude">{t('auth.title')}</h1>
         <p className="dang-nhap__phu">{t('auth.subtitle')}</p>
+        {cheDo === 'dang-ky' ? <ThongBao loai="thong-tin">{t('approval.registerNote')}</ThongBao> : null}
 
         {loi ? (
           <div style={{ marginBottom: 16 }}>
@@ -80,7 +83,7 @@ export function DangNhapScreen(): ReactNode {
         </Truong>
 
         <Truong nhan={t('auth.password')} goiY={cheDo === 'dang-ky' ? t('auth.passwordHint') : undefined}>
-          <ONhap value={matKhau} onChange={setMatKhau} type="password" placeholder="••••••••" />
+          <ONhap value={matKhau} onChange={setMatKhau} type="password" visibilityResetKey={cheDo} placeholder="••••••••" />
         </Truong>
 
         <div style={{ marginTop: 20 }}>

@@ -22,6 +22,7 @@ import { createLinkedInTools } from './linkedin.ts'
 import { createEmailTools } from './email.ts'
 import { createPaidAdsTools } from './paid-ads.ts'
 import { IntegrationStore } from './integrations.ts'
+import { createWorkforceTools } from './workforce.ts'
 
 export interface BuildToolRegistryOptions {
   /** Required by the core tools; omit to build a registry without file tools. */
@@ -46,6 +47,7 @@ export interface BuiltToolRegistry {
 
 export function buildToolRegistry(options: BuildToolRegistryOptions = {}): BuiltToolRegistry {
   const tools: ToolDefinition[] = []
+  if(options.repos) tools.push(...createWorkforceTools(options.repos))
 
   const http = createHttpTools({ allowedHosts: options.allowedHosts })
   tools.push(http.httpFetch)

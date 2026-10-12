@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:seed": "tsx seed/cli/seed.ts",
+    "admin:grant": "tsx scripts/grant-admin.ts",
     "kb:index": "tsx packages/kb/src/cli/index-company.ts",
     "dev:server": "tsx watch apps/server/src/main.ts",
     "dev:web": "pnpm --filter @marketing-agent/web dev",

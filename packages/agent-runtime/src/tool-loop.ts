@@ -403,7 +403,7 @@ async function executeToolCalls(
       const timer = setTimeout(() => controller.abort(), timeoutMs)
       try {
         const toolSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
-        const result = await withTimeout(tool.handler(args, { ...context, signal: toolSignal }), timeoutMs)
+        const result = await withTimeout(tool.handler(args, { ...context, toolCallId: call.id, signal: toolSignal }), timeoutMs)
         const durationMs = Date.now() - startedAt
         logs.push({
           name: call.name,

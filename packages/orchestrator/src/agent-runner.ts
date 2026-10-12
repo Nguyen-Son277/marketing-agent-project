@@ -34,6 +34,10 @@ export interface RunAgentForTaskInput {
   readonly taskId: string | null
   readonly conversationId: string | null
   readonly taskBrief: string
+  readonly actorUserId?: string
+  readonly requestId?: string
+  /** Chế độ việc nhân viên thu hẹp tool để không chạy kế hoạch marketing ngoài ý muốn. */
+  readonly toolNames?: readonly string[]
   /** Ngữ cảnh bổ sung: kết quả các việc phụ thuộc, hướng dẫn của Leader. */
   readonly extraContext?: string | undefined
   /** Ngôn ngữ của cuộc trao đổi; mặc định tiếng Việt để giữ hành vi cũ. */
@@ -95,11 +99,13 @@ export async function runAgentForTask(input: RunAgentForTaskInput): Promise<RunA
     registry,
     tools: kbTools,
     role: resolved.role,
-    grantedNames: resolved.toolNames,
+    grantedNames: input.toolNames ? resolved.toolNames.filter(n=>input.toolNames!.includes(n)) : resolved.toolNames,
   })
 
   const toolContext: ToolContext = {
     companyId: input.companyId,
+    actorUserId: input.actorUserId,
+    requestId: input.requestId,
     agentRole: resolved.role,
     agentDefId: resolved.agentDef.id,
     taskId: input.taskId,

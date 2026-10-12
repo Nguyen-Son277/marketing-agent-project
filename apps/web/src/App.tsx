@@ -11,6 +11,10 @@ import { DangTai } from './components/ui.tsx'
 import { DangNhapScreen } from './screens/DangNhap.tsx'
 import { ChonCongTyScreen } from './screens/ChonCongTy.tsx'
 import { Shell } from './Shell.tsx'
+import { ChoDuyet } from './screens/ChoDuyet.tsx'
+import { AdminDuyetTaiKhoan } from './screens/AdminDuyetTaiKhoan.tsx'
+import { DoiMatKhau } from './screens/DoiMatKhau.tsx'
+import { GiaoViecNhanVien } from './screens/GiaoViecNhanVien.tsx'
 
 export function App(): ReactNode {
   const { user, company, ready, loading } = useSession()
@@ -28,6 +32,10 @@ export function App(): ReactNode {
   }
 
   if (!user) return <DangNhapScreen />
+  if (user.approvalStatus !== 'approved') return <ChoDuyet />
+  if (user.isAdmin) return <AdminDuyetTaiKhoan />
+  if (user.mustChangePassword) return <DoiMatKhau />
+  if (user.accountType === 'employee') return <GiaoViecNhanVien employee />
   if (!company) return <ChonCongTyScreen />
 
   return <Shell />

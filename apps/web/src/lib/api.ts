@@ -8,6 +8,7 @@
  */
 import { readLocale } from './locale-store.ts'
 import type {
+  AdminUsersResponse,
   ArtifactView,
   ClarificationAnswer,
   CompanySummary,
@@ -122,7 +123,7 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | undefined)
   onUnauthorized = handler
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   // `Accept-Language` gửi theo ngôn ngữ đang chọn để backend dịch thông báo lỗi ngay
   // trong phản hồi. Giao diện vẫn dịch lại theo `messageKey` nếu có, nên thông báo
   // đúng ngôn ngữ kể cả khi người dùng đổi ngôn ngữ sau lúc gọi.
@@ -200,6 +201,15 @@ export const api = {
 
   async systemStatus(): Promise<SystemStatusResponse> {
     return request<SystemStatusResponse>('/api/system/status', { allowUnauthorized: true })
+  },
+
+  async adminUsers(params: { status: 'pending' | 'approved'; q: string; page: number }): Promise<AdminUsersResponse> {
+    const query = new URLSearchParams({ ...params, page: String(params.page) })
+    return request(`/api/admin/users?${query}`)
+  },
+
+  async approveUser(userId: string): Promise<{ user: MeResponse['user']; changed: boolean }> {
+    return request(`/api/admin/users/${encodeURIComponent(userId)}/approve`, { method: 'POST', body: {} })
   },
 
   /* -------------------------------------------------------------- công ty */
@@ -302,7 +312,7 @@ export const api = {
 
   async sendMessage(
     conversationId: string,
-    input: { content: string; autoPlan?: boolean; answers?: ClarificationAnswer[] },
+    input: { content: string; mode?: 'campaign' | 'workforce'; autoPlan?: boolean; answers?: ClarificationAnswer[] },
   ): Promise<SendMessageResponse> {
     return request(`/api/conversations/${conversationId}/messages`, { method: 'POST', body: input })
   },

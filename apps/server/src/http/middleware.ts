@@ -58,6 +58,9 @@ export function sessionMiddleware(repos: Repos): Middleware {
             email: resolved.user.email,
             name: resolved.user.name,
             isAdmin: resolved.user.isAdmin,
+            approvalStatus: resolved.user.approvalStatus,
+            accountType: resolved.user.accountType,
+            mustChangePassword: resolved.user.mustChangePassword,
           },
           sessionId: resolved.sessionId,
         } satisfies AuthState
@@ -65,6 +68,38 @@ export function sessionMiddleware(repos: Repos): Middleware {
     }
     return next()
   }
+}
+
+/**
+ * Hàng rào toàn API, không phụ thuộc việc từng route nhớ kiểm tra trạng thái duyệt.
+ * Chỉ các route auth tối thiểu và thông tin sức khoẻ được đi qua khi user pending.
+ */
+export const accountAccessMiddleware: Middleware = (ctx, next) => {
+  const path = ctx.url.pathname
+  const publicPaths = new Set(['/healthz', '/readyz', '/api/system/status', '/api/auth/register', '/api/auth/login', '/api/auth/logout', '/api/auth/me'])
+  if (!path.startsWith('/api/') || publicPaths.has(path)) return next()
+  const auth = readAuth(ctx)
+  if (!auth) throw unauthorized()
+  if (auth.user.approvalStatus !== 'approved') {
+    throw new AppError('forbidden', 'Tài khoản đang chờ admin duyệt.', { messageKey: 'errors.auth.accountPending' })
+  }
+  if (auth.user.mustChangePassword && path !== '/api/auth/change-password') {
+    throw forbidden('Cần đổi mật khẩu lần đầu trước khi sử dụng')
+  }
+  if (auth.user.accountType === 'employee' && !path.startsWith('/api/workforce/') && path !== '/api/auth/change-password') {
+    throw forbidden('Tài khoản nhân viên chỉ được xem và báo cáo việc được giao')
+  }
+  if (auth.user.isAdmin && !path.startsWith('/api/admin/')) {
+    throw new AppError('forbidden', 'Tài khoản admin chỉ sử dụng chức năng duyệt tài khoản.', { messageKey: 'errors.auth.adminOnlyApproval' })
+  }
+  return next()
+}
+
+/** Admin hệ thống độc lập với vai trò admin công ty, không cho owner công ty đi qua. */
+export const requireSystemAdmin: Middleware = (ctx, next) => {
+  const { user } = requireAuthState(ctx)
+  if (!user.isAdmin || user.approvalStatus !== 'approved') throw forbidden('Cần quyền admin hệ thống')
+  return next()
 }
 
 /** Reject anonymous requests. */

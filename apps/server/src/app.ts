@@ -14,7 +14,9 @@ import { resolveLocale, translator } from '@marketing-agent/i18n'
 import type { Repos } from '@marketing-agent/db'
 import type { AppContext } from './context.ts'
 import { createRequestContext, Router, runChain, type Handler, type HttpMethod, type Middleware } from './http/router.ts'
-import { sessionMiddleware } from './http/middleware.ts'
+import { accountAccessMiddleware, sessionMiddleware } from './http/middleware.ts'
+import { registerAdminRoutes } from './routes/admin-routes.ts'
+import { registerWorkforceRoutes } from './routes/workforce-routes.ts'
 import { registerAuthRoutes, registerMemberRoutes } from './routes/auth-routes.ts'
 
 /** Optional route modules, resolved lazily so a partially built package cannot block boot. */
@@ -42,6 +44,8 @@ export function buildApp(options: BuildAppOptions): App {
 
   registerAuthRoutes(router, repos, context.config.sessionTtlDays)
   registerMemberRoutes(router, repos)
+  registerAdminRoutes(router, repos)
+  registerWorkforceRoutes(router, repos)
 
   for (const module of options.optionalModules ?? []) {
     try {
@@ -78,7 +82,7 @@ export function buildApp(options: BuildAppOptions): App {
   const webDist = context.config.webDist
   const staticHandler: Handler | undefined = webDist ? createStaticHandler(webDist) : undefined
 
-  const middleware: readonly Middleware[] = [sessionMiddleware(repos)]
+  const middleware: readonly Middleware[] = [sessionMiddleware(repos), accountAccessMiddleware]
 
   return {
     router,

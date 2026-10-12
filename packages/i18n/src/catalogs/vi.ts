@@ -1,3 +1,5 @@
+import { vi_workforce } from './vi/workforce.ts'
+import { vi_admin } from './vi/admin.ts'
 import { vi_clarify } from './vi/clarify.ts'
 import { vi_companies } from './vi/companies.ts'
 import { vi_errors } from './vi/errors.ts'
@@ -29,6 +31,10 @@ import { vi_diagram } from './vi/diagram.ts'
  */
 export const vi = {
   /* ------------------------------------------------------------- chung */
+  'common.showSecret': 'Hiện',
+  'common.hideSecret': 'Ẩn',
+  'common.showPassword': 'Hiện mật khẩu',
+  'common.hidePassword': 'Ẩn mật khẩu',
   'common.loading': 'Đang tải…',
   'common.loadingData': 'Đang tải số liệu…',
   'common.retry': 'Thử lại',
@@ -70,6 +76,7 @@ export const vi = {
   'nav.dashboard': 'Bảng điều khiển',
   'nav.chat': 'Trao đổi với Leader',
   'nav.tasks': 'Công việc',
+  'nav.workforce': 'Giao việc nhân viên',
   'nav.team': 'Đội agent',
   'nav.knowledge': 'Kho kiến thức',
   'nav.settings': 'Cài đặt',
@@ -82,6 +89,13 @@ export const vi = {
   'locale.label': 'Ngôn ngữ',
   'locale.switchTo': 'Chuyển sang {{name}}',
   'locale.current': 'Đang dùng {{name}}',
+
+  /* ------------------------------------------------- chế độ sáng/tối */
+  'theme.label': 'Chế độ hiển thị',
+  'theme.light': 'Sáng',
+  'theme.dark': 'Tối',
+  'theme.switchTo': 'Chuyển sang chế độ {{name}}',
+  'theme.current': 'Đang dùng chế độ {{name}}',
 
   /* ------------------------------------------------- trạng thái việc */
   'taskStatus.draft': 'Nháp',
@@ -184,6 +198,8 @@ export const vi = {
 
   /* ------------------------------------- chuỗi riêng từng màn hình */
   // Mỗi màn hình một file để nhiều người bổ sung song song mà không xung đột.
+  ...vi_workforce,
+  ...vi_admin,
   ...vi_errors,
   ...vi_companies,
   ...vi_clarify,

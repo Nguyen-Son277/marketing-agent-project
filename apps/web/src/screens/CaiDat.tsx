@@ -7,7 +7,7 @@
  * phần hỏng không kéo sập cả trang. Nguyên tắc bảo mật được nói thẳng trên giao
  * diện: API key là chỉ-ghi, gửi lên rồi thì không bao giờ hiển thị lại.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
   IntegrationKind,
   IntegrationTestResponse,
@@ -23,6 +23,7 @@ import type {
 import { INTEGRATION_KINDS, MODEL_TIERS, PROVIDER_KINDS } from '@marketing-agent/shared'
 import type { MessageKey } from '@marketing-agent/i18n'
 import { api, ApiError } from '../lib/api.ts'
+import { buildFirecrawlConfig, firecrawlConnectionName } from '../lib/firecrawl-form.ts'
 import { useI18n } from '../lib/i18n.tsx'
 import { useSession } from '../lib/session.tsx'
 import { HopThoai, HopThoaiXacNhan } from '../components/HopThoai.tsx'
@@ -38,6 +39,7 @@ import {
   TieuDeTrang,
   Trang,
   Trong,
+  Truong,
 } from '../components/ui.tsx'
 
 // Tên giao thức là danh từ riêng của nhà cung cấp nên không dịch, vì thế giữ thẳng
@@ -483,6 +485,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
                   value={apiKey}
                   onChange={setApiKey}
                   type="password"
+                  visibilityResetKey={hopMo}
                   placeholder={t('settings.providers.keys.keyPlaceholder')}
                 />
               </>
@@ -733,6 +736,7 @@ function PhanKhoaProvider({
               value={keyForm.apiKey}
               onChange={(value) => setKeyForm({ ...keyForm, apiKey: value })}
               type="password"
+              visibilityResetKey={keyForm.keyId}
               placeholder={
                 keyForm.keyId === null
                   ? t('settings.providers.keys.keyPlaceholder')
@@ -1351,10 +1355,70 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   const [kind, setKind] = useState<IntegrationKind>('firecrawl')
   const [ten, setTen] = useState('')
   const [configJson, setConfigJson] = useState('{}')
+  const [firecrawlKey, setFirecrawlKey] = useState('')
+  const [firecrawlUrl, setFirecrawlUrl] = useState('')
+  const [moNangCao, setMoNangCao] = useState(false)
+  const [moThemKetNoi, setMoThemKetNoi] = useState(false)
+  // Ref cập nhật ngay khi đóng/mở, không phải đợi React render: phản hồi lưu có thể về
+  // ngay sau cú bấm đóng và cần biết nên hiện lỗi trong cửa sổ hay ở đầu mục.
+  const hopKetNoiMoRef = useRef(false)
+  const congTyKetNoiRef = useRef(companyId)
+  congTyKetNoiRef.current = companyId
+  const luotKetNoiRef = useRef(0)
+  const dangLuuKetNoiRef = useRef(false)
 
   const [dangLuu, setDangLuu] = useState(false)
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
+  const [loiNgoaiHop, setLoiNgoaiHop] = useState<string | null>(null)
   const [thongBao, setThongBao] = useState<string | null>(null)
+
+  function xoaBieuMauKetNoi(): void {
+    setKind('firecrawl')
+    setTen('')
+    setConfigJson('{}')
+    setFirecrawlKey('')
+    setFirecrawlUrl('')
+    setMoNangCao(false)
+    setLoiLuu(null)
+  }
+
+  function doiLoaiKetNoi(value: string): void {
+    if (!laIntegrationKind(value)) return
+    // Không giữ bí mật trong nháp khi chuyển sang dịch vụ khác.
+    xoaBieuMauKetNoi()
+    setKind(value)
+  }
+
+  function dongHopThoaiKetNoi(): void {
+    hopKetNoiMoRef.current = false
+    setMoThemKetNoi(false)
+    xoaBieuMauKetNoi()
+  }
+
+  function moKetNoiMoi(): void {
+    if (dangLuuKetNoiRef.current) return
+    xoaBieuMauKetNoi()
+    setLoiNgoaiHop(null)
+    setThongBao(null)
+    hopKetNoiMoRef.current = true
+    setMoThemKetNoi(true)
+  }
+
+  useEffect(() => {
+    // Đổi công ty phải bỏ nháp và vô hiệu phản hồi cũ; cấu hình có thể chứa bí mật nên
+    // tuyệt đối không mang nó, hay thông báo của lượt lưu trước, sang công ty mới.
+    dongHopThoaiKetNoi()
+    setLoiNgoaiHop(null)
+    setThongBao(null)
+    setDangLuu(false)
+    dangLuuKetNoiRef.current = false
+    setKetQuaTest({})
+    setLoiTest({})
+    setDangTest(null)
+    return () => {
+      luotKetNoiRef.current += 1
+    }
+  }, [companyId])
 
   const [dangTest, setDangTest] = useState<string | null>(null)
   const [ketQuaTest, setKetQuaTest] = useState<Record<string, IntegrationTestResponse>>({})
@@ -1386,31 +1450,58 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   async function luu(): Promise<void> {
     setLoiLuu(null)
     setThongBao(null)
-    if (ten.trim().length === 0) {
+    const name = kind === 'firecrawl' ? firecrawlConnectionName(ten) : ten.trim()
+    if (!name) {
       setLoiLuu(t('settings.integrations.needName'))
       return
     }
     let config: Record<string, unknown>
-    try {
-      const parsed: unknown = JSON.parse(configJson)
-      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        setLoiLuu(t('settings.integrations.configMustBeObject'))
+    if (kind === 'firecrawl') {
+      const result = buildFirecrawlConfig(firecrawlKey, firecrawlUrl)
+      if (!result.success) {
+        setLoiLuu(t(firecrawlKey.trim() ? 'settings.integrations.firecrawl.invalidUrl' : 'settings.integrations.firecrawl.needKey'))
         return
       }
-      config = parsed as Record<string, unknown>
-    } catch {
-      setLoiLuu(t('settings.integrations.configInvalidJson'))
-      return
+      config = result.data
+    } else {
+      try {
+        const parsed: unknown = JSON.parse(configJson)
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          setLoiLuu(t('settings.integrations.configMustBeObject'))
+          return
+        }
+        config = parsed as Record<string, unknown>
+      } catch {
+        setLoiLuu(t('settings.integrations.configInvalidJson'))
+        return
+      }
     }
+    // Chặn gửi lặp ngay trong cùng một nhịp, trước khi trạng thái React kịp cập nhật.
+    if (dangLuuKetNoiRef.current) return
+    dangLuuKetNoiRef.current = true
+    const luotLuu = ++luotKetNoiRef.current
+    const vanDungNguCanh = (): boolean =>
+      luotLuu === luotKetNoiRef.current && companyId === congTyKetNoiRef.current
     setDangLuu(true)
+    setLoiNgoaiHop(null)
     try {
-      await api.upsertIntegration(companyId, { kind, name: ten.trim(), config })
+      await api.upsertIntegration(companyId, { kind, name, config })
+      if (!vanDungNguCanh()) return
       setThongBao(t('settings.integrations.saved'))
+      dongHopThoaiKetNoi()
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : t('settings.integrations.saveFailed'))
+      if (!vanDungNguCanh()) return
+      const message = error instanceof ApiError ? error.message : t('settings.integrations.saveFailed')
+      // Đã đóng cửa sổ trong lúc chờ thì lỗi phải hiện bên ngoài. Còn mở thì giữ nháp
+      // để người dùng sửa và thử lại, không xoá cấu hình sau một lỗi mạng.
+      if (hopKetNoiMoRef.current) setLoiLuu(message)
+      else setLoiNgoaiHop(message)
     } finally {
-      setDangLuu(false)
+      if (vanDungNguCanh()) {
+        dangLuuKetNoiRef.current = false
+        setDangLuu(false)
+      }
     }
   }
 
@@ -1431,7 +1522,15 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   }
 
   return (
-    <Card tieuDe={t('settings.integrations.title')} phu={t('settings.integrations.subtitle')}>
+    <Card
+      tieuDe={t('settings.integrations.title')}
+      phu={t('settings.integrations.subtitle')}
+      hanhDong={
+        <Nut nho onClick={moKetNoiMoi} disabled={dangLuu}>
+          {t('settings.integrations.add')}
+        </Nut>
+      }
+    >
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
       {thongBao ? (
@@ -1439,12 +1538,13 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
           <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
         </div>
       ) : null}
-      {loiLuu ? (
+      {loiNgoaiHop ? (
         <div style={{ marginBottom: 10 }}>
-          <ThongBao loai="loi">{loiLuu}</ThongBao>
+          <ThongBao loai="loi">{loiNgoaiHop}</ThongBao>
         </div>
       ) : null}
 
+      <p style={{ fontSize: 13, color: 'var(--mau-chu-mo)' }}>{t('settings.integrations.testNote')}</p>
       {danhSach && danhSach.length === 0 ? <Trong>{t('settings.integrations.empty')}</Trong> : null}
 
       {danhSach && danhSach.length > 0 ? (
@@ -1504,35 +1604,65 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
         </table>
       ) : null}
 
-      <h3 className="card__tieu-de" style={{ marginTop: 18 }}>
-        {t('settings.integrations.form.title')}
-      </h3>
-      <div className="luoi luoi--2">
-        <OChon
-          value={kind}
-          onChange={(giaTri) => {
-            if (laIntegrationKind(giaTri)) setKind(giaTri)
-          }}
-          options={INTEGRATION_KINDS.map((item) => ({ value: item, label: t(NHAN_INTEGRATION[item]) }))}
-        />
-        <ONhap value={ten} onChange={setTen} placeholder={t('settings.integrations.form.namePlaceholder')} />
-      </div>
-      <div style={{ marginTop: 12 }}>
-        <div className="nhan">{t('settings.integrations.form.configLabel')}</div>
-        <textarea
-          className="o-van-ban"
-          value={configJson}
-          rows={5}
-          onChange={(event) => setConfigJson(event.target.value)}
-          placeholder={t('settings.integrations.form.configPlaceholder')}
-        />
-        <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.integrations.form.configNote')}</div>
-      </div>
-      <div className="hang" style={{ marginTop: 10 }}>
-        <Nut onClick={() => void luu()} dangTai={dangLuu}>
-          {t('settings.integrations.form.submit')}
-        </Nut>
-      </div>
+      {/* Form chỉ mở từ nút Thêm kết nối, không chiếm chỗ thường trực dưới bảng. */}
+      <HopThoai
+        mo={moThemKetNoi}
+        tieuDe={t('settings.integrations.form.title')}
+        onDong={dongHopThoaiKetNoi}
+        chanDung={
+          <>
+            <Nut bien="phu" nho onClick={dongHopThoaiKetNoi} disabled={dangLuu}>
+              {t('common.cancel')}
+            </Nut>
+            <Nut nho onClick={() => void luu()} dangTai={dangLuu}>
+              {t('settings.integrations.form.submit')}
+            </Nut>
+          </>
+        }
+      >
+        <div className="luoi luoi--2">
+          <OChon
+            value={kind}
+            disabled={dangLuu}
+            onChange={doiLoaiKetNoi}
+            options={INTEGRATION_KINDS.map((item) => ({ value: item, label: t(NHAN_INTEGRATION[item]) }))}
+          />
+          <Truong nhan={t(kind === 'firecrawl' ? 'settings.integrations.firecrawl.nameOptional' : 'settings.integrations.table.name')}>
+            <ONhap value={ten} onChange={setTen} disabled={dangLuu} placeholder={kind === 'firecrawl' ? 'Firecrawl' : t('settings.integrations.form.namePlaceholder')} />
+          </Truong>
+        </div>
+        {kind === 'firecrawl' ? (
+          <div className="cot" style={{ marginTop: 12 }}>
+            <Truong nhan={t('settings.integrations.firecrawl.apiKey')} goiY={t('settings.integrations.firecrawl.keyNote')}>
+              <ONhap type="password" visibilityResetKey={moThemKetNoi} value={firecrawlKey} onChange={setFirecrawlKey} disabled={dangLuu} placeholder="fc-…" />
+            </Truong>
+            <p style={{ margin: 0, color: 'var(--mau-chu-mo)', fontSize: 13 }}>{t('settings.integrations.firecrawl.updateNote')}</p>
+            <details open={moNangCao} onToggle={(event) => setMoNangCao(event.currentTarget.open)}>
+              <summary>{t('settings.integrations.firecrawl.advanced')}</summary>
+              <Truong nhan={t('settings.integrations.firecrawl.baseUrl')} goiY={t('settings.integrations.firecrawl.urlNote')}>
+                <ONhap value={firecrawlUrl} onChange={setFirecrawlUrl} disabled={dangLuu} placeholder="https://api.firecrawl.dev" />
+              </Truong>
+            </details>
+          </div>
+        ) : (
+        <div style={{ marginTop: 12 }}>
+          <label className="cot" style={{ gap: 6 }}>
+            <span className="nhan">{t('settings.integrations.form.configLabel')}</span>
+            <textarea
+              className="o-van-ban"
+              value={configJson}
+              rows={5}
+              disabled={dangLuu}
+              onChange={(event) => setConfigJson(event.target.value)}
+              placeholder={t('settings.integrations.form.configPlaceholder')}
+            />
+          </label>
+          <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.integrations.form.configNote')}</div>
+        </div>
+        )}
+        {/* Lỗi nhập liệu phải ở trong cửa sổ, không bị lớp phủ che ở đầu mục. */}
+        {loiLuu ? <ThongBao loai="loi">{loiLuu}</ThongBao> : null}
+      </HopThoai>
     </Card>
   )
 }

@@ -16,7 +16,8 @@ import {
   registerSchema,
   updateCompanySchema,
 } from '@marketing-agent/shared'
-import type { Repos } from '@marketing-agent/db'
+import { toPublicUser, type Repos } from '@marketing-agent/db'
+import { changePasswordSchema, forbidden } from '@marketing-agent/shared'
 import { SESSION_COOKIE, requireAuthState, requireManage, requireMembership } from '../http/middleware.ts'
 import type { RequestContext, Router } from '../http/router.ts'
 import { createCompanyForUser, deleteCompany, preflight } from '../services/company-service.ts'
@@ -31,7 +32,7 @@ export function registerAuthRoutes(router: Router, repos: Repos, sessionTtlDays:
     setSessionCookie(ctx, session.token, session.expiresAt)
     repos.accounting.audit({ userId: user.id, action: 'auth.register', target: user.email })
     ctx.json(201, {
-      user: { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin },
+      user: toPublicUser(user),
       companies: [],
     })
   })
@@ -48,9 +49,23 @@ export function registerAuthRoutes(router: Router, repos: Repos, sessionTtlDays:
     setSessionCookie(ctx, session.token, session.expiresAt)
     repos.accounting.audit({ userId: user.id, action: 'auth.login' })
     ctx.json(200, {
-      user: { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin },
-      companies: auth.listCompaniesForUser(user.id),
+      user: toPublicUser(user),
+      companies: user.approvalStatus === 'approved' && !user.isAdmin && user.accountType === 'user' && !user.mustChangePassword ? auth.listCompaniesForUser(user.id) : [],
     })
+  })
+
+  router.post('/api/auth/change-password', async (ctx) => {
+    const { user } = requireAuthState(ctx)
+    if(user.approvalStatus !== 'approved') throw forbidden('Tài khoản chưa được duyệt')
+    if(ctx.req.headers.origin && new URL(ctx.req.headers.origin).host !== ctx.req.headers.host) throw forbidden('Origin không hợp lệ')
+    const input = parseOrThrow(changePasswordSchema, await ctx.body(), 'đổi mật khẩu')
+    repos.db.tx(() => {
+      auth.changePassword(user.id, input.currentPassword, input.newPassword)
+      const session = auth.createSession(user.id, sessionTtlDays)
+      setSessionCookie(ctx, session.token, session.expiresAt)
+      repos.accounting.audit({userId:user.id,action:'auth.password_changed'})
+    })
+    ctx.json(200, {user:toPublicUser(auth.findUserById(user.id)!),companies:[]})
   })
 
   router.post('/api/auth/logout', async (ctx) => {
@@ -66,7 +81,10 @@ export function registerAuthRoutes(router: Router, repos: Repos, sessionTtlDays:
 
   router.get('/api/auth/me', async (ctx) => {
     const { user } = requireAuthState(ctx)
-    ctx.json(200, { user, companies: auth.listCompaniesForUser(user.id) })
+    ctx.json(200, {
+      user,
+      companies: user.approvalStatus === 'approved' && !user.isAdmin && user.accountType === 'user' && !user.mustChangePassword ? auth.listCompaniesForUser(user.id) : [],
+    })
   })
 
   router.get('/api/companies', async (ctx) => {

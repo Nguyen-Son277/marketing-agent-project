@@ -111,6 +111,7 @@ export function chatRoutes() {
             conversationId,
             userId,
             content: input.content,
+            mode: input.mode,
             autoPlan: input.autoPlan,
             // Câu trả lời thẻ chọn đi thẳng xuống orchestrator: nơi đó áp vào brief một
             // cách tất định trước khi BriefGate kiểm tra, nên route không tự đoán.

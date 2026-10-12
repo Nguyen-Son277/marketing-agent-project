@@ -58,6 +58,7 @@ export interface SendMessageInput {
   readonly conversationId: string
   readonly userId: string
   readonly content: string
+  readonly mode?: 'campaign' | 'workforce'
   /** Khi true, Leader lập kế hoạch ngay nếu brief đã đủ. */
   readonly autoPlan?: boolean
   /**
@@ -98,6 +99,28 @@ export class ConversationOrchestrator implements CoordinationHost {
     this.writeDiagnostic = deps.writeDiagnostic
   }
 
+  /** Chế độ người giao việc không đi qua BriefGate KPI/ngân sách của chiến dịch. */
+  private async sendWorkforceMessage(input:SendMessageInput):Promise<LeaderTurnResult> {
+    this.repos.workforce.manageCompany(input.userId,input.companyId)
+    const conversation=this.requireConversation(input.companyId,input.conversationId)
+    this.assertBudget(input.companyId)
+    const message=this.repos.work.addMessage({companyId:input.companyId,conversationId:input.conversationId,role:'user',authorKind:'user',contentMd:input.content,meta:{mode:'workforce'}})
+    const locale=this.localeOf(input.companyId,input.conversationId)
+    const history=this.repos.work.listMessages(input.conversationId,input.companyId,40).filter(m=>{
+      try{return JSON.parse(m.metaJson??'{}').mode==='workforce'}catch{return false}
+    }).map(m=>`${m.role}: ${m.contentMd}`).join('\n')
+    const employees=this.repos.workforce.employees(input.userId).filter(e=>e.active&&e.companyIds.includes(input.companyId)).map(e=>({id:e.id,name:e.name}))
+    const run=await runAgentForTask({repos:this.repos,tools:this.tools,embedding:this.embedding,runtimeOverrides:this.runtimeOverrides,companyId:input.companyId,role:'marketing-leader',taskId:null,conversationId:input.conversationId,actorUserId:input.userId,requestId:message.id,locale,toolNames:['employee_list','employee_task_draft'],
+      taskBrief:`MODE: designer employee assignment, NOT campaign planning. Company ${conversation.companyId} only. Employees ${JSON.stringify(employees)}. Vietnam timezone UTC+7, week Monday-Sunday. Current time ${new Date().toISOString()}.
+Ask only missing assignee, design brief/type, planned week/day and explicit deadline date/time. Do NOT ask KPI/budget/campaign scope. Do not invent IDs, deadline or claim to have assigned work. Prepare clear design brief and call employee_task_draft only when all fields supplied. Relative ambiguous deadlines require clarification. Tool creates draft, manager must click confirmation. No automatic assignment or completion. Respond in ${locale==='en'?'English':'Vietnamese'}.
+Conversation:\n${history}`})
+    const drafts=this.repos.db.all<{id:string}>('SELECT id FROM employee_tasks WHERE source_conversation_id=? AND idempotency_key LIKE ?',[input.conversationId,`${input.userId}:${message.id}:%`]).map(r=>r.id)
+    if(!run.run.output && !drafts.length) throw conflict(run.run.error ?? (locale==='en'?'The agent did not produce a response or a draft. Please retry.':'Agent chưa tạo được câu trả lời hoặc nháp. Hãy thử lại.'))
+    const reply=run.run.output || (locale==='en'?'A draft needs manager confirmation; open Employee assignments.':'Nháp cần quản lý xác nhận; mở Giao việc nhân viên để kiểm tra.')
+    this.repos.work.addMessage({companyId:input.companyId,conversationId:input.conversationId,role:'assistant',authorKind:'leader',authorAgent:'marketing-leader',contentMd:reply,meta:{mode:'workforce',workforceDraftIds:drafts}})
+    return {reply,phase:conversation.phase,briefComplete:false,missingFields:[],runId:null,costUsd:run.run.usage.costUsd}
+  }
+
   /* ------------------------------------------------------------ public API */
 
   /**
@@ -108,6 +131,7 @@ export class ConversationOrchestrator implements CoordinationHost {
    * thường của một cuộc trao đổi, không phải ngoại lệ.
    */
   async sendMessage(input: SendMessageInput): Promise<LeaderTurnResult> {
+    if(input.mode === 'workforce') return this.sendWorkforceMessage(input)
     const conversation = this.requireConversation(input.companyId, input.conversationId)
     this.assertBudget(input.companyId)
     const locale = this.localeOf(input.companyId, conversation.id)

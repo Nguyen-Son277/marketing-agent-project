@@ -10,6 +10,8 @@
  * làm mặc định — nhờ vậy chỗ nào chưa kịp chuyển vẫn hiển thị được.
  */
 export const vi_errors = {
+  'errors.auth.accountPending': 'Tài khoản đang chờ admin duyệt.',
+  'errors.auth.adminOnlyApproval': 'Tài khoản admin chỉ sử dụng chức năng duyệt tài khoản.',
   /* --------------------------------------------------------- chung */
   'errors.generic.internal': 'Lỗi hệ thống. Vui lòng thử lại.',
   'errors.generic.validation': 'Dữ liệu gửi lên không hợp lệ.',

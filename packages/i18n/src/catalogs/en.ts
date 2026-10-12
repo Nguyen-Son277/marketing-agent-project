@@ -1,3 +1,5 @@
+import { en_workforce } from './en/workforce.ts'
+import { en_admin } from './en/admin.ts'
 import { en_clarify } from './en/clarify.ts'
 import { en_companies } from './en/companies.ts'
 import { en_errors } from './en/errors.ts'
@@ -28,6 +30,10 @@ import { en_diagram } from './en/diagram.ts'
 
 export const en = {
   /* ------------------------------------------------------------- general */
+  'common.showSecret': 'Show',
+  'common.hideSecret': 'Hide',
+  'common.showPassword': 'Show password',
+  'common.hidePassword': 'Hide password',
   'common.loading': 'Loading…',
   'common.loadingData': 'Loading data…',
   'common.retry': 'Retry',
@@ -69,6 +75,7 @@ export const en = {
   'nav.dashboard': 'Dashboard',
   'nav.chat': 'Chat with the Leader',
   'nav.tasks': 'Tasks',
+  'nav.workforce': 'Employee assignments',
   'nav.team': 'Agent team',
   'nav.knowledge': 'Knowledge base',
   'nav.settings': 'Settings',
@@ -81,6 +88,13 @@ export const en = {
   'locale.label': 'Language',
   'locale.switchTo': 'Switch to {{name}}',
   'locale.current': 'Currently {{name}}',
+
+  /* ------------------------------------------------------------- theme */
+  'theme.label': 'Appearance',
+  'theme.light': 'Light',
+  'theme.dark': 'Dark',
+  'theme.switchTo': 'Switch to {{name}} mode',
+  'theme.current': 'Using {{name}} mode',
 
   /* --------------------------------------------------------- task status */
   'taskStatus.draft': 'Draft',
@@ -182,6 +196,8 @@ export const en = {
   'dashboard.systemNotReadyTitle': 'System is not ready:',
 
   /* ------------------------------------------- per-screen namespaces */
+  ...en_workforce,
+  ...en_admin,
   ...en_errors,
   ...en_companies,
   ...en_clarify,

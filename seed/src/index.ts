@@ -164,10 +164,12 @@ function ensureOwner(repos: Repos, company: CompanyRecord, options: SeedCompanyO
       email,
       password: options.ownerPassword!,
       name: options.ownerName ?? 'Chủ sở hữu',
+      // Seed là thao tác tin cậy của người vận hành, không phải đường đăng ký công khai.
+      approvalStatus: 'approved',
     })
   }
   repos.auth.addMembership(company.id, user.id, 'owner')
-  return { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin }
+  return { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin, approvalStatus: user.approvalStatus, accountType:user.accountType, mustChangePassword:user.mustChangePassword }
 }
 
 /**

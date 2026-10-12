@@ -104,6 +104,81 @@ describe('catalog không còn khoá chết', () => {
   })
 })
 
+describe('mục Kết nối: chỉ mở biểu mẫu từ nút thêm', () => {
+  const ketNoi = caiDat.slice(caiDat.indexOf('function PhanKetNoi'), caiDat.indexOf('function PhanGioiHan'))
+
+  it('mặc định đóng và có nút mở cạnh tiêu đề', () => {
+    expect(ketNoi).toContain('[moThemKetNoi, setMoThemKetNoi] = useState(false)')
+    expect(ketNoi).toContain('onClick={moKetNoiMoi}')
+    expect(ketNoi).toContain("t('settings.integrations.add')")
+    expect(vi).toContain("'settings.integrations.add': 'Thêm kết nối'")
+    expect(en).toContain("'settings.integrations.add': 'Add integration'")
+  })
+
+  it('các trường nhập nằm trong HopThoai, không hiển thị dưới bảng', () => {
+    const start = ketNoi.indexOf('<HopThoai\n')
+    const end = ketNoi.indexOf('</HopThoai>', start)
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    for (const field of ['value={kind}', 'value={ten}', 'value={configJson}', '{loiLuu ? <ThongBao']) {
+      const position = ketNoi.indexOf(field)
+      expect(position, field).toBeGreaterThan(start)
+      expect(position, field).toBeLessThan(end)
+    }
+    expect(ketNoi).toContain('onDong={dongHopThoaiKetNoi}')
+  })
+
+  it('đóng và mở đều đặt lại nháp, giữ cấu hình bí mật khỏi lần mở sau', () => {
+    const reset = ketNoi.slice(ketNoi.indexOf('function xoaBieuMauKetNoi'), ketNoi.indexOf('function dongHopThoaiKetNoi'))
+    expect(reset).toContain("setKind('firecrawl')")
+    expect(reset).toContain("setTen('')")
+    expect(reset).toContain("setConfigJson('{}')")
+    expect(reset).toContain("setFirecrawlKey('')")
+    expect(reset).toContain("setFirecrawlUrl('')")
+    expect(reset).toContain('setLoiLuu(null)')
+    const close = ketNoi.slice(ketNoi.indexOf('function dongHopThoaiKetNoi'), ketNoi.indexOf('function moKetNoiMoi'))
+    expect(close).toContain('xoaBieuMauKetNoi()')
+    const open = ketNoi.slice(ketNoi.indexOf('function moKetNoiMoi'), ketNoi.indexOf('useEffect'))
+    expect(open).toContain('xoaBieuMauKetNoi()')
+  })
+
+  it('Firecrawl có nhánh riêng chỉ cần key, JSON vẫn dành cho dịch vụ khác', () => {
+    expect(ketNoi).toContain("{kind === 'firecrawl' ? (")
+    expect(ketNoi).toContain('type="password" visibilityResetKey={moThemKetNoi} value={firecrawlKey}')
+    expect(ketNoi).toContain('buildFirecrawlConfig(firecrawlKey, firecrawlUrl)')
+    expect(ketNoi).toContain('firecrawlConnectionName(ten)')
+    expect(ketNoi).toContain('onChange={doiLoaiKetNoi}')
+  })
+
+  it('giữ kiểm tra tên và JSON, chỉ đóng sau khi API lưu thành công', () => {
+    const save = ketNoi.slice(ketNoi.indexOf('async function luu'), ketNoi.indexOf('async function test'))
+    expect(save).toContain("t('settings.integrations.needName')")
+    expect(save).toContain('JSON.parse(configJson)')
+    expect(save).toContain('Array.isArray(parsed)')
+    expect(save.indexOf('dongHopThoaiKetNoi()')).toBeGreaterThan(save.indexOf('await api.upsertIntegration'))
+    const error = save.slice(save.indexOf('catch (error)'), save.indexOf('finally'))
+    expect(error).not.toContain('dongHopThoaiKetNoi()')
+    expect(error).toContain('if (hopKetNoiMoRef.current) setLoiLuu(message)')
+    expect(error).toContain('else setLoiNgoaiHop(message)')
+  })
+
+  it('không mở lượt mới khi đang lưu và bỏ phản hồi của công ty cũ', () => {
+    expect(ketNoi).toContain('if (dangLuuKetNoiRef.current) return')
+    expect(ketNoi).toContain('onClick={moKetNoiMoi} disabled={dangLuu}')
+    expect(ketNoi).toContain('companyId === congTyKetNoiRef.current')
+    expect(ketNoi).toContain('luotLuu === luotKetNoiRef.current')
+    expect(ketNoi).toContain('if (!vanDungNguCanh()) return')
+    expect(ketNoi).toContain('luotKetNoiRef.current += 1')
+  })
+
+  it('giữ nút kiểm tra kết nối và hướng dẫn không nhắc form bên dưới', () => {
+    expect(ketNoi).toContain('await api.testIntegration(companyId, integration.id)')
+    expect(ketNoi).toContain("t('settings.integrations.test')")
+    expect(vi).not.toContain('Thêm kết nối bằng biểu mẫu bên dưới')
+    expect(en).not.toContain('No integrations yet. Add one below')
+  })
+})
+
 describe('mục Model: biểu mẫu nhập tay nằm trong hộp thoại', () => {
   /**
    * Vì sao kiểm bằng cách đọc mã: yêu cầu là "biểu mẫu chỉ hiện sau khi bấm nút". `tsc` và

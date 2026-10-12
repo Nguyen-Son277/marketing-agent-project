@@ -12,9 +12,11 @@ import { useSession } from './lib/session.tsx'
 import { useI18n } from './lib/i18n.tsx'
 import { Nhan, Nut } from './components/ui.tsx'
 import { LocaleSwitcher } from './components/LocaleSwitcher.tsx'
+import { ThemeSwitcher } from './components/ThemeSwitcher.tsx'
 import { BangDieuKhien } from './screens/BangDieuKhien.tsx'
 import { TraoDoi } from './screens/TraoDoi.tsx'
 import { CongViec } from './screens/CongViec.tsx'
+import { GiaoViecNhanVien } from './screens/GiaoViecNhanVien.tsx'
 import { DoiAgent } from './screens/DoiAgent.tsx'
 import { KhoKienThuc } from './screens/KhoKienThuc.tsx'
 import { CaiDat } from './screens/CaiDat.tsx'
@@ -33,6 +35,7 @@ export const ROUTES = [
   { id: 'bang-dieu-khien', nhan: 'nav.dashboard', nhom: 'nav.group.work', bieuTuong: '📊' },
   { id: 'trao-doi', nhan: 'nav.chat', nhom: 'nav.group.work', bieuTuong: '💬' },
   { id: 'cong-viec', nhan: 'nav.tasks', nhom: 'nav.group.work', bieuTuong: '🗂️' },
+  { id: 'giao-viec', nhan: 'nav.workforce', nhom: 'nav.group.work', bieuTuong: '🎨' },
   { id: 'doi-agent', nhan: 'nav.team', nhom: 'nav.group.config', bieuTuong: '🎯' },
   { id: 'kho-kien-thuc', nhan: 'nav.knowledge', nhom: 'nav.group.config', bieuTuong: '📚' },
   { id: 'cong-ty', nhan: 'nav.companies', nhom: 'nav.group.config', bieuTuong: '🏢' },
@@ -44,7 +47,7 @@ export const ROUTES = [
 export type RouteId = (typeof ROUTES)[number]['id']
 
 function docRoute(): RouteId {
-  const raw = window.location.hash.replace(/^#\/?/, '')
+  const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0]
   const found = ROUTES.find((route) => route.id === raw)
   return found ? found.id : 'bang-dieu-khien'
 }
@@ -93,6 +96,8 @@ export function Shell(): ReactNode {
         return <TraoDoi companyId={companyId} />
       case 'cong-viec':
         return <CongViec companyId={companyId} />
+      case 'giao-viec':
+        return <GiaoViecNhanVien />
       case 'doi-agent':
         return <DoiAgent companyId={companyId} />
       case 'kho-kien-thuc':
@@ -115,8 +120,8 @@ export function Shell(): ReactNode {
 
         {companies.length > 0 ? (
           <select
-            className="o-chon"
-            style={{ width: 'auto', minWidth: 190 }}
+            className="o-chon app__company-picker"
+            aria-label={t('nav.switchCompany')}
             value={companyId ?? ''}
             onChange={(event) => selectCompany(event.target.value)}
           >
@@ -132,8 +137,9 @@ export function Shell(): ReactNode {
 
         <span className="app__spacer" />
 
-        <span style={{ fontSize: 13, color: 'var(--mau-chu-mo)' }}>{user?.name}</span>
+        <span className="app__user" title={user?.name}>{user?.name}</span>
         <LocaleSwitcher compact />
+        <ThemeSwitcher compact />
         <Nut bien="phu" nho onClick={() => void signOut()}>
           {t('nav.signOut')}
         </Nut>

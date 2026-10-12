@@ -46,13 +46,14 @@ function LoiManHinh({ loi }: { loi: ApiError }): ReactNode {
 }
 
 /** Thanh tiến độ thuần CSS, không cần thư viện biểu đồ. */
-function ThanhTienDo({ tyLe }: { tyLe: number }): ReactNode {
+function ThanhTienDo({ tyLe, nhan }: { tyLe: number; nhan: string }): ReactNode {
   const phanTram = Math.max(0, Math.min(100, tyLe))
   const quaNguong = phanTram >= 80
   return (
     <div
       style={{ height: 8, borderRadius: 999, background: 'var(--mau-vien)', overflow: 'hidden' }}
       role="progressbar"
+      aria-label={nhan}
       aria-valuenow={Math.round(phanTram)}
       aria-valuemin={0}
       aria-valuemax={100}
@@ -79,7 +80,9 @@ export function BangDieuKhien({
 }): ReactNode {
   const { systemProblem } = useSession()
   const { t, formatNumber, formatDateTime, formatCurrencyUsd } = useI18n()
-  const [duLieu, setDuLieu] = useState<DashboardResponse | null>(null)
+  const [banChup, setDuLieu] = useState<DashboardResponse | null>(null)
+  // Không hiển thị số liệu của công ty trước ngay cả trong nhịp render đầu khi đổi công ty.
+  const duLieu = banChup?.company.id === companyId ? banChup : null
   const [dangTai, setDangTai] = useState(true)
   const [loi, setLoi] = useState<ApiError | null>(null)
   const [lanThu, setLanThu] = useState(0)
@@ -109,7 +112,7 @@ export function BangDieuKhien({
 
   if (dangTai && !duLieu) {
     return (
-      <Trang>
+      <Trang rong>
         <TieuDeTrang>{t('dashboard.title')}</TieuDeTrang>
         <DangTai nhan={t('common.loadingData')} />
       </Trang>
@@ -118,7 +121,7 @@ export function BangDieuKhien({
 
   if (loi && !duLieu) {
     return (
-      <Trang>
+      <Trang rong>
         <TieuDeTrang>{t('dashboard.title')}</TieuDeTrang>
         <LoiManHinh loi={loi} />
         <div style={{ marginTop: 12 }}>
@@ -130,7 +133,14 @@ export function BangDieuKhien({
     )
   }
 
-  if (!duLieu) return null
+  if (!duLieu) {
+    return (
+      <Trang rong>
+        <TieuDeTrang>{t('dashboard.title')}</TieuDeTrang>
+        <DangTai nhan={t('common.loadingData')} />
+      </Trang>
+    )
+  }
 
   const { counts, cost } = duLieu
   const soViecDangMo = DANG_MO.reduce((tong, trangThai) => tong + counts.tasks[trangThai], 0)
@@ -138,111 +148,125 @@ export function BangDieuKhien({
   const conLai = cost.limitPerDay - cost.today
 
   return (
-    <Trang>
-      <TieuDeTrang moTa={t('dashboard.subtitle', { company: duLieu.company.name })}>
-        {t('dashboard.title')}
-      </TieuDeTrang>
-
-      {systemProblem ? (
-        <div style={{ marginBottom: 16 }}>
-          <ThongBao loai="canh-bao">
-            <strong>{t('dashboard.systemNotReadyTitle')}</strong> {systemProblem}.{' '}
-            {t('dashboard.finishSetup')}
-          </ThongBao>
-        </div>
-      ) : null}
-
-      <div className="luoi luoi--4">
-        <OSo
-          nhan={t('dashboard.openTasks')}
-          giaTri={formatNumber(soViecDangMo)}
-          moTa={t('dashboard.tasksHint')}
-        />
-        <OSo
-          nhan={t('dashboard.doneTasks')}
-          giaTri={formatNumber(counts.tasks.done)}
-          loai="thanh-cong"
-          moTa={t('dashboard.throughReview')}
-        />
-        <OSo nhan={t('dashboard.conversations')} giaTri={formatNumber(counts.conversations)} moTa={t('dashboard.withLeader')} />
-        <OSo nhan={t('dashboard.documents')} giaTri={formatNumber(counts.documents)} moTa={t('dashboard.inKnowledgeBase')} />
-        <OSo
-          nhan={t('dashboard.agentsEnabled')}
-          giaTri={`${formatNumber(counts.agentsEnabled)}/${formatNumber(counts.agentsTotal)}`}
-          loai={counts.agentsEnabled === 0 ? 'loi' : counts.agentsEnabled < counts.agentsTotal ? 'canh-bao' : 'thanh-cong'}
-          moTa={counts.agentsEnabled === 0 ? t('dashboard.noAgents') : t('dashboard.agentsReady')}
-        />
-      </div>
-
-      <Card
-        tieuDe={t('dashboard.costToday')}
-        phu={t('dashboard.costLimits', {
-          limit: formatCurrencyUsd(cost.limitPerDay),
-          last30: formatCurrencyUsd(cost.last30Days),
-        })}
-      >
-        <div className="hang" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-          <span className="so" style={{ fontWeight: 700, fontSize: 20 }}>
-            {formatCurrencyUsd(cost.today)}
-          </span>
-          <span style={{ color: 'var(--mau-chu-mo)', fontSize: 13 }}>
-            {cost.limitPerDay > 0
-              ? t('dashboard.costUsedPercent', { percent: Math.round(tyLeChiPhi) })
-              : t('dashboard.noDailyLimit')}
-          </span>
-        </div>
-        <ThanhTienDo tyLe={tyLeChiPhi} />
-        {cost.limitPerDay > 0 && conLai <= 0 ? (
-          <div style={{ marginTop: 10 }}>
-            <ThongBao loai="loi">{t('dashboard.costCapReached')}</ThongBao>
+    <Trang rong>
+      <div className="dashboard">
+        <header className="dashboard__header">
+          <div>
+            <TieuDeTrang moTa={t('dashboard.subtitle', { company: duLieu.company.name })}>
+              {t('dashboard.title')}
+            </TieuDeTrang>
           </div>
-        ) : null}
-      </Card>
-
-      <Card tieuDe={t('dashboard.tasksByStatus')} phu={t('dashboard.viewTasksHint')}>
-        <div className="hang">
-          {TASK_STATUSES.map((trangThai) => {
-            // Nhãn suy từ mã trạng thái; viết tường minh từng khoá sẽ lặp lại tám lần
-            // cùng một quy tắc và dễ lệch khi hợp đồng thêm trạng thái mới.
-            const nhan = t(`taskStatus.${trangThai}`)
-            return (
-              <span key={trangThai} className="badge badge--mo" title={nhan}>
-                {nhan}: <span className="so">{formatNumber(counts.tasks[trangThai])}</span>
-              </span>
-            )
-          })}
-        </div>
-      </Card>
-
-      <Card tieuDe={t('dashboard.recentActivity')} phu={t('dashboard.recentHint')}>
-        {duLieu.recentActivity.length === 0 ? (
-          <Trong>{t('dashboard.noActivity')}</Trong>
-        ) : (
-          <div className="cot">
-            {duLieu.recentActivity.map((hoatDong, chiSo) => (
-              <div key={`${hoatDong.at}-${chiSo}`} className="hang" style={{ alignItems: 'flex-start' }}>
-                <span style={{ flex: '0 0 118px', color: 'var(--mau-chu-mo)', fontSize: 13 }} className="so">
-                  {formatDateTime(hoatDong.at)}
-                </span>
-                <span className="badge badge--mo">{hoatDong.kind}</span>
-                <span style={{ flex: 1, minWidth: 200 }}>{hoatDong.summary}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <Card tieuDe={t('dashboard.quickActions')} phu={t('dashboard.quickHint')}>
-        <div className="hang">
-          <Nut onClick={() => onNavigate('trao-doi')}>{t('dashboard.openChat')}</Nut>
-          <Nut bien="phu" onClick={() => onNavigate('cong-viec')}>
-            {t('dashboard.viewTasks')}
-          </Nut>
-          <Nut bien="phu" onClick={taiLai} dangTai={dangTai && duLieu !== null}>
+          <Nut bien="phu" onClick={taiLai} dangTai={dangTai}>
             {t('common.refresh')}
           </Nut>
+        </header>
+
+        {loi ? <LoiManHinh loi={loi} /> : null}
+
+        {systemProblem ? (
+          <div style={{ marginBottom: 16 }}>
+            <ThongBao loai="canh-bao">
+              <strong>{t('dashboard.systemNotReadyTitle')}</strong> {systemProblem}.{' '}
+              {t('dashboard.finishSetup')}
+            </ThongBao>
+          </div>
+        ) : null}
+
+        <div className="dashboard__stats">
+          <OSo
+            nhan={t('dashboard.openTasks')}
+            giaTri={formatNumber(soViecDangMo)}
+            moTa={t('dashboard.tasksHint')}
+          />
+          <OSo
+            nhan={t('dashboard.doneTasks')}
+            giaTri={formatNumber(counts.tasks.done)}
+            loai="thanh-cong"
+            moTa={t('dashboard.throughReview')}
+          />
+          <OSo nhan={t('dashboard.conversations')} giaTri={formatNumber(counts.conversations)} moTa={t('dashboard.withLeader')} />
+          <OSo nhan={t('dashboard.documents')} giaTri={formatNumber(counts.documents)} moTa={t('dashboard.inKnowledgeBase')} />
+          <OSo
+            nhan={t('dashboard.agentsEnabled')}
+            giaTri={`${formatNumber(counts.agentsEnabled)}/${formatNumber(counts.agentsTotal)}`}
+            loai={counts.agentsEnabled === 0 ? 'loi' : counts.agentsEnabled < counts.agentsTotal ? 'canh-bao' : 'thanh-cong'}
+            moTa={counts.agentsEnabled === 0 ? t('dashboard.noAgents') : t('dashboard.agentsReady')}
+          />
         </div>
-      </Card>
+
+        <div className="dashboard__overview">
+          <Card
+            tieuDe={t('dashboard.costToday')}
+            phu={t('dashboard.costLimits', {
+              limit: formatCurrencyUsd(cost.limitPerDay),
+              last30: formatCurrencyUsd(cost.last30Days),
+            })}
+          >
+            <div className="hang" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+              <span className="so" style={{ fontWeight: 700, fontSize: 20 }}>
+                {formatCurrencyUsd(cost.today)}
+              </span>
+              <span style={{ color: 'var(--mau-chu-mo)', fontSize: 13 }}>
+                {cost.limitPerDay > 0
+                  ? t('dashboard.costUsedPercent', { percent: Math.round(tyLeChiPhi) })
+                  : t('dashboard.noDailyLimit')}
+              </span>
+            </div>
+            <ThanhTienDo tyLe={tyLeChiPhi} nhan={t('dashboard.costToday')} />
+            {cost.limitPerDay > 0 && conLai <= 0 ? (
+              <div style={{ marginTop: 10 }}>
+                <ThongBao loai="loi">{t('dashboard.costCapReached')}</ThongBao>
+              </div>
+            ) : null}
+          </Card>
+
+          <Card tieuDe={t('dashboard.tasksByStatus')} phu={t('dashboard.viewTasksHint')}>
+            <div className="dashboard__statuses">
+              {TASK_STATUSES.map((trangThai) => {
+                // Nhãn suy từ mã trạng thái; viết tường minh từng khoá sẽ lặp lại tám lần
+                // cùng một quy tắc và dễ lệch khi hợp đồng thêm trạng thái mới.
+                const nhan = t(`taskStatus.${trangThai}`)
+                return (
+                  <div key={trangThai} className={`dashboard__status dashboard__status--${trangThai}`}>
+                    <span>{nhan}</span>
+                    <strong className="so">{formatNumber(counts.tasks[trangThai])}</strong>
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+
+        </div>
+
+        <div className="dashboard__bottom">
+          <Card tieuDe={t('dashboard.recentActivity')} phu={t('dashboard.recentHint')}>
+            {duLieu.recentActivity.length === 0 ? (
+              <Trong>{t('dashboard.noActivity')}</Trong>
+            ) : (
+              <ol className="dashboard__activity">
+                {duLieu.recentActivity.map((hoatDong, chiSo) => (
+                  <li key={`${hoatDong.at}-${chiSo}`} className="dashboard__activity-item">
+                    <div className="dashboard__activity-meta">
+                      <time dateTime={hoatDong.at} className="so">{formatDateTime(hoatDong.at)}</time>
+                      <span className="badge badge--mo">{hoatDong.kind}</span>
+                    </div>
+                    <div className="dashboard__activity-summary">{hoatDong.summary}</div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Card>
+
+          <Card tieuDe={t('dashboard.quickActions')} phu={t('dashboard.quickHint')}>
+            <div className="dashboard__actions">
+              <Nut onClick={() => onNavigate('trao-doi')}>{t('dashboard.openChat')}</Nut>
+              <Nut bien="phu" onClick={() => onNavigate('cong-viec')}>
+                {t('dashboard.viewTasks')}
+              </Nut>
+            </div>
+          </Card>
+        </div>
+      </div>
     </Trang>
   )
 }

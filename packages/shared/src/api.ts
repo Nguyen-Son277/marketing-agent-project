@@ -65,9 +65,30 @@ export interface CompanySummary {
 }
 
 export interface MeResponse {
-  readonly user: { readonly id: string; readonly email: string; readonly name: string; readonly isAdmin: boolean }
+  readonly user: {
+    readonly id: string
+    readonly email: string
+    readonly name: string
+    readonly isAdmin: boolean
+    readonly approvalStatus: 'pending' | 'approved'
+    readonly accountType: 'user' | 'employee'
+    readonly mustChangePassword: boolean
+  }
   readonly companies: readonly CompanySummary[]
 }
+
+export type AdminUserView = MeResponse['user'] & {
+  readonly createdAt: string
+  readonly approvedAt: string | null
+}
+
+export interface AdminUsersResponse {
+  readonly users: readonly AdminUserView[]
+  readonly total: number
+  readonly page: number
+  readonly pageSize: number
+}
+
 
 /* ------------------------------------------------------------------- team */
 
@@ -322,6 +343,7 @@ export interface MessageView {
    * hình dạng đổi. Tầng API là nơi kiểm tra hình dạng và trả `undefined` nếu không khớp.
    */
   readonly clarify?: ClarificationRequest
+  readonly workforceDraftIds?: readonly string[]
   readonly tokensIn: number
   readonly tokensOut: number
   readonly costUsd: number
@@ -642,6 +664,8 @@ export const API_ROUTES = {
   login: '/api/auth/login',
   logout: '/api/auth/logout',
   me: '/api/auth/me',
+  adminUsers: '/api/admin/users',
+  approveUser: (id: string) => `/api/admin/users/${encodeURIComponent(id)}/approve`,
   companies: '/api/companies',
   company: (id: string) => `/api/companies/${id}`,
   updateCompany: (id: string) => `/api/companies/${id}`,

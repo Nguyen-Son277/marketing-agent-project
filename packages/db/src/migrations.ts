@@ -484,4 +484,61 @@ UPDATE llm_providers
 DELETE FROM llm_providers WHERE company_id IS NULL;
 `,
   },
+  {
+    id: '0009_user_approval',
+    sql: `
+-- Tài khoản mới phải được admin duyệt. Tài khoản đã có giữ quyền sử dụng để nâng cấp
+-- không khoá người đang vận hành; không ghi giả danh admin đã duyệt những hàng cũ.
+ALTER TABLE users ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'pending'
+  CHECK (approval_status IN ('pending', 'approved'));
+ALTER TABLE users ADD COLUMN approved_at TEXT;
+ALTER TABLE users ADD COLUMN approved_by TEXT REFERENCES users(id) ON DELETE SET NULL;
+UPDATE users SET approval_status = 'approved';
+CREATE INDEX idx_users_approval_created ON users(approval_status, created_at, id);
+`,
+  },
+  {
+    id: '0010_employee_workforce',
+    sql: `
+-- Không dùng memberships cho nhân viên: họ chỉ xem việc được giao, không xem dữ liệu marketing.
+ALTER TABLE users ADD COLUMN account_type TEXT NOT NULL DEFAULT 'user' CHECK(account_type IN ('user','employee'));
+ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE employee_profiles (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ manager_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ role TEXT NOT NULL DEFAULT 'designer', active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+);
+CREATE TABLE employee_company_access (
+ user_id TEXT NOT NULL REFERENCES employee_profiles(user_id) ON DELETE CASCADE,
+ company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ PRIMARY KEY(user_id,company_id)
+);
+CREATE TABLE employee_tasks (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ manager_id TEXT NOT NULL REFERENCES users(id), assignee_user_id TEXT NOT NULL REFERENCES employee_profiles(user_id),
+ title TEXT NOT NULL, brief TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('image','video','other')),
+ priority INTEGER NOT NULL DEFAULT 2, planned_week TEXT NOT NULL, planned_date TEXT, deadline TEXT NOT NULL,
+ status TEXT NOT NULL CHECK(status IN ('draft','assigned','in_progress','review','done','cancelled')),
+ source TEXT NOT NULL DEFAULT 'manager', source_conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+ idempotency_key TEXT UNIQUE, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT
+);
+CREATE INDEX idx_employee_tasks_schedule ON employee_tasks(manager_id,planned_week,planned_date);
+CREATE INDEX idx_employee_tasks_assignee ON employee_tasks(assignee_user_id,status,deadline);
+CREATE TABLE employee_task_reports (
+ id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES employee_tasks(id) ON DELETE CASCADE,
+ author_id TEXT NOT NULL REFERENCES users(id), kind TEXT NOT NULL, content TEXT NOT NULL, links_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE employee_task_events (
+ id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES employee_tasks(id) ON DELETE CASCADE,
+ actor_id TEXT NOT NULL REFERENCES users(id), kind TEXT NOT NULL, note TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX idx_employee_reports_task ON employee_task_reports(task_id,created_at);
+CREATE INDEX idx_employee_events_task ON employee_task_events(task_id,created_at);
+-- Cấp tool tạo nháp một lần cho công ty hiện có; không reset grant khác.
+INSERT OR IGNORE INTO agent_preset_tools(preset_id,company_id,tool_name)
+ SELECT p.id,p.company_id,'employee_list' FROM agent_presets p JOIN agent_defs d ON d.id=p.agent_def_id WHERE d.role IN ('marketing-leader','design-video');
+INSERT OR IGNORE INTO agent_preset_tools(preset_id,company_id,tool_name)
+ SELECT p.id,p.company_id,'employee_task_draft' FROM agent_presets p JOIN agent_defs d ON d.id=p.agent_def_id WHERE d.role IN ('marketing-leader','design-video');
+`,
+  },
 ]

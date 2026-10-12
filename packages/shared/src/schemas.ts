@@ -187,6 +187,7 @@ export const createConversationSchema = z.object({
 export type CreateConversationInput = z.infer<typeof createConversationSchema>
 
 export const sendMessageSchema = z.object({
+  mode: z.enum(['campaign','workforce']).default('campaign'),
   content: z.string().trim().min(1, 'Cần nội dung').max(20_000),
   /** When true the leader plans and dispatches immediately instead of asking first. */
   autoPlan: z.boolean().default(false),
@@ -231,12 +232,31 @@ export const reviewTaskSchema = z.object({
 })
 export type ReviewTaskInput = z.infer<typeof reviewTaskSchema>
 
+/** Firecrawl cloud chỉ cần key; URL gốc riêng là tuỳ chọn cho self-host/proxy. */
+export const firecrawlConfigSchema = z.object({
+  apiKey: z.string().trim().min(1, 'Cần API key Firecrawl').max(2000),
+  baseUrl: z.string().trim().url('URL Firecrawl không hợp lệ').refine((value) => {
+    try {
+      const url = new URL(value)
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash
+    } catch { return false }
+  }, 'URL phải là HTTP/HTTPS, không chứa thông tin đăng nhập, query hoặc fragment').optional(),
+}).passthrough()
+
 export const upsertIntegrationSchema = z.object({
   kind: integrationKindSchema,
   name: z.string().trim().min(1).max(80),
   /** Integration secrets/credentials, encrypted before storage. */
   config: z.record(z.unknown()),
-})
+}).superRefine((input, ctx) => {
+  if (input.kind !== 'firecrawl') return
+  const result = firecrawlConfigSchema.safeParse(input.config)
+  if (!result.success) {
+    for (const issue of result.error.issues) ctx.addIssue({ ...issue, path: ['config', ...issue.path] })
+  }
+}).transform((input) => input.kind === 'firecrawl'
+  ? { ...input, config: firecrawlConfigSchema.parse(input.config) }
+  : input)
 export type UpsertIntegrationInput = z.infer<typeof upsertIntegrationSchema>
 
 export const costQuerySchema = z.object({
@@ -252,7 +272,7 @@ export const paginationSchema = z.object({
 export type PaginationInput = z.infer<typeof paginationSchema>
 
 /** Parse a payload or throw a 400-shaped validation AppError. */
-export function parseOrThrow<T>(schema: z.ZodType<T>, payload: unknown, label = 'dữ liệu'): T {
+export function parseOrThrow<S extends z.ZodTypeAny>(schema: S, payload: unknown, label = 'dữ liệu'): z.output<S> {
   const result = schema.safeParse(payload)
   if (!result.success) {
     const issues = result.error.issues.map((i) => ({

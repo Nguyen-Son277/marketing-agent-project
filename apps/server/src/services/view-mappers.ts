@@ -252,6 +252,8 @@ export function toConversationView(conversation: ConversationRecord, costUsd: nu
 export function toMessageView(message: MessageRecord): MessageView {
   const meta = parseJsonOrNull(message.metaJson)
   const clarify = readClarification(meta)
+  const rawDrafts=meta&&typeof meta==='object'?(meta as Record<string,unknown>).workforceDraftIds:null
+  const workforceDraftIds=Array.isArray(rawDrafts)?rawDrafts.filter((id):id is string=>typeof id==='string'&&id.length<100):[]
   return {
     id: message.id,
     role: message.role,
@@ -260,6 +262,7 @@ export function toMessageView(message: MessageRecord): MessageView {
     contentMd: message.contentMd,
     meta,
     ...(clarify ? { clarify } : {}),
+    ...(workforceDraftIds.length?{workforceDraftIds}:{}),
     tokensIn: message.tokensIn,
     tokensOut: message.tokensOut,
     costUsd: message.costUsd,

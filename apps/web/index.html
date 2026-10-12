@@ -3,12 +3,40 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="light dark" />
     <title>Đội Agent Marketing</title>
     <meta
       name="description"
       content="Hệ thống đội agent marketing: Leader điều phối, chuyên môn thực thi, kho kiến thức riêng cho từng công ty."
     />
+    <!--
+      Đặt theme TRƯỚC khi CSS/React tải: nếu để provider React làm việc này, người dùng
+      chọn chế độ tối sẽ thấy một nháy nền sáng mỗi lần tải trang.
+
+      Vì sao viết thẳng ở đây thay vì import module: script trong head phải chạy đồng bộ
+      trước lần vẽ đầu tiên, mà import module là bất đồng bộ. Khoá lưu và quy tắc dự phòng
+      phải trùng `src/lib/theme-store.ts`; đổi một nơi là phải đổi cả hai.
+    -->
+    <script>
+      (function () {
+        var KEY = 'ma.theme'
+        var theme = 'light'
+        try {
+          var stored = window.localStorage.getItem(KEY)
+          if (stored === 'light' || stored === 'dark') theme = stored
+          else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark'
+        } catch (error) {
+          // Chặn localStorage: vẫn phải chạy, chỉ là không nhớ được lựa chọn.
+        }
+        document.documentElement.setAttribute('data-theme', theme)
+        document.documentElement.style.colorScheme = theme
+      })()
+    </script>
+    <style>
+      /* Nền tối thiểu trước khi bundle CSS tới, để không nháy trắng ở chế độ tối. */
+      html[data-theme='dark'] body { background: #12181a; }
+      html[data-theme='light'] body { background: #faf9f6; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

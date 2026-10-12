@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useSession } from '../lib/session.tsx'
 import { useI18n } from '../lib/i18n.tsx'
 import { LocaleSwitcher } from '../components/LocaleSwitcher.tsx'
+import { ThemeSwitcher } from '../components/ThemeSwitcher.tsx'
 import { FormTaoCongTy } from '../components/FormTaoCongTy.tsx'
 import { Card, Nut, ThongBao, Trang } from '../components/ui.tsx'
 
@@ -13,8 +14,9 @@ export function ChonCongTyScreen(): ReactNode {
   return (
     <div className="dang-nhap">
       {/* Người dùng chưa có công ty vẫn phải đổi được ngôn ngữ: không có Shell ở màn này. */}
-      <div className="dang-nhap__ngon-ngu">
+      <div className="dang-nhap__cong-cu">
         <LocaleSwitcher />
+        <ThemeSwitcher />
       </div>
       <div style={{ width: '100%', maxWidth: 560 }}>
         <Trang>

@@ -284,9 +284,12 @@ export class AccountingRepo {
     const existing = this.findIntegration(input.companyId, input.kind, input.name)
     const encrypted = this.secrets.encryptJson(input.config)
     if (existing) {
+      // Key Firecrawl mới chưa được kiểm tra; không giữ nhãn ok và thời điểm của key cũ.
       this.db.run(
-        `UPDATE integrations SET config_enc = ?, config_iv = ?, status = ? WHERE id = ?`,
-        [encrypted.enc, encrypted.iv, input.status ?? existing.status, existing.id],
+        `UPDATE integrations SET config_enc = ?, config_iv = ?, status = ?, last_check_at = ? WHERE id = ?`,
+        [encrypted.enc, encrypted.iv,
+          input.kind === 'firecrawl' ? 'configured' : input.status ?? existing.status,
+          input.kind === 'firecrawl' ? null : existing.lastCheckAt, existing.id],
       )
       return this.requireIntegration(existing.id, input.companyId)
     }

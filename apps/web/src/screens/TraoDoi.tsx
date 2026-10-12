@@ -131,6 +131,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   const [chiTiet, setChiTiet] = useState<ConversationDetailResponse | null>(null)
   const [suKien, setSuKien] = useState<DongSuKien[]>([])
   const [noiDung, setNoiDung] = useState('')
+  const [cheDoGiaoViec,setCheDoGiaoViec]=useState<'campaign'|'workforce'>('campaign')
   const [loi, setLoi] = useState<string | null>(null)
   const [dangTai, setDangTai] = useState(true)
   const [dangGui, setDangGui] = useState(false)
@@ -324,7 +325,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
     setBaoKetQua(null)
     setDangGui(true)
     try {
-      const ketQua = await api.sendMessage(dangChon, answers ? { content, answers } : { content })
+      const ketQua = await api.sendMessage(dangChon, answers ? { content, answers, mode:cheDoGiaoViec } : { content, mode:cheDoGiaoViec })
       setBaoKetQua(
         ketQua.briefComplete
           ? t('chat.briefCompleteHint')
@@ -469,6 +470,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                   nho
                   bien="phu"
                   dangTai={dangChay === 'plan'}
+                  disabled={cheDoGiaoViec === 'workforce'}
                   onClick={() => void chayBuoc('plan')}
                   title={t('chat.planHint')}
                 >
@@ -478,7 +480,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                   nho
                   bien="phu"
                   dangTai={dangChay === 'run'}
-                  disabled={chiTiet.tasks.length === 0}
+                  disabled={chiTiet.tasks.length === 0 || cheDoGiaoViec === 'workforce'}
                   onClick={() => void chayBuoc('run')}
                   title={chiTiet.tasks.length === 0 ? t('chat.runNeedsPlan') : t('chat.runHint')}
                 >
@@ -487,7 +489,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                 <Nut
                   nho
                   dangTai={dangChay === 'report'}
-                  disabled={chiTiet.tasks.length === 0}
+                  disabled={chiTiet.tasks.length === 0 || cheDoGiaoViec === 'workforce'}
                   onClick={() => void chayBuoc('report')}
                   title={t('chat.reportHint')}
                 >
@@ -496,7 +498,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
               </div>
             </div>
 
-            {chiTiet.conversation.briefComplete ? null : (
+            {chiTiet.conversation.briefComplete || cheDoGiaoViec === 'workforce' ? null : (
               <div style={{ marginTop: 12 }}>
                 <ThongBao loai="canh-bao">
                   {t('chat.briefMissingPrefix')}{' '}
@@ -557,6 +559,9 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
           đúng mức, và bất biến "chỉ một vùng cuộn" vẫn giữ.
         */}
         <div className="chat__thanh">
+          <select className="o-chon" style={{width:'auto',maxWidth:'100%'}} aria-label={t('wf.chatMode')} value={cheDoGiaoViec} disabled={dangGui} onChange={e=>setCheDoGiaoViec(e.target.value as 'campaign'|'workforce')}>
+            <option value="campaign">{t('wf.campaign')}</option><option value="workforce">{t('wf.designerChat')}</option>
+          </select>
           <Nut
             nho
             bien="phu"
@@ -717,6 +722,7 @@ function TinNhan({ message }: { message: MessageView }): ReactNode {
         ) : (
           <Markdown>{message.contentMd}</Markdown>
         )}
+        {message.workforceDraftIds?.map(id=><div key={id} className="card" style={{marginTop:10}}><p>{t('wf.draftNotice')}</p><a href={`#/giao-viec?taskId=${encodeURIComponent(id)}`}>{t('wf.openDraft')}</a></div>)}
       </div>
     </div>
   )

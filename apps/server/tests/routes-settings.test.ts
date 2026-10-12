@@ -36,6 +36,27 @@ async function startModelsServer(models: string[]): Promise<string> {
 }
 
 describe('settings routes', () => {
+  it('Firecrawl chặn cấu hình sai, mã hoá key và reset lần kiểm tra khi thay key', async () => {
+    const { ownerCookie, company } = await tenant(ctx, 'firecrawl-form@example.com', 'Firecrawl Form')
+    const path = `/api/companies/${company.id}/integrations`
+    for (const config of [{}, { apiKey: 1 }, { apiKey: ' ' }, { apiKey: 'test', baseUrl: 'ftp://bad.example' }]) {
+      expect((await ctx.client.request('POST', path, { headers: ownerCookie, body: { kind: 'firecrawl', name: 'Firecrawl', config } })).status).toBe(400)
+    }
+    const first = await ctx.client.request('POST', path, { headers: ownerCookie, body: { kind: 'firecrawl', name: 'Firecrawl', config: { apiKey: ' fc-first-key ' } } })
+    expect(first.status).toBe(201)
+    expect(first.body).not.toContain('fc-first-key')
+    const id = first.json<{ integration: { id: string } }>().integration.id
+    const stored = ctx.repos.accounting.requireIntegration(id, company.id)
+    expect(stored.configEnc).not.toContain('fc-first-key')
+    expect(ctx.repos.accounting.resolveIntegrationConfig(stored)).toEqual({ apiKey: 'fc-first-key' })
+    await ctx.client.request('POST', `${path}/${id}/test`, { headers: ownerCookie, body: {} })
+    expect(ctx.repos.accounting.requireIntegration(id, company.id).lastCheckAt).toBeTruthy()
+    const update = await ctx.client.request('POST', path, { headers: ownerCookie, body: { kind: 'firecrawl', name: 'Firecrawl', config: { apiKey: 'private-second-key' } } })
+    expect(update.json<{ integration: { id: string } }>().integration.id).toBe(id)
+    expect(ctx.repos.accounting.listIntegrations(company.id)).toHaveLength(1)
+    expect(ctx.repos.accounting.requireIntegration(id, company.id)).toMatchObject({ status: 'configured', lastCheckAt: null })
+    expect((await ctx.client.request('GET', path, { headers: ownerCookie })).body).not.toContain('private-second-key')
+  })
   it('quản lý provider, model, route, kết nối và giới hạn (happy path)', async () => {
     const { ownerCookie, company } = await tenant(ctx, 'set-owner@example.com', 'Settings Co')
     const base = `/api/companies/${company.id}`

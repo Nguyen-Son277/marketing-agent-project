@@ -6,7 +6,7 @@
  * trong bản tự host. Các thành phần ở đây giữ đúng một trách nhiệm và không tự
  * quản lý trạng thái, nên màn hình nào cũng ghép được.
  */
-import type { ChangeEvent, ReactNode, RefObject } from 'react'
+import { useEffect, useId, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react'
 import { useI18n } from '../lib/i18n.tsx'
 
 /**
@@ -152,6 +152,7 @@ export function ONhap({
   type = 'text',
   disabled,
   autoFocus,
+  visibilityResetKey,
 }: {
   value: string
   onChange: (value: string) => void
@@ -159,17 +160,43 @@ export function ONhap({
   type?: string
   disabled?: boolean
   autoFocus?: boolean
+  /** Đổi khoá khi mở/đóng form giữ mounted, không giữ trạng thái hiện ở lượt sau. */
+  visibilityResetKey?: string | number | boolean | null
 }): ReactNode {
-  return (
+  const { t } = useI18n()
+  const inputId = useId()
+  const [hien, setHien] = useState(false)
+  const laMatKhau = type === 'password'
+  useEffect(() => { setHien(false) }, [type, visibilityResetKey])
+  useEffect(() => { if (value.length === 0 || disabled) setHien(false) }, [value, disabled])
+  const input = (
     <input
+      id={inputId}
       className="o-nhap"
-      type={type}
+      type={laMatKhau && hien ? 'text' : type}
       value={value}
       placeholder={placeholder}
       disabled={disabled}
       autoFocus={autoFocus}
       onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
     />
+  )
+  if (!laMatKhau) return input
+  return (
+    <div className="o-mat-khau">
+      {input}
+      <button
+        type="button"
+        className="o-mat-khau__nut"
+        disabled={disabled}
+        aria-label={t(hien ? 'common.hidePassword' : 'common.showPassword')}
+        aria-controls={inputId}
+        aria-pressed={hien}
+        onClick={() => setHien((truoc) => !truoc)}
+      >
+        {t(hien ? 'common.hideSecret' : 'common.showSecret')}
+      </button>
+    </div>
   )
 }
 

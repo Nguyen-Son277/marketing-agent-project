@@ -111,6 +111,12 @@ export async function registerUser(
   if (response.status !== 201) throw new Error(`Đăng ký thất bại: ${response.status} ${response.body}`)
   const user = ctx.repos.auth.findUserByEmail(email)
   if (!user) throw new Error('Không tìm thấy người dùng vừa đăng ký')
+  // Fixture nghiệp vụ cần user đã duyệt; đường pending thật có test riêng, không tắt guard.
+  const reviewer = ctx.repos.auth.findUserByEmail('fixture-admin@example.com') ?? ctx.repos.auth.createUser({
+    email: 'fixture-admin@example.com', password: 'fixture-password-123', name: 'Fixture admin',
+    isAdmin: true, approvalStatus: 'approved',
+  })
+  ctx.repos.auth.approveUser(user.id, reviewer.id)
   return { userId: user.id, cookie: cookieHeader(response, SESSION_COOKIE) }
 }
 

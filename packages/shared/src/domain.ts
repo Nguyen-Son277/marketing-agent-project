@@ -59,6 +59,42 @@ export type ArtifactKind = (typeof ARTIFACT_KINDS)[number]
 export const CONVERSATION_PHASES = ['intake', 'clarify', 'brief', 'plan', 'assign', 'execute', 'review', 'report', 'closed'] as const
 export type ConversationPhase = (typeof CONVERSATION_PHASES)[number]
 
+/* ------------------------------------------------------- việc cho nhân viên */
+
+/**
+ * Vòng đời việc giao cho nhân viên (designer).
+ *
+ * Cố ý KHÁC `TASK_STATUSES` của agent: việc nhân viên do con người giao và con
+ * người duyệt, không có `failed`/`blocked` vì agent không chạy nó. `review` nghĩa
+ * là "nhân viên báo xong, chờ quản lý duyệt" — chỉ quản lý mới đưa được sang `done`.
+ * `cancelled` là trạng thái cuối, giữ lại để không xoá lịch sử.
+ */
+export const EMPLOYEE_TASK_STATUSES = ['draft', 'assigned', 'in_progress', 'review', 'done', 'cancelled'] as const
+export type EmployeeTaskStatus = (typeof EMPLOYEE_TASK_STATUSES)[number]
+
+/** Trạng thái còn phải theo dõi. */
+export const OPEN_EMPLOYEE_TASK_STATUSES: readonly EmployeeTaskStatus[] = ['assigned', 'in_progress', 'review']
+
+/** Loại đầu ra, dùng cho bộ lọc và biểu tượng trên lịch. */
+export const EMPLOYEE_TASK_KINDS = ['image', 'video', 'other'] as const
+export type EmployeeTaskKind = (typeof EMPLOYEE_TASK_KINDS)[number]
+
+/** Nguồn tạo việc: người quản lý tự nhập hay agent đề xuất rồi quản lý xác nhận. */
+export const EMPLOYEE_TASK_SOURCES = ['manager', 'agent'] as const
+export type EmployeeTaskSource = (typeof EMPLOYEE_TASK_SOURCES)[number]
+
+/** Chức danh nhân viên. Đợt đầu chỉ có designer nhưng khoá vẫn đặt để mở rộng. */
+export const EMPLOYEE_ROLES = ['designer'] as const
+export type EmployeeRole = (typeof EMPLOYEE_ROLES)[number]
+
+/** Loại tài khoản: tài khoản quản lý bình thường hay tài khoản nhân viên. */
+export const ACCOUNT_TYPES = ['user', 'employee'] as const
+export type AccountType = (typeof ACCOUNT_TYPES)[number]
+
+/** Báo cáo của nhân viên: tiến độ thường, vướng mắc, hay gửi duyệt hoàn thành. */
+export const EMPLOYEE_REPORT_KINDS = ['progress', 'blocker', 'submit'] as const
+export type EmployeeReportKind = (typeof EMPLOYEE_REPORT_KINDS)[number]
+
 /**
  * Knowledge categories: the ACL unit. `code` is the stable directory prefix and
  * the value stored in kb_acl; agents may only read categories they are granted.

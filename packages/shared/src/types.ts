@@ -3,6 +3,7 @@
  * between packages; `schemas.ts` holds the zod validators for API boundaries.
  */
 import type {
+  AccountType,
   AgentMessageKind,
   AgentRole,
   ArtifactKind,
@@ -19,12 +20,20 @@ import type {
 
 /* ------------------------------------------------------------------ tenancy */
 
+export type ApprovalStatus = 'pending' | 'approved'
+
 export interface UserRecord {
   readonly id: string
   readonly email: string
   readonly passwordHash: string
   readonly name: string
   readonly isAdmin: boolean
+  readonly approvalStatus: ApprovalStatus
+  readonly accountType: AccountType
+  /** Tài khoản nhân viên do quản lý tạo: bắt buộc đổi mật khẩu trước khi dùng. */
+  readonly mustChangePassword: boolean
+  readonly approvedAt: string | null
+  readonly approvedBy: string | null
   readonly createdAt: string
 }
 
@@ -34,6 +43,9 @@ export interface PublicUser {
   readonly email: string
   readonly name: string
   readonly isAdmin: boolean
+  readonly approvalStatus: ApprovalStatus
+  readonly accountType: AccountType
+  readonly mustChangePassword: boolean
 }
 
 export interface CompanyRecord {
@@ -396,6 +408,10 @@ export type LlmChunk =
 
 /** Context handed to a tool handler; carries tenancy plus the run identity. */
 export interface ToolContext {
+  /** Danh tính từ HTTP, không lấy từ tham số model hay chủ hội thoại. */
+  readonly actorUserId?: string
+  readonly requestId?: string
+  readonly toolCallId?: string
   readonly companyId: string
   readonly agentRole: AgentRole
   readonly agentDefId: string

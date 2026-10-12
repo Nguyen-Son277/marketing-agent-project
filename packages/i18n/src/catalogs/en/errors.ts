@@ -6,6 +6,8 @@
  * resolve the same keys. Splitting it out makes that contract visible.
  */
 export const en_errors = {
+  'errors.auth.accountPending': 'Your account is awaiting admin approval.',
+  'errors.auth.adminOnlyApproval': 'Admin accounts can only use account approval features.',
   /* -------------------------------------------------------- generic */
   'errors.generic.internal': 'System error. Please try again.',
   'errors.generic.validation': 'The submitted data is not valid.',

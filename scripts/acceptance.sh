@@ -69,6 +69,8 @@ buoc "2/8 Đăng ký người dùng"
 goi POST /api/auth/register "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"Nghiệm thu\"}" >/dev/null || true
 goi POST /api/auth/login "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" | grep -q '"id"' || loi "đăng nhập thất bại"
 echo "   đăng nhập OK: $EMAIL"
+STATUS=$(goi GET /api/auth/me | json "d['user']['approvalStatus']")
+[ "$STATUS" = "approved" ] || loi "Tài khoản $EMAIL đang chờ admin duyệt. Duyệt qua giao diện admin rồi chạy lại với EMAIL=$EMAIL; kịch bản không tự vượt hàng rào duyệt."
 
 buoc "3/8 Tạo công ty (kèm 10 agent + phân quyền tri thức)"
 COMPANY=$(goi POST /api/companies '{"name":"Cong Ty Nghiem Thu"}')

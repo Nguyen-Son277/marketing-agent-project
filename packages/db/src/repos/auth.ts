@@ -6,6 +6,8 @@ import {
   nowIso,
   sha256,
   unauthorized,
+  type AccountType,
+  type ApprovalStatus,
   type CompanyRole,
   type CompanyRecord,
   type MembershipRecord,
@@ -21,6 +23,11 @@ interface UserRow {
   password_hash: string
   name: string
   is_admin: number
+  approval_status: ApprovalStatus
+  account_type: AccountType
+  must_change_password: number
+  approved_at: string | null
+  approved_by: string | null
   created_at: string
 }
 
@@ -54,6 +61,11 @@ const toUser = (row: UserRow): UserRecord => ({
   passwordHash: row.password_hash,
   name: row.name,
   isAdmin: row.is_admin === 1,
+  approvalStatus: row.approval_status,
+  accountType: row.account_type,
+  mustChangePassword: row.must_change_password === 1,
+  approvedAt: row.approved_at,
+  approvedBy: row.approved_by,
   createdAt: row.created_at,
 })
 
@@ -62,6 +74,9 @@ export const toPublicUser = (user: UserRecord): PublicUser => ({
   email: user.email,
   name: user.name,
   isAdmin: user.isAdmin,
+  approvalStatus: user.approvalStatus,
+  accountType: user.accountType,
+  mustChangePassword: user.mustChangePassword,
 })
 
 const toCompany = (row: CompanyRow): CompanyRecord => ({
@@ -82,7 +97,7 @@ const toMembership = (row: MembershipRow): MembershipRecord => ({
 export class AuthRepo {
   constructor(private readonly db: Database) {}
 
-  createUser(input: { email: string; password: string; name: string; isAdmin?: boolean }): UserRecord {
+  createUser(input: { email: string; password: string; name: string; isAdmin?: boolean; approvalStatus?: ApprovalStatus; accountType?: AccountType; mustChangePassword?: boolean }): UserRecord {
     const email = input.email.trim().toLowerCase()
     const existing = this.findUserByEmail(email)
     if (existing) throw conflict('Email này đã được đăng ký')
@@ -92,12 +107,17 @@ export class AuthRepo {
       passwordHash: hashPassword(input.password),
       name: input.name.trim(),
       isAdmin: input.isAdmin ?? false,
+      approvalStatus: input.approvalStatus ?? 'pending',
+      accountType: input.accountType ?? 'user',
+      mustChangePassword: input.mustChangePassword ?? false,
+      approvedAt: null,
+      approvedBy: null,
       createdAt: nowIso(),
     }
     this.db.run(
-      `INSERT INTO users (id, email, password_hash, name, is_admin, created_at)
-       VALUES (@id, @email, @passwordHash, @name, @isAdmin, @createdAt)`,
-      { ...user, isAdmin: user.isAdmin ? 1 : 0 },
+      `INSERT INTO users (id, email, password_hash, name, is_admin, approval_status, account_type, must_change_password, approved_at, approved_by, created_at)
+       VALUES (@id, @email, @passwordHash, @name, @isAdmin, @approvalStatus, @accountType, @mustChangePassword, @approvedAt, @approvedBy, @createdAt)`,
+      { ...user, isAdmin: user.isAdmin ? 1 : 0, mustChangePassword: user.mustChangePassword ? 1 : 0 },
     )
     return user
   }
@@ -112,12 +132,58 @@ export class AuthRepo {
     return row ? toUser(row) : undefined
   }
 
+  /** Danh sách tối thiểu cho admin; không đưa password hash ra khỏi repository. */
+  listUsersForApproval(input: { status: ApprovalStatus; q?: string; page: number; pageSize: number }) {
+    const search = `%${(input.q ?? '').replace(/[\\%_]/g, '\\$&')}%`
+    const params = { status: input.status, search }
+    const where = "approval_status = @status AND is_admin = 0 AND (name LIKE @search ESCAPE '\\' OR email LIKE @search ESCAPE '\\')"
+    const total = this.db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM users WHERE ${where}`, params)?.n ?? 0
+    const rows = this.db.all<UserRow>(
+      `SELECT * FROM users WHERE ${where} ORDER BY created_at ASC, id ASC LIMIT @limit OFFSET @offset`,
+      { ...params, limit: input.pageSize, offset: (input.page - 1) * input.pageSize },
+    )
+    return { users: rows.map((row) => ({ ...toPublicUser(toUser(row)), createdAt: row.created_at, approvedAt: row.approved_at })), total }
+  }
+
+  /** Trả changed để nơi gọi chỉ ghi audit một lần khi hai admin cùng duyệt. */
+  approveUser(userId: string, adminId: string): { user: UserRecord; changed: boolean } {
+    const user = this.findUserById(userId)
+    if (!user) throw notFound('Không tìm thấy người dùng')
+    const result = this.db.run(
+      "UPDATE users SET approval_status = 'approved', approved_at = ?, approved_by = ? WHERE id = ? AND approval_status = 'pending'",
+      [nowIso(), adminId, userId],
+    )
+    return { user: this.findUserById(userId)!, changed: result.changes > 0 }
+  }
+
+  /** Chỉ dùng từ CLI tin cậy; không có API cấp quyền admin cho người dùng. */
+  grantSystemAdmin(email: string): { user: UserRecord; changed: boolean } {
+    const user = this.findUserByEmail(email)
+    if (!user) throw notFound('Email chưa được đăng ký. Hãy đăng ký trên website trước.')
+    const result = this.db.run(
+      "UPDATE users SET is_admin = 1, approval_status = 'approved', approved_at = COALESCE(approved_at, ?) WHERE id = ? AND (is_admin = 0 OR approval_status <> 'approved')",
+      [nowIso(), user.id],
+    )
+    return { user: this.findUserById(user.id)!, changed: result.changes > 0 }
+  }
+
   /** Verify credentials without revealing which half failed. */
   authenticate(email: string, password: string): UserRecord | undefined {
     const user = this.findUserByEmail(email)
     if (!user) return undefined
     if (!verifyPassword(password, user.passwordHash)) return undefined
     return user
+  }
+
+  /** Đổi mật khẩu phải thu hồi mọi phiên cũ; nơi gọi cấp lại riêng phiên hiện tại. */
+  changePassword(userId: string, current: string, next: string): void {
+    const user = this.findUserById(userId)
+    if (!user || !verifyPassword(current, user.passwordHash)) throw unauthorized('Mật khẩu hiện tại không đúng')
+    if (verifyPassword(next, user.passwordHash)) throw conflict('Mật khẩu mới phải khác mật khẩu ban đầu')
+    this.db.tx(() => {
+      this.db.run('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?', [hashPassword(next), userId])
+      this.deleteSessionsForUser(userId)
+    })
   }
 
   /** Issue a session and return the plaintext token exactly once. */
@@ -233,8 +299,8 @@ export class AuthRepo {
   }
 
   listMembers(companyId: string): (MembershipRecord & { user: PublicUser })[] {
-    const rows = this.db.all<MembershipRow & { u_id: string; u_email: string; u_name: string; u_is_admin: number }>(
-      `SELECT m.*, u.id AS u_id, u.email AS u_email, u.name AS u_name, u.is_admin AS u_is_admin
+    const rows = this.db.all<MembershipRow & { u_id: string; u_email: string; u_name: string; u_is_admin: number; u_approval: ApprovalStatus; u_type: AccountType; u_change: number }>(
+      `SELECT m.*, u.id AS u_id, u.email AS u_email, u.name AS u_name, u.is_admin AS u_is_admin, u.approval_status AS u_approval, u.account_type AS u_type, u.must_change_password AS u_change
          FROM memberships m
          JOIN users u ON u.id = m.user_id
         WHERE m.company_id = ?
@@ -248,6 +314,9 @@ export class AuthRepo {
         email: row.u_email,
         name: row.u_name,
         isAdmin: row.u_is_admin === 1,
+        approvalStatus: row.u_approval,
+        accountType: row.u_type,
+        mustChangePassword: row.u_change === 1,
       },
     }))
   }

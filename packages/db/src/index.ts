@@ -13,6 +13,7 @@ import { KnowledgeRepo } from './repos/knowledge.ts'
 import { LlmRepo } from './repos/llm.ts'
 import { TeamRepo } from './repos/team.ts'
 import { WorkRepo } from './repos/work.ts'
+import { WorkforceRepo } from './repos/workforce.ts'
 
 export interface Repos {
   readonly db: Database
@@ -23,6 +24,7 @@ export interface Repos {
   readonly knowledge: KnowledgeRepo
   readonly work: WorkRepo
   readonly accounting: AccountingRepo
+  readonly workforce: WorkforceRepo
 }
 
 export interface CreateReposOptions extends OpenDatabaseOptions {
@@ -47,10 +49,12 @@ export function createRepos(options: CreateReposOptions): Repos {
   const secrets = new SecretBox(secret)
   const llm = new LlmRepo(db, secrets)
   const team = new TeamRepo(db, llm)
+  const auth = new AuthRepo(db)
   return {
     db,
     secrets,
-    auth: new AuthRepo(db),
+    auth,
+    workforce: new WorkforceRepo(db, auth),
     llm,
     team,
     knowledge: new KnowledgeRepo(db),

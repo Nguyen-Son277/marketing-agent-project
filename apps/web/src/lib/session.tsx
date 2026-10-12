@@ -108,8 +108,10 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
   const applySession = useCallback(
     (response: MeResponse) => {
       setUser(response.user)
-      setCompanies(response.companies)
+      const allowedCompanies = response.user.approvalStatus === 'approved' && !response.user.isAdmin && response.user.accountType === 'user' && !response.user.mustChangePassword ? response.companies : []
+      setCompanies(allowedCompanies)
       setCompanyId((current) => {
+        if (response.user.approvalStatus !== 'approved' || response.user.isAdmin || response.user.accountType === 'employee' || response.user.mustChangePassword) return null
         if (current && response.companies.some((company) => company.id === current)) return current
         return resolveCompanyId(response.user.id, response.companies)
       })
@@ -167,8 +169,9 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
   const signIn = useCallback(
     (nextUser: PublicUser, nextCompanies: readonly CompanySummary[]) => {
       setUser(nextUser)
-      setCompanies(nextCompanies)
-      const resolved = resolveCompanyId(nextUser.id, nextCompanies)
+      const allowedCompanies = nextUser.approvalStatus === 'approved' && !nextUser.isAdmin && nextUser.accountType === 'user' && !nextUser.mustChangePassword ? nextCompanies : []
+      setCompanies(allowedCompanies)
+      const resolved = resolveCompanyId(nextUser.id, allowedCompanies)
       setCompanyId(resolved)
       if (resolved) writeStoredCompanyId(nextUser.id, resolved)
     },
