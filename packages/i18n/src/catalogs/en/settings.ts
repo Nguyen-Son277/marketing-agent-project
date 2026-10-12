@@ -111,6 +111,10 @@ export const en_settings = {
   'settings.models.purgeConfirm': 'Delete every model of "{{name}}" that no agent uses?',
   'settings.models.purged': 'Deleted {{count}} unused models.',
   'settings.models.purgeFailed': 'Could not delete unused models.',
+  // Label of the BUTTON that opens the dialog, kept apart from `form.title` (the dialog
+  // heading) for the same reason `settings.providers.add` is apart from
+  // `settings.providers.form.createTitle`: one is an action, the other is a heading.
+  'settings.models.add': 'Add model',
   'settings.models.form.title': 'Add model',
   'settings.models.form.modelIdPlaceholder': 'Model ID, e.g. deepseek-v4-flash',
   'settings.models.form.labelPlaceholder': 'Display label',

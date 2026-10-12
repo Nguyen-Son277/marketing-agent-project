@@ -113,6 +113,10 @@ export const vi_settings = {
   'settings.models.purgeConfirm': 'Xoá mọi model không được agent nào dùng của "{{name}}"?',
   'settings.models.purged': 'Đã xoá {{count}} model không dùng.',
   'settings.models.purgeFailed': 'Không xoá được model không dùng.',
+  // Nhãn của NÚT mở hộp thoại, tách khỏi `form.title` (tiêu đề trong hộp thoại) — cùng lý do
+  // đã tách `settings.providers.add` khỏi `settings.providers.form.createTitle`: một cái là
+  // hành động, một cái là tiêu đề, và câu chữ có thể đổi khác nhau về sau.
+  'settings.models.add': 'Thêm model',
   'settings.models.form.title': 'Thêm model',
   'settings.models.form.modelIdPlaceholder': 'Mã model, ví dụ: deepseek-v4-flash',
   'settings.models.form.labelPlaceholder': 'Nhãn hiển thị',

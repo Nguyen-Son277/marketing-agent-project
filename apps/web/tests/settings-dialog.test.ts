@@ -16,6 +16,9 @@ const doc = (duongDan: string): string =>
 const caiDat = doc('../src/screens/CaiDat.tsx')
 const ui = doc('../src/components/ui.tsx')
 const hopThoai = doc('../src/components/HopThoai.tsx')
+/** Catalog i18n của mục Cài đặt, đọc một lần ở cấp module cho mọi khối test dùng chung. */
+const vi = doc('../../../packages/i18n/src/catalogs/vi/settings.ts')
+const en = doc('../../../packages/i18n/src/catalogs/en/settings.ts')
 
 describe('màn Cài đặt dùng hộp thoại thay hộp thoại trình duyệt', () => {
   it('không còn window.confirm hay window.alert', () => {
@@ -89,9 +92,6 @@ describe('catalog không còn khoá chết', () => {
    * biên dịch (union khoá chỉ lớn hơn), nên chúng nằm lại rất lâu và làm người sửa sau tưởng
    * còn hai nơi làm cùng một việc.
    */
-  const vi = doc('../../../packages/i18n/src/catalogs/vi/settings.ts')
-  const en = doc('../../../packages/i18n/src/catalogs/en/settings.ts')
-
   it('không còn khoá settings.providers.fetch.*', () => {
     // Chỉ còn lại trong comment giải thích; khẳng định không có khai báo khoá thật.
     expect(vi).not.toMatch(/^\s*'settings\.providers\.fetch\./m)
@@ -101,5 +101,69 @@ describe('catalog không còn khoá chết', () => {
   it('có đúng một bộ khoá cho việc lấy model', () => {
     expect(vi).toMatch(/'settings\.models\.fetch\.open'/)
     expect(en).toMatch(/'settings\.models\.fetch\.open'/)
+  })
+})
+
+describe('mục Model: biểu mẫu nhập tay nằm trong hộp thoại', () => {
+  /**
+   * Vì sao kiểm bằng cách đọc mã: yêu cầu là "biểu mẫu chỉ hiện sau khi bấm nút". `tsc` và
+   * `vite build` đều không nói gì về việc một khối JSX quay lại vị trí tĩnh, và một lần sửa
+   * vô ý là biểu mẫu lại luôn hiện — đúng thứ người dùng vừa yêu cầu bỏ đi.
+   */
+  const phanModel = caiDat.slice(caiDat.indexOf('function PhanModel'))
+
+  it('biểu mẫu nằm giữa cặp thẻ HopThoai, không phải ở vị trí tĩnh', () => {
+    // Mốc văn bản thay vì regex nhiều dòng: regex tham lam đã gây hỏng file nhiều lần trong
+    // dự án này, nên ở đây chỉ so sánh thứ tự chỉ số.
+    const moDau = phanModel.indexOf('<HopThoai\n')
+    expect(moDau, 'thiếu HopThoai bao biểu mẫu').toBeGreaterThan(-1)
+
+    const viTriNhapModel = phanModel.indexOf('settings.models.form.modelIdPlaceholder')
+    expect(viTriNhapModel, 'thiếu ô nhập mã model').toBeGreaterThan(moDau)
+
+    // Thẻ đóng của hộp thoại phải nằm SAU ô nhập — nếu không, biểu mẫu đã bị đẩy ra ngoài.
+    const dongThe = phanModel.indexOf('</HopThoai>', moDau)
+    expect(dongThe).toBeGreaterThan(viTriNhapModel)
+  })
+
+  it('có nút mở hộp thoại dùng khoá riêng của nút', () => {
+    // Nhãn nút tách khỏi tiêu đề hộp thoại, cùng lý do đã tách cho nhà cung cấp.
+    expect(caiDat).toMatch(/t\('settings\.models\.add'\)/)
+    expect(caiDat).toMatch(/'settings\.models\.add'/)
+    expect(vi).toMatch(/'settings\.models\.add'/)
+    expect(en).toMatch(/'settings\.models\.add'/)
+  })
+
+  it('mở và đóng hộp thoại đều đi qua hàm xoá biểu mẫu', () => {
+    // Mở mà không xoá thì hiện dữ liệu lần trước; đóng mà không xoá thì lần sau bấm nút
+    // người dùng thấy nguyên biểu mẫu cũ và rất dễ gửi nhầm.
+    expect(phanModel).toMatch(/function moThemModelMoi\(\): void \{/)
+    expect(phanModel).toMatch(/function dongHopThoaiModel\(\): void \{/)
+    const thanDong = phanModel.slice(
+      phanModel.indexOf('function dongHopThoaiModel'),
+      phanModel.indexOf('function moThemModelMoi'),
+    )
+    expect(thanDong).toMatch(/xoaBieuMauModel\(\)/)
+    const thanMo = phanModel.slice(phanModel.indexOf('function moThemModelMoi'))
+    expect(thanMo.slice(0, 200)).toMatch(/xoaBieuMauModel\(\)/)
+  })
+
+  it('lưu thành công thì đóng hộp thoại', () => {
+    const thanLuu = phanModel.slice(phanModel.indexOf('async function luu()'), phanModel.indexOf('async function xoaModel()'))
+    expect(thanLuu).toMatch(/dongHopThoaiModel\(\)/)
+  })
+
+  it('lỗi của biểu mẫu hiện trong hộp thoại, lỗi xoá hiện ở đầu mục', () => {
+    // Hai loại lỗi khác ngữ cảnh nên phải hiện ở hai chỗ: để lỗi biểu mẫu ở đầu mục thì bị
+    // lớp phủ che khi hộp thoại mở; để lỗi xoá trong hộp thoại thì không ai thấy vì hộp thoại
+    // đã đóng. Đoạn "đầu mục" là phần JSX TRƯỚC hộp thoại đầu tiên.
+    const viTriHopThoaiDauTien = phanModel.indexOf('<HopThoai')
+    expect(viTriHopThoaiDauTien).toBeGreaterThan(-1)
+    const phanDauMuc = phanModel.slice(0, viTriHopThoaiDauTien)
+
+    expect(phanDauMuc).toMatch(/\{loiXoa \? \(/)
+    expect(phanDauMuc).not.toMatch(/\{loiLuu \? \(/)
+    // Và lỗi biểu mẫu phải nằm trong hộp thoại.
+    expect(phanModel).toMatch(/\{loiLuu \? <ThongBao loai="loi">/)
   })
 })

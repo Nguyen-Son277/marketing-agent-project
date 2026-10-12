@@ -829,13 +829,25 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
   const [hoTroTool, setHoTroTool] = useState(true)
 
   const [dangLuu, setDangLuu] = useState(false)
+  /** Lỗi của biểu mẫu thêm model — hiện BÊN TRONG hộp thoại, xem chú thích ở chỗ render. */
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
+  /** Lỗi của thao tác xoá/purge — xảy ra ngoài hộp thoại nên hiện ở đầu mục. */
+  const [loiXoa, setLoiXoa] = useState<string | null>(null)
   const [thongBao, setThongBao] = useState<string | null>(null)
   const [dangPurge, setDangPurge] = useState<string | null>(null)
 
   // Hộp thoại lấy model đặt ngay trong mục Model: đây mới là chỗ người dùng tìm khi cần
   // thêm model, còn khối fetch cũ nằm trong bảng khoá của nhà cung cấp thì không ai thấy.
   const [moChonModel, setMoChonModel] = useState(false)
+
+  /**
+   * Hộp thoại nhập model bằng tay.
+   *
+   * Tách khỏi `moChonModel` vì đây là hai đường khác nhau: lấy danh sách từ nhà cung cấp,
+   * và tự khai một model mà nhà cung cấp không trả về. Gộp làm một hộp thoại sẽ khiến nó
+   * phải chứa cả hai luồng và khó hiểu hơn cả hai.
+   */
+  const [moThemModel, setMoThemModel] = useState(false)
 
   // Hộp thoại xác nhận giữ ĐỐI TƯỢNG cần xoá thay vì một cờ boolean: nhờ vậy câu xác nhận
   // luôn nhắc đúng tên model/nhà cung cấp, kể cả khi danh sách đã được tải lại sau đó.
@@ -873,6 +885,37 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     [providers],
   )
 
+  /** Xoá trắng biểu mẫu nhưng KHÔNG đụng tới `thongBao` của lần lưu trước. */
+  function xoaBieuMauModel(): void {
+    setProviderId('')
+    setModelId('')
+    setLabel('')
+    setContextWindow('128000')
+    setCostIn('0')
+    setCostOut('0')
+    setHoTroTool(true)
+    setLoiLuu(null)
+  }
+
+  /**
+   * Đóng hộp thoại và xoá sạch biểu mẫu.
+   *
+   * Vì sao phải xoá: trạng thái biểu mẫu sống ngoài hộp thoại, nên nếu chỉ ẩn hộp thoại thì
+   * lần sau bấm "Thêm model" người dùng thấy nguyên dữ liệu của lần trước và rất dễ gửi
+   * nhầm. Hàm này cũng là `onDong`, nên nó chạy cho cả `Esc` lẫn bấm ra ngoài.
+   */
+  function dongHopThoaiModel(): void {
+    setMoThemModel(false)
+    xoaBieuMauModel()
+  }
+
+  /** Mở hộp thoại nhập model, luôn bắt đầu từ biểu mẫu trắng. */
+  function moThemModelMoi(): void {
+    xoaBieuMauModel()
+    setThongBao(null)
+    setMoThemModel(true)
+  }
+
   async function luu(): Promise<void> {
     setLoiLuu(null)
     setThongBao(null)
@@ -891,11 +934,15 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
         costInPerMtok: soTuChuoi(costIn),
         costOutPerMtok: soTuChuoi(costOut),
       })
-      setModelId('')
-      setLabel('')
+      // Đóng hộp thoại và xoá biểu mẫu qua MỘT đường duy nhất (`dongHopThoaiModel`), thay vì
+      // tự đặt lại từng trường ở đây: hai nơi cùng xoá biểu mẫu thì sớm muộn sẽ lệch nhau.
+      // Hộp thoại mở lại lần sau vì thế luôn là biểu mẫu trắng.
       setThongBao(t('settings.models.created'))
+      dongHopThoaiModel()
       taiLai()
     } catch (error) {
+      // Lỗi thì hộp thoại Ở LẠI để người dùng sửa và thử lại; `loiLuu` hiện bên trong hộp
+      // thoại vì để ở đầu mục thì bị lớp phủ che.
       setLoiLuu(error instanceof ApiError ? error.message : t('settings.models.saveFailed'))
     } finally {
       setDangLuu(false)
@@ -906,7 +953,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     const model = choXoaModel
     if (!model) return
     setDangXoaModel(true)
-    setLoiLuu(null)
+    setLoiXoa(null)
     setThongBao(null)
     try {
       await api.deleteModel(companyId, model.id)
@@ -914,7 +961,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
       setChoXoaModel(null)
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : t('settings.models.deleteFailed'))
+      setLoiXoa(error instanceof ApiError ? error.message : t('settings.models.deleteFailed'))
       // Đóng hộp thoại cả khi lỗi: câu lỗi hiện trên mục Model, để hộp thoại mở lại thì
       // lớp phủ che mất chính thông báo đó.
       setChoXoaModel(null)
@@ -927,7 +974,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     const provider = choPurge
     if (!provider) return
     setDangPurge(provider.id)
-    setLoiLuu(null)
+    setLoiXoa(null)
     setThongBao(null)
     try {
       const ketQua = await api.purgeProviderModels(companyId, provider.id)
@@ -935,7 +982,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
       setChoPurge(null)
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : t('settings.models.purgeFailed'))
+      setLoiXoa(error instanceof ApiError ? error.message : t('settings.models.purgeFailed'))
       setChoPurge(null)
     } finally {
       setDangPurge(null)
@@ -946,12 +993,19 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     <Card
       tieuDe={t('settings.models.title')}
       phu={t('settings.models.subtitle')}
-      // Nút mở hộp thoại đặt cạnh tiêu đề mục Model — đúng chỗ người dùng đi tìm khi
-      // muốn thêm model, thay vì phải mở một dòng nhà cung cấp rồi cuộn xuống bảng khoá.
+      // Hai nút đặt cạnh tiêu đề mục Model — đúng chỗ người dùng đi tìm khi muốn thêm model,
+      // thay vì phải mở một dòng nhà cung cấp rồi cuộn xuống bảng khoá. Nút lấy danh sách là
+      // đường đi phổ biến nên để kiểu chính; nhập tay là đường dự phòng cho model mà nhà cung
+      // cấp không trả về, nên để kiểu phụ.
       hanhDong={
-        <Nut nho onClick={() => setMoChonModel(true)}>
-          {t('settings.models.fetch.open')}
-        </Nut>
+        <div className="hang" style={{ gap: 8 }}>
+          <Nut bien="phu" nho onClick={moThemModelMoi}>
+            {t('settings.models.add')}
+          </Nut>
+          <Nut nho onClick={() => setMoChonModel(true)}>
+            {t('settings.models.fetch.open')}
+          </Nut>
+        </div>
       }
     >
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
@@ -961,9 +1015,11 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
           <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
         </div>
       ) : null}
-      {loiLuu ? (
+      {/* Lỗi xoá/purge hiện ở đây vì nó xảy ra NGOÀI hộp thoại. Lỗi của biểu mẫu thêm model
+          thì hiện bên trong hộp thoại — để ở đây sẽ bị lớp phủ che. */}
+      {loiXoa ? (
         <div style={{ marginBottom: 10 }}>
-          <ThongBao loai="loi">{loiLuu}</ThongBao>
+          <ThongBao loai="loi">{loiXoa}</ThongBao>
         </div>
       ) : null}
 
@@ -1046,35 +1102,55 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
         </table>
       ) : null}
 
-      <h3 className="card__tieu-de" style={{ marginTop: 18 }}>
-        {t('settings.models.form.title')}
-      </h3>
-      <div className="luoi luoi--2">
-        <OChon
-          value={providerId}
-          onChange={setProviderId}
-          options={(providers ?? []).map((provider) => ({ value: provider.id, label: provider.name }))}
-        />
-        <ONhap value={modelId} onChange={setModelId} placeholder={t('settings.models.form.modelIdPlaceholder')} />
-        <ONhap value={label} onChange={setLabel} placeholder={t('settings.models.form.labelPlaceholder')} />
-        <ONhap
-          value={contextWindow}
-          onChange={setContextWindow}
-          placeholder={t('settings.models.form.contextPlaceholder')}
-        />
-        <ONhap value={costIn} onChange={setCostIn} placeholder={t('settings.models.form.costInPlaceholder')} />
-        <ONhap value={costOut} onChange={setCostOut} placeholder={t('settings.models.form.costOutPlaceholder')} />
-      </div>
-      <label className="hang" style={{ gap: 6, marginTop: 10, fontSize: 14 }}>
-        <input type="checkbox" checked={hoTroTool} onChange={(event) => setHoTroTool(event.target.checked)} />
-        {t('settings.models.form.supportsTools')}
-      </label>
-      <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.models.form.toolsNote')}</p>
-      <div className="hang">
-        <Nut onClick={() => void luu()} dangTai={dangLuu} disabled={providers !== null && providers.length === 0}>
-          {t('settings.models.form.submit')}
-        </Nut>
-      </div>
+      {/*
+        Biểu mẫu nhập model nằm trong hộp thoại, chỉ mở khi bấm nút "Thêm model" ở đầu mục.
+        Trước đây nó là một khối tĩnh luôn hiện ở cuối mục, làm mục này nặng và đẩy bảng
+        model lên trên — trong khi phần lớn người dùng đi đường "Lấy danh sách model".
+      */}
+      <HopThoai
+        mo={moThemModel}
+        tieuDe={t('settings.models.form.title')}
+        onDong={dongHopThoaiModel}
+        chanDung={
+          <>
+            <Nut bien="phu" nho onClick={dongHopThoaiModel} disabled={dangLuu}>
+              {t('common.cancel')}
+            </Nut>
+            <Nut nho onClick={() => void luu()} dangTai={dangLuu} disabled={providers !== null && providers.length === 0}>
+              {t('settings.models.form.submit')}
+            </Nut>
+          </>
+        }
+      >
+        <div className="cot" style={{ gap: 10 }}>
+          <div className="luoi luoi--2">
+            <OChon
+              value={providerId}
+              onChange={setProviderId}
+              options={(providers ?? []).map((provider) => ({ value: provider.id, label: provider.name }))}
+            />
+            <ONhap value={modelId} onChange={setModelId} placeholder={t('settings.models.form.modelIdPlaceholder')} />
+            <ONhap value={label} onChange={setLabel} placeholder={t('settings.models.form.labelPlaceholder')} />
+            <ONhap
+              value={contextWindow}
+              onChange={setContextWindow}
+              placeholder={t('settings.models.form.contextPlaceholder')}
+            />
+            <ONhap value={costIn} onChange={setCostIn} placeholder={t('settings.models.form.costInPlaceholder')} />
+            <ONhap value={costOut} onChange={setCostOut} placeholder={t('settings.models.form.costOutPlaceholder')} />
+          </div>
+          <label className="hang" style={{ gap: 6, fontSize: 14 }}>
+            <input type="checkbox" checked={hoTroTool} onChange={(event) => setHoTroTool(event.target.checked)} />
+            {t('settings.models.form.supportsTools')}
+          </label>
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--mau-chu-mo)' }}>
+            {t('settings.models.form.toolsNote')}
+          </p>
+          {/* Lỗi lưu phải nằm TRONG hộp thoại: hiện ở đầu mục thì bị lớp phủ che, người dùng
+              chỉ thấy nút Lưu không phản hồi. Hộp thoại cũng Ở LẠI khi lỗi để sửa và thử lại. */}
+          {loiLuu ? <ThongBao loai="loi">{loiLuu}</ThongBao> : null}
+        </div>
+      </HopThoai>
 
       {/* Không truyền `providerId`: người dùng chọn nhà cung cấp ngay trong hộp thoại, vì
           mục Model gom model của mọi nhà cung cấp. */}
