@@ -13,7 +13,13 @@ export const en_chat = {
   'chat.conversations': 'Conversations',
   'chat.newConversation': 'Start a new conversation',
   'chat.newConversationTitle': 'New conversation',
-  'chat.emptyList': 'No conversations yet. Press + to start one.',
+  // The conversation list now opens on demand, so it has its own open and close buttons.
+  'chat.listConversations': 'Conversation list',
+  'chat.closeList': 'Close list',
+  // This line must name the button that actually exists. It used to say "Press +", but the "+"
+  // button was replaced by "Start a new conversation" — pointing at something that is not there
+  // sends people looking for a control that does not exist.
+  'chat.emptyList': 'No conversations yet. Press "Start a new conversation" to begin.',
   'chat.listMeta': '{{phase}} · {{date}}',
   'chat.chooseConversation': 'Choose or start a conversation to begin.',
   'chat.emptyChat':

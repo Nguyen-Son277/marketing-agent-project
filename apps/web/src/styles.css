@@ -1226,3 +1226,67 @@ a {
   margin-top: 10px;
   font-size: 13px;
 }
+
+/* ------------------------------- trao đổi: thanh công cụ + danh sách phiên */
+/* Trước đây danh sách cuộc trao đổi là cột trái cố định 250px luôn hiện, làm khung chat hẹp
+   đi suốt trong khi phần lớn thời gian người dùng chỉ đọc một cuộc. Nay nó mở ra theo yêu cầu. */
+
+.chat__thanh {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  /* `flex: 0 0 auto`: thanh công cụ giữ nguyên chiều cao, không giành chỗ của khung tin nhắn.
+     Vì nó nằm TRONG luồng flex (không `position: absolute`) nên khung tin nhắn tự giảm đúng
+     mức, và bất biến "chỉ một vùng cuộn" vẫn giữ. */
+  flex: 0 0 auto;
+}
+
+.chat__than {
+  display: flex;
+  flex-direction: column;
+  /* `flex: 1` + `min-height: 0` là điều kiện để `.chat` bên trong được phép nhỏ hơn nội dung.
+     Thiếu `min-height: 0` thì khung chat cao theo số tin nhắn và đẩy khung nhập ra khỏi màn
+     hình — đúng lỗi đã sửa ở đợt trước, nên đây là dòng quan trọng nhất của khối này. */
+  flex: 1;
+  min-height: 0;
+  /* Neo cho bảng danh sách `position: absolute` bên dưới, để nó không tràn ra ngoài khung. */
+  position: relative;
+}
+
+.ds-phien {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  /* Có trần cả hai chiều: danh sách dài không được tràn khỏi khung chat, và trên màn hình hẹp
+     `92%` giữ nó nằm trong khung. */
+  width: min(320px, 92%);
+  max-height: 70%;
+  display: flex;
+  flex-direction: column;
+  background: var(--mau-be-mat);
+  border: 1px solid var(--mau-vien);
+  border-radius: var(--ban-kinh);
+  box-shadow: var(--bong-lon);
+  overflow: hidden;
+}
+
+.ds-phien__dau {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--mau-vien);
+}
+
+.ds-phien__danh-sach {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  overflow-y: auto;
+  min-height: 0;
+}

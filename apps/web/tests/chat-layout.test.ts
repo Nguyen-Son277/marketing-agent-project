@@ -223,11 +223,15 @@ describe('cấu trúc màn Trao đổi', () => {
     // Thẻ chat phải là `.card` và chứa `.chat`; thứ tự xuất hiện trong file chứng minh
     // điều đó vì JSX lồng nhau theo thứ tự.
     const cardIndex = traoDoi.indexOf('<div className="card"')
-    const chatIndex = traoDoi.indexOf('<div className="chat"')
+    const thanIndex = traoDoi.indexOf('className="chat__than"')
+    const chatIndex = traoDoi.indexOf('className="chat"')
     const khungIndex = traoDoi.indexOf('className="chat__khung"')
     const nhapIndex = traoDoi.indexOf('className="chat__nhap"')
     expect(cardIndex).toBeGreaterThan(-1)
-    expect(chatIndex).toBeGreaterThan(cardIndex)
+    // `.chat__than` là lớp bọc mới; nếu nó biến mất thì `min-height: 0` của nó cũng mất và
+    // khung chat sẽ cao theo nội dung, đẩy khung nhập ra ngoài màn hình.
+    expect(thanIndex).toBeGreaterThan(cardIndex)
+    expect(chatIndex).toBeGreaterThan(thanIndex)
     expect(khungIndex).toBeGreaterThan(chatIndex)
     expect(nhapIndex).toBeGreaterThan(khungIndex)
   })
@@ -257,5 +261,95 @@ describe('cấu trúc màn Trao đổi', () => {
     // Server điền brief bằng `answers` (tất định); `content` để lịch sử chat đọc được.
     expect(traoDoi).toMatch(/answers/)
     expect(traoDoi).toMatch(/api\.sendMessage/)
+  })
+})
+
+/**
+ * Bất biến của thanh công cụ và bảng danh sách cuộc trao đổi.
+ *
+ * Vì sao kiểm bằng cách đọc mã nguồn: đây là những yêu cầu về BỐ CỤC và về việc đóng/mở —
+ * `tsc` và `vite build` đều không nói gì nếu cột danh sách cũ quay lại, hay nếu bảng quên
+ * đóng khi bấm ra ngoài.
+ */
+describe('danh sách cuộc trao đổi mở theo yêu cầu', () => {
+  it('không còn cột danh sách cố định bên trái', () => {
+    // Bố cục cũ: `.card` đặt `flexDirection: 'row'` với một cột `flex: '0 0 250px'` luôn hiện.
+    expect(traoDoi).not.toContain("flex: '0 0 250px'")
+    expect(traoDoi).not.toMatch(/<div className="card" style=\{\{ flexDirection: 'row'/)
+  })
+
+  it('có hai nút: mở danh sách và tạo cuộc mới', () => {
+    expect(traoDoi).toMatch(/t\('chat\.listConversations'\)/)
+    expect(traoDoi).toMatch(/t\('chat\.newConversation'\)/)
+    // Cả hai nút phải nằm trong thanh công cụ.
+    const thanh = traoDoi.indexOf('className="chat__thanh"')
+    expect(thanh).toBeGreaterThan(-1)
+    expect(traoDoi.indexOf("t('chat.listConversations')")).toBeGreaterThan(thanh)
+    expect(traoDoi.indexOf("t('chat.newConversation')")).toBeGreaterThan(thanh)
+  })
+
+  it('bảng danh sách là lớp phủ, chỉ render khi mở', () => {
+    // Nếu render vô điều kiện thì nó luôn chiếm chỗ — đúng thứ cần bỏ.
+    expect(traoDoi).toMatch(/moDanhSach \? \(/)
+    expect(traoDoi).toMatch(/className="ds-phien"/)
+  })
+
+  it('đóng được bằng Esc và bằng bấm ra ngoài', () => {
+    // Gắn listener khi mở, và phải gỡ khi đóng để không rò rỉ theo mỗi lần mở.
+    expect(traoDoi).toMatch(/addEventListener\('keydown'/)
+    expect(traoDoi).toMatch(/addEventListener\('pointerdown'/)
+    expect(traoDoi).toMatch(/removeEventListener\('keydown'/)
+    expect(traoDoi).toMatch(/removeEventListener\('pointerdown'/)
+    expect(traoDoi).toMatch(/event\.key === 'Escape'/)
+  })
+
+  it('bấm ra ngoài không tính cú bấm trên nút mở', () => {
+    // Thiếu hai phép loại trừ này thì chính cú bấm mở bảng cũng bị coi là "bấm ra ngoài" và
+    // bảng đóng ngay sau khi mở.
+    expect(traoDoi).toMatch(/bangRef\.current\?\.contains/)
+    expect(traoDoi).toMatch(/nutDanhSachRef\.current\?\.contains/)
+  })
+
+  it('chọn một cuộc thì đóng bảng', () => {
+    const onChon = traoDoi.indexOf('setDangChon(cuoc.id)')
+    expect(onChon).toBeGreaterThan(-1)
+    // Ngay sau khi chọn phải đóng bảng; chọn xong mà để mở tiếp thì nó che khung chat.
+    expect(traoDoi.slice(onChon, onChon + 200)).toMatch(/setMoDanhSach\(false\)/)
+  })
+
+  it('CSS giữ được bất biến khung nhập nằm trong tầm nhìn', () => {
+    // Đây là dòng quan trọng nhất của khối CSS mới: thiếu `min-height: 0` ở lớp bọc thì `.chat`
+    // bên trong cao theo nội dung và khung nhập bị đẩy khỏi màn hình trở lại.
+    const than = declarations('.chat__than')
+    expect(than).toMatch(/flex:\s*1/)
+    expect(than).toMatch(/min-height:\s*0/)
+    expect(than).toMatch(/position:\s*relative/)
+    // Thanh công cụ không được giành chỗ của khung tin nhắn.
+    expect(declarations('.chat__thanh')).toMatch(/flex:\s*0\s+0\s+auto/)
+  })
+
+  it('bảng danh sách bị giới hạn trong khung chat', () => {
+    const bang = declarations('.ds-phien')
+    expect(bang).toMatch(/position:\s*absolute/)
+    // Có trần cả hai chiều, nếu không danh sách dài sẽ tràn khỏi khung.
+    expect(bang).toMatch(/max-height:/)
+    expect(bang).toMatch(/width:\s*min\(/)
+  })
+
+  it('câu chữ trạng thái rỗng nhắc đúng nút đang có', () => {
+    // Bất biến chống câu chữ lệch khỏi giao diện: câu cũ nói "Bấm +" trong khi nút "+" đã bị
+    // thay bằng nút "Tạo cuộc trao đổi mới" — hướng dẫn sai chỗ thì người dùng đi tìm một
+    // thứ không tồn tại.
+    const viChat = readFileSync(fileURLToPath(new URL('../../../packages/i18n/src/catalogs/vi/chat.ts', import.meta.url)), 'utf8')
+    const enChat = readFileSync(fileURLToPath(new URL('../../../packages/i18n/src/catalogs/en/chat.ts', import.meta.url)), 'utf8')
+    expect(viChat).toMatch(/'chat\.emptyList'/)
+    expect(enChat).toMatch(/'chat\.emptyList'/)
+    expect(viChat).not.toMatch(/'chat\.emptyList':[^\n]*Bấm \+/)
+    expect(enChat).not.toMatch(/'chat\.emptyList':[^\n]*Press \+/)
+    // Và hai khoá mới của thanh công cụ phải có ở cả hai ngôn ngữ.
+    for (const khoa of ['chat.listConversations', 'chat.closeList']) {
+      expect(viChat, `vi thiếu ${khoa}`).toMatch(new RegExp(`'${khoa.replace('.', '\\.')}'`))
+      expect(enChat, `en thiếu ${khoa}`).toMatch(new RegExp(`'${khoa.replace('.', '\\.')}'`))
+    }
   })
 })

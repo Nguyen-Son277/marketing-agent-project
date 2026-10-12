@@ -6,7 +6,7 @@
  * trong bản tự host. Các thành phần ở đây giữ đúng một trách nhiệm và không tự
  * quản lý trạng thái, nên màn hình nào cũng ghép được.
  */
-import type { ChangeEvent, ReactNode } from 'react'
+import type { ChangeEvent, ReactNode, RefObject } from 'react'
 import { useI18n } from '../lib/i18n.tsx'
 
 /**
@@ -78,6 +78,10 @@ export function Nut({
   rong = false,
   type = 'button',
   title,
+  diVa,
+  ariaExpanded,
+  ariaHasPopup,
+  ariaControls,
 }: {
   children: ReactNode
   onClick?: () => void
@@ -88,12 +92,35 @@ export function Nut({
   rong?: boolean
   type?: 'button' | 'submit'
   title?: string
+  /**
+   * Ref tới chính phần tử `<button>`.
+   *
+   * Vì sao cần: nút mở một vùng nổi (bảng, danh sách) phải tự loại trừ chính nó khi xử lý
+   * "bấm ra ngoài". Không có ref thì phải bọc nút trong một `div` chỉ để gắn ref, làm cây
+   * phần tử rối thêm mà không giải quyết gì.
+   */
+  diVa?: RefObject<HTMLButtonElement | null>
+  ariaExpanded?: boolean
+  ariaHasPopup?: boolean
+  ariaControls?: string
 }): ReactNode {
   const lop = ['btn', bien === 'phu' ? 'btn--phu' : bien === 'nguy-hiem' ? 'btn--nguy-hiem' : '', nho ? 'btn--nho' : '', rong ? 'btn--rong' : '']
     .filter(Boolean)
     .join(' ')
   return (
-    <button className={lop} onClick={onClick} disabled={disabled || dangTai} type={type} title={title}>
+    <button
+      ref={diVa}
+      className={lop}
+      onClick={onClick}
+      disabled={disabled || dangTai}
+      type={type}
+      title={title}
+      // Chỉ gắn thuộc tính aria khi nơi gọi thật sự truyền, để nút thường không mang thuộc
+      // tính thừa gây nhiễu trình đọc màn hình.
+      {...(ariaExpanded === undefined ? {} : { 'aria-expanded': ariaExpanded })}
+      {...(ariaHasPopup ? { 'aria-haspopup': true as const } : {})}
+      {...(ariaControls ? { 'aria-controls': ariaControls } : {})}
+    >
       {dangTai ? <span className="dang-tai" aria-hidden /> : null}
       {children}
     </button>

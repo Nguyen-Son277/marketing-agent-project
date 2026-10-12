@@ -15,7 +15,13 @@ export const vi_chat = {
   // Tiêu đề mặc định của cuộc mới nằm trong catalog vì nó được lưu xuống máy chủ:
   // nếu hard-code tiếng Việt thì cuộc tạo lúc dùng tiếng Anh vẫn mang tên tiếng Việt.
   'chat.newConversationTitle': 'Cuộc trao đổi mới',
-  'chat.emptyList': 'Chưa có cuộc trao đổi nào. Bấm + để bắt đầu.',
+  // Danh sách cuộc trao đổi giờ mở ra khi cần, nên có nút riêng để mở và nút để đóng.
+  'chat.listConversations': 'Danh sách cuộc trao đổi',
+  'chat.closeList': 'Đóng danh sách',
+  // Câu này phải nhắc ĐÚNG tên nút đang có trên màn hình. Trước đây nó nói "Bấm +" nhưng nút
+  // "+" đã bị thay bằng nút "Tạo cuộc trao đổi mới" — hướng dẫn sai chỗ thì người dùng đi tìm
+  // một thứ không tồn tại.
+  'chat.emptyList': 'Chưa có cuộc trao đổi nào. Bấm "Tạo cuộc trao đổi mới" để bắt đầu.',
   'chat.listMeta': '{{phase}} · {{date}}',
   'chat.chooseConversation': 'Chọn hoặc tạo một cuộc trao đổi để bắt đầu.',
   'chat.emptyChat':

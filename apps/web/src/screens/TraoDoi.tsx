@@ -121,6 +121,13 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   const { t, formatDateTime, formatCurrencyUsd } = useI18n()
   const [danhSach, setDanhSach] = useState<ConversationView[]>([])
   const [dangChon, setDangChon] = useState<string | null>(null)
+  /**
+   * Danh sách cuộc trao đổi mở ra theo yêu cầu, không chiếm chỗ thường trực.
+   *
+   * Trước đây nó là cột trái cố định 250px luôn hiện, làm khung chat hẹp đi suốt trong khi
+   * phần lớn thời gian người dùng chỉ đọc một cuộc.
+   */
+  const [moDanhSach, setMoDanhSach] = useState(false)
   const [chiTiet, setChiTiet] = useState<ConversationDetailResponse | null>(null)
   const [suKien, setSuKien] = useState<DongSuKien[]>([])
   const [noiDung, setNoiDung] = useState('')
@@ -142,6 +149,40 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   const cuonRef = useRef<HTMLDivElement>(null)
   const demSuKien = useRef(0)
   const oGanDayRef = useRef(true)
+  /** Vùng bảng danh sách và nút mở nó, để biết cú bấm nào là "bấm ra ngoài". */
+  const bangRef = useRef<HTMLDivElement>(null)
+  const nutDanhSachRef = useRef<HTMLButtonElement>(null)
+
+  /**
+   * Đóng bảng danh sách bằng `Esc` và bằng bấm ra ngoài.
+   *
+   * Vì sao nghe `pointerdown` chứ không phải `click`: nút mở cũng nằm ngoài bảng, nên với
+   * `click` thì chính cú bấm mở bảng sẽ bị hiểu là "bấm ra ngoài" và đóng lại ngay. Nghe ở
+   * pha nhấn xuống và bỏ qua cú bấm trên nút mở khử được vòng luẩn quẩn đó.
+   *
+   * Chỉ gắn listener khi bảng đang mở, và gỡ khi đóng hoặc khi component unmount.
+   */
+  useEffect(() => {
+    if (!moDanhSach) return
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setMoDanhSach(false)
+    }
+    const onPointerDown = (event: PointerEvent): void => {
+      const mucTieu = event.target as Node | null
+      if (!mucTieu) return
+      if (bangRef.current?.contains(mucTieu)) return
+      if (nutDanhSachRef.current?.contains(mucTieu)) return
+      setMoDanhSach(false)
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [moDanhSach])
 
   /** Tải danh sách cuộc trao đổi; chọn cuộc mới nhất nếu chưa chọn gì. */
   useEffect(() => {
@@ -510,39 +551,70 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
         `flex: 1` rồi truyền chiều cao xuống `.chat` → `.chat__khung` (vùng cuộn duy nhất)
         → `.chat__nhap` luôn nằm trong tầm nhìn.
       */}
-      <div className="card" style={{ flexDirection: 'row', gap: 16 }}>
-        {/* Danh sách cuộc trao đổi: cột trái, tự cuộn khi có nhiều cuộc. */}
-        <div className="cot" style={{ flex: '0 0 250px', minWidth: 0, minHeight: 0, gap: 8 }}>
-          <div className="hang" style={{ justifyContent: 'space-between' }}>
-            <div style={{ fontWeight: 650 }}>{t('chat.conversations')}</div>
-            <Nut nho bien="phu" onClick={() => void taoCuocMoi()} title={t('chat.newConversation')}>
-              +
-            </Nut>
-          </div>
-          <div className="cot" style={{ flex: 1, minHeight: 0, overflowY: 'auto', gap: 4 }}>
-            {danhSach.length === 0 ? (
-              <p style={{ color: 'var(--mau-chu-mo)', fontSize: 14, margin: 0 }}>{t('chat.emptyList')}</p>
-            ) : (
-              danhSach.map((cuoc) => (
-                <button
-                  key={cuoc.id}
-                  type="button"
-                  className={cuoc.id === dangChon ? 'app__nav-item app__nav-item--active' : 'app__nav-item'}
-                  onClick={() => setDangChon(cuoc.id)}
-                  style={{ display: 'block' }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{cuoc.title}</div>
-                  <div style={{ fontSize: 11, opacity: 0.8 }}>
-                    {t('chat.listMeta', {
-                      phase: t(KHOA_GIAI_DOAN[cuoc.phase]),
-                      date: formatDateTime(cuoc.updatedAt),
-                    })}
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
+      <div className="card">
+        {/*
+          Thanh công cụ nằm TRONG luồng flex (không nổi) nên chiều cao khung tin nhắn tự giảm
+          đúng mức, và bất biến "chỉ một vùng cuộn" vẫn giữ.
+        */}
+        <div className="chat__thanh">
+          <Nut
+            nho
+            bien="phu"
+            diVa={nutDanhSachRef}
+            ariaExpanded={moDanhSach}
+            ariaHasPopup
+            ariaControls="ds-phien"
+            onClick={() => setMoDanhSach((truoc) => !truoc)}
+          >
+            {t('chat.listConversations')}
+          </Nut>
+          <Nut nho onClick={() => void taoCuocMoi()}>
+            {t('chat.newConversation')}
+          </Nut>
         </div>
+
+        <div className="chat__than">
+          {/*
+            Bảng danh sách là lớp phủ neo vào vùng chat, chỉ render khi đang mở. Đặt trong
+            `.chat__than` (đã `position: relative`) nên nó không tràn ra ngoài khung chat.
+          */}
+          {moDanhSach ? (
+            <div className="ds-phien" id="ds-phien" ref={bangRef} role="group" aria-label={t('chat.listConversations')}>
+              <div className="ds-phien__dau">
+                <div style={{ fontWeight: 650 }}>{t('chat.conversations')}</div>
+                <Nut nho bien="phu" onClick={() => setMoDanhSach(false)} title={t('chat.closeList')}>
+                  {t('common.close')}
+                </Nut>
+              </div>
+              <div className="ds-phien__danh-sach">
+                {danhSach.length === 0 ? (
+                  <p style={{ color: 'var(--mau-chu-mo)', fontSize: 14, margin: 0 }}>{t('chat.emptyList')}</p>
+                ) : (
+                  danhSach.map((cuoc) => (
+                    <button
+                      key={cuoc.id}
+                      type="button"
+                      className={cuoc.id === dangChon ? 'app__nav-item app__nav-item--active' : 'app__nav-item'}
+                      // Chọn xong thì đóng bảng: mục đích đã đạt, để mở tiếp chỉ che khung chat.
+                      onClick={() => {
+                        setDangChon(cuoc.id)
+                        setMoDanhSach(false)
+                      }}
+                      style={{ display: 'block' }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{cuoc.title}</div>
+                      <div style={{ fontSize: 11, opacity: 0.8 }}>
+                        {t('chat.listMeta', {
+                          phase: t(KHOA_GIAI_DOAN[cuoc.phase]),
+                          date: formatDateTime(cuoc.updatedAt),
+                        })}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : null}
 
         {chiTiet ? (
           <div className="chat" style={{ minWidth: 0 }}>
@@ -611,6 +683,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
             {t('chat.chooseConversation')}
           </div>
         )}
+        </div>
       </div>
     </Trang>
   )
