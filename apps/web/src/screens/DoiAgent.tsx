@@ -14,6 +14,10 @@ import { KB_CATEGORIES, MODEL_TIERS } from '@marketing-agent/shared'
 import { api, ApiError } from '../lib/api.ts'
 import { useI18n } from '../lib/i18n.tsx'
 import {
+  HopThoaiCauHinhNhanhModel,
+  type KetQuaCauHinhNhanh,
+} from '../components/HopThoaiCauHinhNhanhModel.tsx'
+import {
   Card,
   DangTai,
   Nhan,
@@ -135,6 +139,10 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
   const [loiLuu, setLoiLuu] = useState<Record<string, string>>({})
   /** Model đang chọn trong ô "thêm model dự phòng" của từng agent. */
   const [chonFallback, setChonFallback] = useState<Record<string, string>>({})
+  /** Hộp thoại "Cấu hình nhanh model" — gán model cho nhiều agent trong một lần. */
+  const [moNhanh, setMoNhanh] = useState(false)
+  /** Kết quả lần lưu nhanh gần nhất, hiện ở đầu trang. */
+  const [ketQuaNhanh, setKetQuaNhanh] = useState<KetQuaCauHinhNhanh | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -303,6 +311,38 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
   return (
     <Trang rong>
       <TieuDeTrang moTa={t('team.subtitle')}>{t('nav.team')}</TieuDeTrang>
+
+      <div className="hang" style={{ marginBottom: 12 }}>
+        <Nut
+          onClick={() => {
+            setKetQuaNhanh(null)
+            setMoNhanh(true)
+          }}
+          disabled={duLieu.models.length === 0}
+          title={duLieu.models.length === 0 ? t('team.quickNoModels') : undefined}
+        >
+          {t('team.quickOpen')}
+        </Nut>
+      </div>
+
+      {ketQuaNhanh && ketQuaNhanh.roleLoi.length > 0 ? (
+        <div style={{ marginBottom: 12 }}>
+          <ThongBao loai="loi">
+            {t('team.quickSaveFailed', {
+              roles: ketQuaNhanh.roleLoi
+                .map((role) => duLieu.members.find((member) => member.role === role)?.displayName ?? role)
+                .join(', '),
+            })}
+          </ThongBao>
+        </div>
+      ) : null}
+      {ketQuaNhanh && ketQuaNhanh.roleLoi.length === 0 && ketQuaNhanh.daCapNhat > 0 ? (
+        <div style={{ marginBottom: 12 }}>
+          <ThongBao loai="thanh-cong">
+            {t('team.quickSaved', { n: formatNumber(ketQuaNhanh.daCapNhat) })}
+          </ThongBao>
+        </div>
+      ) : null}
 
       <div className="luoi luoi--3" style={{ marginBottom: 16 }}>
         <OSo
@@ -634,6 +674,20 @@ export function DoiAgent({ companyId }: { companyId: string }): ReactNode {
           </Card>
         )
       })}
+
+      <HopThoaiCauHinhNhanhModel
+        mo={moNhanh}
+        companyId={companyId}
+        members={duLieu.members}
+        models={duLieu.models}
+        onDong={() => setMoNhanh(false)}
+        onKetThuc={(ketQua) => {
+          setMoNhanh(false)
+          setKetQuaNhanh(ketQua)
+          // Tải lại để bảng phản ánh đúng trạng thái server, kể cả khi một phần lưu lỗi.
+          taiLai()
+        }}
+      />
     </Trang>
   )
 }

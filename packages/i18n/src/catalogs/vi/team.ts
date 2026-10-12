@@ -81,6 +81,35 @@ export const vi_team = {
   'team.fallbackMax': 'Tối đa 5 model dự phòng.',
   'team.noPrimaryModel':
     'Agent này chưa được chọn model chính; lượt chạy sẽ báo cần cấu hình cho tới khi bạn chọn trong Cài đặt.',
+
+  /* ------------------------------------------- cấu hình nhanh model */
+  'team.quickOpen': 'Cấu hình nhanh model',
+  'team.quickTitle': 'Cấu hình nhanh model cho cả đội',
+  'team.quickHint':
+    'Chỉ đổi model chính và model dự phòng. Kỹ năng, tool, quyền kiến thức và trạng thái bật/tắt của từng agent giữ nguyên.',
+  'team.quickAllLabel': 'Gán một model chính cho tất cả',
+  'team.quickApplyAll': 'Áp dụng tất cả',
+  'team.quickTierLabel': 'Gán model chính theo tier',
+  'team.quickApplyTier': 'Gán theo tier',
+  'team.quickTierKeep': '— Giữ nguyên tier {{tier}} —',
+  'team.quickTierHint':
+    'Để trống một tier nghĩa là KHÔNG đổi các agent thuộc tier đó, không phải xoá model của họ.',
+  'team.quickFallbackLabel': 'Thêm model dự phòng cho tất cả',
+  'team.quickApplyFallback': 'Thêm vào dự phòng',
+  'team.quickFallbackHint':
+    'Model được thêm vào CUỐI danh sách dự phòng hiện có của mọi agent; bỏ qua agent đã có model đó hoặc đã đủ 5.',
+  'team.quickFallbackCount': '{{n}}/{{max}}',
+  'team.quickPickPlaceholder': '— Chọn model —',
+  'team.quickColAgent': 'Agent',
+  'team.quickColTier': 'Tier',
+  'team.quickColModel': 'Model chính',
+  'team.quickColFallback': 'Dự phòng',
+  'team.quickNoModels': 'Công ty chưa có model nào. Vào Cài đặt → Model để thêm model trước.',
+  'team.quickChanged': '{{n}} agent sẽ được cập nhật',
+  'team.quickUnchanged': 'Chưa có thay đổi',
+  'team.quickSave': 'Lưu thay đổi',
+  'team.quickSaved': 'Đã cập nhật model cho {{n}} agent.',
+  'team.quickSaveFailed': 'Không lưu được cho: {{roles}}. Hãy kiểm tra lại và thử lưu từng agent.',
   'team.toolNote':
     'Các tool ghi ra kênh ngoài (đăng bài, gửi email, chạy quảng cáo) đều đánh dấu “cần duyệt”: agent chỉ tạo bản nháp, con người duyệt ở màn “Công việc” rồi mới thực thi.',
 

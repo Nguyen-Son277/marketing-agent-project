@@ -73,6 +73,34 @@ export const en_team = {
   'team.fallbackMax': 'At most 5 fallback models.',
   'team.noPrimaryModel':
     'This agent has no primary model yet; runs will report a configuration error until you pick one in Settings.',
+
+  /* ------------------------------------------------ quick model setup */
+  'team.quickOpen': 'Quick model setup',
+  'team.quickTitle': 'Quick model setup for the whole team',
+  'team.quickHint':
+    'Only the primary and fallback models change. Each agent keeps its skills, tools, knowledge permissions and enabled state.',
+  'team.quickAllLabel': 'Assign one primary model to every agent',
+  'team.quickApplyAll': 'Apply to all',
+  'team.quickTierLabel': 'Assign a primary model per tier',
+  'team.quickApplyTier': 'Assign by tier',
+  'team.quickTierKeep': '— Keep tier {{tier}} as is —',
+  'team.quickTierHint': 'Leaving a tier empty means those agents are NOT changed, not that their model is cleared.',
+  'team.quickFallbackLabel': 'Add a fallback model to every agent',
+  'team.quickApplyFallback': 'Add as fallback',
+  'team.quickFallbackHint':
+    'The model is appended to the END of each agent’s existing fallback list; agents that already have it or already have 5 are skipped.',
+  'team.quickFallbackCount': '{{n}}/{{max}}',
+  'team.quickPickPlaceholder': '— Pick a model —',
+  'team.quickColAgent': 'Agent',
+  'team.quickColTier': 'Tier',
+  'team.quickColModel': 'Primary model',
+  'team.quickColFallback': 'Fallback',
+  'team.quickNoModels': 'This company has no models yet. Add one in Settings → Models first.',
+  'team.quickChanged': '{{n}} agents will be updated',
+  'team.quickUnchanged': 'No changes yet',
+  'team.quickSave': 'Save changes',
+  'team.quickSaved': 'Updated models for {{n}} agents.',
+  'team.quickSaveFailed': 'Could not save for: {{roles}}. Please check and retry those agents individually.',
   'team.toolNote':
     'Tools that write to external channels (publishing posts, sending email, running ads) are all marked “needs approval”: the agent only drafts, a human approves on the “Tasks” screen, and only then does it execute.',
 
