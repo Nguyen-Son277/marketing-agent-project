@@ -82,6 +82,8 @@ export function Nut({
   ariaExpanded,
   ariaHasPopup,
   ariaControls,
+  ariaLabel,
+  className,
 }: {
   children: ReactNode
   onClick?: () => void
@@ -103,8 +105,10 @@ export function Nut({
   ariaExpanded?: boolean
   ariaHasPopup?: boolean
   ariaControls?: string
+  ariaLabel?: string
+  className?: string
 }): ReactNode {
-  const lop = ['btn', bien === 'phu' ? 'btn--phu' : bien === 'nguy-hiem' ? 'btn--nguy-hiem' : '', nho ? 'btn--nho' : '', rong ? 'btn--rong' : '']
+  const lop = ['btn', bien === 'phu' ? 'btn--phu' : bien === 'nguy-hiem' ? 'btn--nguy-hiem' : '', nho ? 'btn--nho' : '', rong ? 'btn--rong' : '', className ?? '']
     .filter(Boolean)
     .join(' ')
   return (
@@ -117,6 +121,7 @@ export function Nut({
       title={title}
       // Chỉ gắn thuộc tính aria khi nơi gọi thật sự truyền, để nút thường không mang thuộc
       // tính thừa gây nhiễu trình đọc màn hình.
+      {...(ariaLabel === undefined ? {} : { 'aria-label': ariaLabel })}
       {...(ariaExpanded === undefined ? {} : { 'aria-expanded': ariaExpanded })}
       {...(ariaHasPopup ? { 'aria-haspopup': true as const } : {})}
       {...(ariaControls ? { 'aria-controls': ariaControls } : {})}

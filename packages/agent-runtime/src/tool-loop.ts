@@ -50,6 +50,8 @@ const RETRY_ATTEMPTS = 3
  */
 const MAX_MODEL_ATTEMPTS = 4
 
+class StepLimitError extends Error {}
+
 const ZERO_USAGE: LlmUsage = { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }
 
 interface ModelTurn {
@@ -82,8 +84,11 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
   let modelId: string | null = choice.model.id
   // Một model có thể có nhiều API key. Thử lần lượt từng khoá trước khi bỏ model, vì
   // đổi model là thay đổi lớn hơn nhiều so với đổi khoá của cùng một nhà cung cấp.
-  let adapters = pickAdapters(deps, choice.model)
+  const dynamicKeys = !deps.adapter && deps.adapters.selectAdapterFor !== undefined
+  let adapters = dynamicKeys ? [] : pickAdapters(deps, choice.model)
   let keyIndex = 0
+  let preferredKeyId: string | null = null
+  const failedKeysByModel = new Map<string, Set<string>>()
   const triedModels = new Set<string>([choice.model.id])
 
   const meter = deps.meterFactory({
@@ -109,7 +114,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
   let modelAttempts = 0
 
   try {
-    for (let step = 1; step <= maxSteps; step += 1) {
+    for (let step = 1; dynamicKeys ? steps < maxSteps : step <= maxSteps; step += 1) {
       if (input.signal?.aborted) {
         stopReason = 'cancelled'
         errorMessage = 'Lượt chạy đã bị huỷ theo yêu cầu'
@@ -142,19 +147,69 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
 
       // `steps` đếm số lần gọi model thật, không phải số vòng lặp, để bản ghi chi phí
       // không tính cả những vòng bị chặn bởi ngân sách trước khi gọi.
-      steps += 1
       let turn: ModelTurn
+      let selected: ReturnType<NonNullable<AgentRuntimeDeps['adapters']['selectAdapterFor']>>
       try {
-        const adapter = deps.adapter ?? adapters[keyIndex] ?? adapters[0]
-        if (!adapter) throw new Error('Không có adapter nào cho model đã chọn')
-        turn = await withRetry(() => collectTurn(adapter, request, input.signal), {
-          attempts: RETRY_ATTEMPTS,
-          isRetryable: isRetryableProviderError,
-        })
+        if (dynamicKeys) {
+          turn = await withRetry(async () => {
+            if (input.signal?.aborted) throw abortError()
+            if (steps >= maxSteps) throw new StepLimitError()
+            if (input.budget) meter.checkBudget(agent.companyId, input.budget)
+            selected = undefined
+            selected = deps.adapters.selectAdapterFor!(choice.model, {
+              preferredKeyId,
+              excludeKeyIds: [...(failedKeysByModel.get(choice.model.id) ?? [])],
+            })
+            if (!selected) throw new Error('Không còn khoá API khả dụng cho model')
+            preferredKeyId = selected.keyId
+            steps += 1
+            return collectTurn(selected.adapter, request, input.signal)
+          }, {
+            attempts: RETRY_ATTEMPTS,
+            // Rotation skips a broken key immediately; failover retains retry/backoff.
+            isRetryable: (error) =>
+              !(error instanceof StepLimitError) && (selected?.mode === 'failover' || selected?.keyId === null) && isRetryableProviderError(error),
+          })
+        } else {
+          steps += 1
+          const adapter = deps.adapter ?? adapters[keyIndex] ?? adapters[0]
+          if (!adapter) throw new Error('Không có adapter nào cho model đã chọn')
+          turn = await withRetry(() => collectTurn(adapter, request, input.signal), {
+            attempts: RETRY_ATTEMPTS,
+            isRetryable: isRetryableProviderError,
+          })
+        }
       } catch (thrown) {
+        if (thrown instanceof StepLimitError) {
+          stopReason = 'max_steps'
+          errorMessage = `Đã đạt giới hạn ${maxSteps} lượt gọi model`
+          break
+        }
+        if (isAppError(thrown) && thrown.code === 'budget_exceeded') throw thrown
         if (input.signal?.aborted || isAbortError(thrown)) {
           stopReason = 'cancelled'
           errorMessage = 'Lượt chạy đã bị huỷ theo yêu cầu'
+          break
+        }
+
+        if (dynamicKeys && selected?.keyId) {
+          const failed = failedKeysByModel.get(choice.model.id) ?? new Set<string>()
+          failed.add(selected.keyId)
+          failedKeysByModel.set(choice.model.id, failed)
+          deps.adapters.skipFailedKey?.(choice.model, selected.keyId, selected.blockId)
+          input.context.log('Khoá API lỗi; thử khoá kế tiếp', { model: choice.model.modelId, keyId: selected.keyId })
+          preferredKeyId = null
+          // Next iteration selects a new key without reserving a speculative request.
+          if (steps >= maxSteps) {
+            stopReason = 'max_steps'
+            errorMessage = `Đã đạt giới hạn ${maxSteps} lượt gọi model`
+            break
+          }
+          continue
+        }
+        if (dynamicKeys && steps >= maxSteps) {
+          stopReason = 'max_steps'
+          errorMessage = `Đã đạt giới hạn ${maxSteps} lượt gọi model`
           break
         }
 
@@ -182,8 +237,9 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
             triedModels.add(next.model.id)
             choice = next
             modelId = choice.model.id
-            adapters = pickAdapters(deps, choice.model)
+            adapters = dynamicKeys ? [] : pickAdapters(deps, choice.model)
             keyIndex = 0
+            preferredKeyId = null
             input.context.log('Model lỗi; chuyển model dự phòng', {
               from: previous.modelId,
               to: choice.model.modelId,
@@ -233,7 +289,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
         conversation.push({ role: 'tool', toolCallId: outcome.callId, name: outcome.name, content: outcome.content })
       }
 
-      if (step === maxSteps) {
+      if (dynamicKeys ? steps >= maxSteps : step === maxSteps) {
         stopReason = 'max_steps'
         errorMessage = `Agent vẫn yêu cầu gọi công cụ sau ${maxSteps} bước; dừng để tránh lặp vô hạn`
       }

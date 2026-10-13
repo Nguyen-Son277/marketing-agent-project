@@ -49,6 +49,11 @@ const NHAN_PROVIDER: Readonly<Record<ProviderKind, string>> = {
   anthropic: 'Anthropic',
 }
 
+const NHAN_KEY_USAGE_MODE: Readonly<Record<ProviderView['keyUsageMode'], MessageKey>> = {
+  failover: 'settings.providers.keyUsageMode.failover',
+  round_robin: 'settings.providers.keyUsageMode.roundRobin',
+}
+
 /**
  * Nhãn kênh là KHOÁ DỊCH (trừ tên riêng giữ nguyên ở cả hai ngôn ngữ).
  *
@@ -133,6 +138,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
   const [suaId, setSuaId] = useState<string | null>(null)
   const [ten, setTen] = useState('')
   const [kind, setKind] = useState<ProviderKind>('openai_compatible')
+  const [keyUsageMode, setKeyUsageMode] = useState<ProviderView['keyUsageMode']>('failover')
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [apiKeyLabel, setApiKeyLabel] = useState('')
@@ -188,6 +194,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     setSuaId(provider.id)
     setTen(provider.name)
     setKind(provider.kind)
+    setKeyUsageMode(provider.keyUsageMode)
     setBaseUrl(provider.baseUrl)
     setApiKey('')
     setApiKeyLabel('')
@@ -210,6 +217,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     setSuaId(null)
     setTen('')
     setKind('openai_compatible')
+    setKeyUsageMode('failover')
     setBaseUrl('')
     setApiKey('')
     setApiKeyLabel('')
@@ -265,6 +273,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
         await api.updateProvider(companyId, suaId, {
           name: ten.trim(),
           kind,
+          keyUsageMode,
           baseUrl: baseUrl.trim(),
           enabled: bat,
         })
@@ -273,6 +282,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
         await api.createProvider(companyId, {
           name: ten.trim(),
           kind,
+          keyUsageMode,
           baseUrl: baseUrl.trim(),
           enabled: bat,
           ...(apiKey.length > 0
@@ -491,6 +501,26 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
               </>
             ) : null}
           </div>
+          <label className="truong">
+            <span className="nhan">{t('settings.providers.keyUsageMode.label')}</span>
+            <OChon
+              value={keyUsageMode}
+              onChange={(giaTri) => {
+                if (giaTri === 'failover' || giaTri === 'round_robin') setKeyUsageMode(giaTri)
+              }}
+              options={[
+                { value: 'failover', label: t(NHAN_KEY_USAGE_MODE.failover) },
+                { value: 'round_robin', label: t(NHAN_KEY_USAGE_MODE.round_robin) },
+              ]}
+              disabled={dangLuu}
+            />
+          </label>
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--mau-chu-mo)' }}>
+            {t('settings.providers.keyUsageMode.hint')}
+          </p>
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--mau-chu-mo)' }}>
+            {t('settings.providers.keyUsageMode.rateLimitNote')}
+          </p>
           <label className="hang" style={{ gap: 6, fontSize: 14 }}>
             <input type="checkbox" checked={bat} onChange={(event) => setBat(event.target.checked)} />
             {t('settings.providers.form.enable')}
@@ -654,6 +684,12 @@ function PhanKhoaProvider({
     <div className="card" style={{ marginTop: 14 }}>
       <h3 className="card__tieu-de">{t('settings.providers.keys.title', { count: formatNumber(provider.keys.length) })}</h3>
       <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.providers.keys.hint')}</p>
+      <p style={{ fontSize: 12 }}>
+        <strong>{t('settings.providers.keyUsageMode.label')}: </strong>
+        {t(NHAN_KEY_USAGE_MODE[provider.keyUsageMode])}
+      </p>
+      <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.providers.keyUsageMode.hint')}</p>
+      <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.providers.keyUsageMode.rateLimitNote')}</p>
 
       {thongBao ? (
         <div style={{ marginBottom: 8 }}>

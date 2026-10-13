@@ -36,6 +36,7 @@ export const createCompanySchema = z.object({
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>
 
 export const providerKindSchema = z.enum(PROVIDER_KINDS)
+export const providerKeyUsageModeSchema = z.enum(['failover', 'round_robin'])
 export const modelTierSchema = z.enum(MODEL_TIERS)
 export const agentRoleSchema = z.enum(AGENT_ROLES)
 export const companyRoleSchema = z.enum(COMPANY_ROLES)
@@ -47,6 +48,7 @@ export const createProviderSchema = z.object({
   name: z.string().trim().min(1).max(80),
   kind: providerKindSchema.default('openai_compatible'),
   baseUrl: z.string().trim().url('URL không hợp lệ'),
+  keyUsageMode: providerKeyUsageModeSchema.default('failover'),
   /**
    * Khoá đầu tiên, tuỳ chọn. Plaintext chỉ nhận một lần khi ghi rồi mã hoá ngay.
    * Thêm khoá tiếp theo bằng endpoint `/providers/:id/keys`.
@@ -66,6 +68,7 @@ export const updateProviderSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   kind: providerKindSchema.optional(),
   baseUrl: z.string().trim().url('URL không hợp lệ').optional(),
+  keyUsageMode: providerKeyUsageModeSchema.optional(),
   extraJson: z.record(z.unknown()).optional(),
   enabled: z.boolean().optional(),
 })

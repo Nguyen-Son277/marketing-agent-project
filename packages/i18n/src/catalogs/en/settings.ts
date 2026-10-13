@@ -20,7 +20,7 @@ export const en_settings = {
   /* -------------------------------------------------------- providers */
   'settings.providers.title': 'Model providers',
   'settings.providers.subtitle':
-    'Each URL is one provider and can have several API keys: when one fails the next is used automatically. Keys are write-only, encrypted by the server and never returned in their original form.',
+    'Each URL is one provider and can have several API keys, used in failover or round-robin mode. Keys are write-only, encrypted by the server and never returned in their original form.',
   'settings.providers.empty':
     'No providers yet. Add an OpenAI-compatible provider so agents can call models.',
   'settings.providers.table.name': 'Name',
@@ -35,6 +35,13 @@ export const en_settings = {
   'settings.providers.keyMissing': 'No key',
   'settings.providers.enabled': 'Enabled',
   'settings.providers.disabled': 'Disabled',
+  'settings.providers.keyUsageMode.label': 'Key usage mode',
+  'settings.providers.keyUsageMode.failover': 'Failover',
+  'settings.providers.keyUsageMode.roundRobin': 'Round robin',
+  'settings.providers.keyUsageMode.hint':
+    'Failover: prefer the first available key and switch on failure. Round robin: switch to the next key after every 3 model calls; this call count is fixed and cannot be changed.',
+  'settings.providers.keyUsageMode.rateLimitNote':
+    'The provider may share rate limits across an account or project. Rotating keys does not guarantee avoiding requests-per-minute (RPM) limits.',
   'settings.providers.test': 'Test',
   'settings.providers.testResult': '{{message}} · {{ms}} ms',
   'settings.providers.testModelsSeen': '· saw {{count}} models',
@@ -65,7 +72,7 @@ export const en_settings = {
   /* --------------------------------------------------------- api key */
   'settings.providers.keys.title': 'API keys ({{count}})',
   'settings.providers.keys.hint':
-    'One URL can hold several keys. They are tried in order; when a key fails the next one is used automatically.',
+    'One URL can hold several keys. The provider key usage mode determines failover or round-robin selection; key order determines the selection order.',
   'settings.providers.keys.empty': 'No keys yet. An internal gateway may not need one.',
   'settings.providers.keys.label': 'Label',
   'settings.providers.keys.priority': 'Order',

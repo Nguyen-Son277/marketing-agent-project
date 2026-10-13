@@ -161,6 +161,7 @@ export interface CreateProviderBody {
   /** Khoá đầu tiên, tuỳ chọn. Chỉ gửi khi tạo; server không bao giờ trả lại giá trị này. */
   readonly apiKey?: string
   readonly apiKeyLabel?: string
+  readonly keyUsageMode?: 'failover' | 'round_robin'
   readonly extra?: Record<string, unknown>
   readonly enabled?: boolean
 }
@@ -170,6 +171,7 @@ export interface UpdateProviderBody {
   readonly name?: string
   readonly kind?: ProviderKind
   readonly baseUrl?: string
+  readonly keyUsageMode?: 'failover' | 'round_robin'
   readonly extra?: Record<string, unknown>
   readonly enabled?: boolean
 }
@@ -491,6 +493,7 @@ export interface ProviderView {
   readonly name: string
   readonly kind: ProviderKind
   readonly baseUrl: string
+  readonly keyUsageMode: 'failover' | 'round_robin'
   readonly enabled: boolean
   readonly isGlobal: boolean
   readonly apiKeyConfigured: boolean

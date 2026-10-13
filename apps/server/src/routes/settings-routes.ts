@@ -121,6 +121,7 @@ export function settingsRoutes() {
               name: input.name,
               kind: input.kind ?? 'openai_compatible',
               baseUrl: input.baseUrl,
+              keyUsageMode: input.keyUsageMode,
               ...(input.extraJson ? { extra: input.extraJson } : {}),
               enabled: input.enabled,
             })
@@ -151,6 +152,7 @@ export function settingsRoutes() {
             ...(input.name === undefined ? {} : { name: input.name }),
             ...(input.kind === undefined ? {} : { kind: input.kind }),
             ...(input.baseUrl === undefined ? {} : { baseUrl: input.baseUrl }),
+            ...(input.keyUsageMode === undefined ? {} : { keyUsageMode: input.keyUsageMode }),
             ...(input.extraJson === undefined ? {} : { extra: input.extraJson }),
             ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
           })

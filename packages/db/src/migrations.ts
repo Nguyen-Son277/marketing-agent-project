@@ -541,4 +541,17 @@ INSERT OR IGNORE INTO agent_preset_tools(preset_id,company_id,tool_name)
  SELECT p.id,p.company_id,'employee_task_draft' FROM agent_presets p JOIN agent_defs d ON d.id=p.agent_def_id WHERE d.role IN ('marketing-leader','design-video');
 `,
   },
+  {
+    id: '0011_provider_key_rotation',
+    sql: `
+ALTER TABLE llm_providers ADD COLUMN key_usage_mode TEXT NOT NULL DEFAULT 'failover'
+  CHECK (key_usage_mode IN ('failover', 'round_robin'));
+CREATE TABLE llm_provider_key_rotation (
+  provider_id TEXT PRIMARY KEY REFERENCES llm_providers(id) ON DELETE CASCADE,
+  key_id TEXT REFERENCES llm_provider_keys(id) ON DELETE SET NULL,
+  calls_used INTEGER NOT NULL DEFAULT 0 CHECK (calls_used BETWEEN 0 AND 3),
+  block_id TEXT NOT NULL
+);
+`,
+  },
 ]

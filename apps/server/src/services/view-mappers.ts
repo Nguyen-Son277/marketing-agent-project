@@ -439,6 +439,7 @@ export function toProviderView(
     name: provider.name,
     kind: provider.kind,
     baseUrl: provider.baseUrl,
+    keyUsageMode: provider.keyUsageMode,
     enabled: provider.enabled,
     isGlobal: provider.companyId === null,
     apiKeyConfigured: keyViews.length > 0,

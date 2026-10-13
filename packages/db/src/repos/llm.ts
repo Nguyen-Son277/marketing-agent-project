@@ -12,6 +12,7 @@ import {
   type ModelRouteRecord,
   type ModelTier,
   type ProviderKind,
+  type ProviderKeyUsageMode,
 } from '@marketing-agent/shared'
 import type { Database } from '../database.ts'
 import type { SecretBox } from '../crypto.ts'
@@ -23,6 +24,7 @@ interface ProviderRow {
   name: string
   kind: ProviderKind
   base_url: string
+  key_usage_mode: ProviderKeyUsageMode
   extra_json: string | null
   enabled: number
   created_at: string
@@ -79,6 +81,7 @@ const toProvider = (row: ProviderRow): LlmProviderRecord => ({
   name: row.name,
   kind: row.kind,
   baseUrl: row.base_url,
+  keyUsageMode: row.key_usage_mode,
   extraJson: row.extra_json,
   enabled: row.enabled === 1,
   createdAt: row.created_at,
@@ -140,19 +143,21 @@ export class LlmRepo {
     name: string
     kind: ProviderKind
     baseUrl: string
+    keyUsageMode?: ProviderKeyUsageMode
     extra?: Record<string, unknown>
     enabled?: boolean
   }): LlmProviderRecord {
     const id = newId()
     this.db.run(
-      `INSERT INTO llm_providers (id, company_id, name, kind, base_url, extra_json, enabled, created_at)
-       VALUES (@id, @companyId, @name, @kind, @baseUrl, @extra, @enabled, @createdAt)`,
+      `INSERT INTO llm_providers (id, company_id, name, kind, base_url, key_usage_mode, extra_json, enabled, created_at)
+       VALUES (@id, @companyId, @name, @kind, @baseUrl, @mode, @extra, @enabled, @createdAt)`,
       {
         id,
         companyId: input.companyId,
         name: input.name,
         kind: input.kind,
         baseUrl: input.baseUrl.replace(/\/+$/, ''),
+        mode: input.keyUsageMode ?? 'failover',
         extra: input.extra ? JSON.stringify(input.extra) : null,
         enabled: (input.enabled ?? true) ? 1 : 0,
         createdAt: nowIso(),
@@ -167,6 +172,7 @@ export class LlmRepo {
       name?: string
       kind?: ProviderKind
       baseUrl?: string
+      keyUsageMode?: ProviderKeyUsageMode
       extra?: Record<string, unknown>
       enabled?: boolean
     },
@@ -184,6 +190,11 @@ export class LlmRepo {
     if (patch.baseUrl !== undefined) {
       sets.push('base_url = @baseUrl')
       params.baseUrl = patch.baseUrl.replace(/\/+$/, '')
+    }
+    if (patch.keyUsageMode !== undefined) {
+      sets.push('key_usage_mode = @mode')
+      params.mode = patch.keyUsageMode
+      if (patch.keyUsageMode !== this.requireProvider(id).keyUsageMode) this.resetKeyRotation(id)
     }
     if (patch.extra !== undefined) {
       sets.push('extra_json = @extra')
@@ -258,6 +269,7 @@ export class LlmRepo {
         createdAt: nowIso(),
       },
     )
+    this.resetKeyRotation(input.providerId)
     return this.requireProviderKey(id)
   }
 
@@ -289,11 +301,15 @@ export class LlmRepo {
     if (sets.length > 0) {
       this.db.run(`UPDATE llm_provider_keys SET ${sets.join(', ')} WHERE id = @id`, params)
     }
-    return this.requireProviderKey(id)
+    const updated = this.requireProviderKey(id)
+    this.resetKeyRotation(updated.providerId)
+    return updated
   }
 
   deleteProviderKey(id: string): void {
+    const key = this.requireProviderKey(id)
     this.db.run('DELETE FROM llm_provider_keys WHERE id = ?', [id])
+    this.resetKeyRotation(key.providerId)
   }
 
   findProviderKey(id: string): LlmProviderKeyRecord | undefined {
@@ -312,7 +328,7 @@ export class LlmRepo {
     const rows = this.db.all<ProviderKeyRow>(
       `SELECT * FROM llm_provider_keys
         WHERE provider_id = ? ${options.includeDisabled ? '' : 'AND enabled = 1'}
-        ORDER BY priority ASC, created_at ASC`,
+        ORDER BY priority ASC, created_at ASC, id ASC`,
       [providerId],
     )
     return rows.map(toProviderKey)
@@ -326,7 +342,7 @@ export class LlmRepo {
     const rows = this.db.all<ProviderKeyRow>(
       `SELECT * FROM llm_provider_keys
         WHERE provider_id = ? AND enabled = 1
-        ORDER BY priority ASC, created_at ASC`,
+        ORDER BY priority ASC, created_at ASC, id ASC`,
       [provider.id],
     )
     return rows.map((row) => ({
@@ -334,6 +350,61 @@ export class LlmRepo {
       label: row.label,
       apiKey: row.api_key_enc && row.api_key_iv ? this.secrets.decrypt(row.api_key_enc, row.api_key_iv) : '',
     }))
+  }
+
+  private resetKeyRotation(providerId: string): void {
+    this.db.run('DELETE FROM llm_provider_key_rotation WHERE provider_id = ?', [providerId])
+  }
+
+  /** Reserve one actual chat request atomically; never keep a transaction across await. */
+  selectProviderKey(providerId: string, options: {
+    preferredKeyId?: string | null
+    excludeKeyIds?: readonly string[]
+  } = {}): { mode: ProviderKeyUsageMode; blockId?: string; key: { id: string; label: string; apiKey: string } | null } | undefined {
+    return this.db.tx(() => {
+      const provider = this.requireProvider(providerId)
+      const keys = this.listProviderKeys(providerId)
+      // Internal gateways without enabled keys retain their keyless behavior.
+      if (keys.length === 0) return { mode: provider.keyUsageMode, key: null }
+      const excluded = new Set(options.excludeKeyIds ?? [])
+      const eligible = keys.filter((key) => !excluded.has(key.id))
+      if (eligible.length === 0) return undefined
+      let selected = eligible.find((key) => key.id === options.preferredKeyId) ?? eligible[0]!
+      let blockId: string | undefined
+      if (provider.keyUsageMode === 'round_robin') {
+        const state = this.db.get<{ key_id: string | null; calls_used: number; block_id: string }>(
+          'SELECT key_id, calls_used, block_id FROM llm_provider_key_rotation WHERE provider_id = ?', [providerId],
+        )
+        const currentIndex = keys.findIndex((key) => key.id === state?.key_id)
+        let index = currentIndex < 0 ? 0 : currentIndex
+        let used = currentIndex < 0 ? 0 : state!.calls_used
+        // Failed keys abandon their remaining block by design. Every actual
+        // request still reserves a slot on the chosen key, including failover.
+        if (used >= 3 || excluded.has(keys[index]!.id)) {
+          index = (index + 1) % keys.length
+          used = 0
+        }
+        for (let scanned = 0; scanned < keys.length && excluded.has(keys[index]!.id); scanned += 1) {
+          index = (index + 1) % keys.length
+          used = 0
+        }
+        selected = keys[index]!
+        blockId = used === 0 ? newId() : state!.block_id
+        this.db.run(`INSERT INTO llm_provider_key_rotation (provider_id, key_id, calls_used, block_id)
+          VALUES (?, ?, ?, ?) ON CONFLICT(provider_id) DO UPDATE SET
+          key_id = excluded.key_id, calls_used = excluded.calls_used, block_id = excluded.block_id`,
+        [providerId, selected.id, used + 1, blockId])
+      }
+      const row = this.db.get<ProviderKeyRow>('SELECT * FROM llm_provider_keys WHERE id = ?', [selected.id])!
+      const apiKey = row.api_key_enc && row.api_key_iv ? this.secrets.decrypt(row.api_key_enc, row.api_key_iv) : ''
+      return { mode: provider.keyUsageMode, ...(blockId ? { blockId } : {}), key: { id: row.id, label: row.label, apiKey } }
+    })
+  }
+
+  /** Drop the failed key's remaining block only if the cursor has not already moved on. */
+  skipFailedProviderKey(providerId: string, keyId: string, blockId: string): void {
+    this.db.run('UPDATE llm_provider_key_rotation SET calls_used = 3 WHERE provider_id = ? AND key_id = ? AND block_id = ?',
+      [providerId, keyId, blockId])
   }
 
   /* ---------------------------------------------------------------- models */

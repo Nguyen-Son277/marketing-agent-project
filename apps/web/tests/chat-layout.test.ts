@@ -215,6 +215,17 @@ describe('CSS thẻ chọn phương án', () => {
 const traoDoi = readFileSync(fileURLToPath(new URL('../src/screens/TraoDoi.tsx', import.meta.url)), 'utf8')
 
 describe('cấu trúc màn Trao đổi', () => {
+  it('đặt nút hamburger danh sách trước ô chọn chế độ và giữ nhãn trợ năng', () => {
+    const thanh = /<div className="chat__thanh">([\s\S]*?)<\/div>/.exec(traoDoi)?.[1] ?? ''
+    expect(thanh).toContain('className="chat__nut-menu"')
+    expect(thanh).toContain("ariaLabel={t('chat.listConversations')}")
+    expect(thanh).toContain('ariaExpanded={moDanhSach}')
+    expect(thanh).toContain('ariaControls="ds-phien"')
+    expect(thanh).toContain('<svg viewBox="0 0 24 24" aria-hidden="true"')
+    expect(thanh.indexOf('className="chat__nut-menu"')).toBeLessThan(thanh.indexOf('className="o-chon"'))
+    expect(thanh).not.toMatch(/^\s*\{t\('chat\.listConversations'\)\}\s*$/m)
+  })
+
   it('dùng chế độ cao đầy đủ', () => {
     expect(traoDoi).toMatch(/<Trang[^>]*caoDay/)
   })

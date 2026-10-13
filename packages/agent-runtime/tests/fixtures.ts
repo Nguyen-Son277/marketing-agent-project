@@ -55,6 +55,7 @@ export function testProvider(overrides: Partial<LlmProviderRecord> = {}): LlmPro
     name: 'Gateway test',
     kind: 'openai_compatible',
     baseUrl: 'http://localhost:20128/v1',
+    keyUsageMode: 'failover',
     extraJson: null,
     enabled: true,
     createdAt: '2026-01-01T00:00:00.000Z',

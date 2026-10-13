@@ -12,6 +12,8 @@ const read = (path: string): string => readFileSync(fileURLToPath(new URL(path, 
 const css = read('../src/styles.css').replace(/\/\*[\s\S]*?\*\//g, '')
 const dashboard = read('../src/screens/BangDieuKhien.tsx')
 const shell = read('../src/Shell.tsx')
+const vi = read('../../../packages/i18n/src/catalogs/vi.ts')
+const en = read('../../../packages/i18n/src/catalogs/en.ts')
 
 function rule(selector: string): string {
   const start = css.indexOf(`${selector} {`)
@@ -42,20 +44,98 @@ describe('main co đúng theo cửa sổ', () => {
     expect(rule('.app__main')).toContain('min-height: 0')
     expect(rule('.app__main')).toContain('overflow-y: auto')
     expect(rule('.app__nav')).toContain('min-height: 0')
+    expect(rule('.app__nav')).toContain('flex-direction: column')
+    expect(rule('.app__nav-links')).toContain('flex: 1')
+    expect(rule('.app__nav-links')).toContain('min-height: 0')
+    expect(rule('.app__nav-toggle')).toContain('margin-top: 12px')
+    expect(rule('.app__sidebar-user')).toContain('flex: 0 0 auto')
+    expect(rule('.app__sidebar-user')).toContain('border-top: 1px solid var(--mau-vien)')
+    expect(shell).toContain('className="app__sidebar-user"')
+    expect(shell.indexOf('className="app__sidebar-user"')).toBeGreaterThan(shell.indexOf('className="app__nav-toggle"'))
+    expect(rule('.app__nav-links')).toContain('overflow-y: auto')
+    expect(shell).toContain('className="app__sidebar-signout"')
+    expect(shell).toContain('className="app__sidebar-user-trigger"')
+    expect(shell).toContain('aria-expanded={userMenuOpen}')
+    expect(shell).toContain('setUserMenuOpen((open) => !open)')
+    expect(css).toContain(".app--nav-thu-gon .app__sidebar-user[data-menu-open='true'] .app__sidebar-signout")
+    expect(shell).toContain("aria-label={t('nav.signOut')}")
+    expect(shell).toContain('onClick={() => void signOut()}')
+    expect(rule('.app__sidebar-signout')).toContain('cursor: pointer')
+    expect(shell).not.toContain("<Nut bien=\"phu\" nho onClick={() => void signOut()}>")
   })
 
   it('mobile có ba hàng rõ ràng và menu chỉ chiếm một hàng ngang', () => {
     const mobile = mobileRules()
     expect(mobile).toContain('grid-template-rows: auto auto minmax(0, 1fr)')
-    expect(mobile).toContain('.app__nav > div')
+    expect(mobile).toContain('.app__nav-links > div')
     expect(mobile).toContain('flex: 0 0 auto')
     expect(mobile).toContain('white-space: nowrap')
+    // Desktop đặt `.app__nav` thành cột dọc; mobile phải ghi đè về hàng ngang.
+    expect(mobile).toContain('flex-direction: row')
   })
 
   it('giữ main chat không cuộn trang và thu khoảng đệm trên màn hẹp', () => {
     expect(rule('.app__main--cao-day')).toContain('overflow: hidden')
     expect(shell).toContain("route === 'trao-doi' ? 'app__main app__main--cao-day' : 'app__main'")
     expect(css).toContain('.app__main--cao-day { padding: 10px; }')
+  })
+
+  it('sidebar desktop thu về icon-only và khôi phục tên/accessibility khi mở', () => {
+    expect(css).toContain('grid-template-columns: 72px minmax(0, 1fr)')
+    expect(css).toContain('.app--nav-thu-gon {')
+    expect(css).toContain('.app--nav-thu-gon .app__nav')
+    expect(css).toContain('padding-inline: 8px')
+    expect(css).toContain('justify-content: center')
+    expect(css).toContain('transition: grid-template-columns 180ms ease')
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(css).toContain('transition: none')
+    expect(css).toContain('clip: rect(0, 0, 0, 0)')
+    expect(css).not.toContain('.app--nav-thu-gon .app__nav-label { display: none')
+    expect(css).toContain('font-size: 19px')
+    expect(rule('.app')).toContain('grid-template-columns: 248px minmax(0, 1fr)')
+    expect(shell).toContain("const NAV_COLLAPSED_KEY = 'ma.navCollapsed'")
+    expect(shell).toContain('window.localStorage.getItem(NAV_COLLAPSED_KEY)')
+    expect(shell).toContain('window.localStorage.setItem(NAV_COLLAPSED_KEY, String(value))')
+    expect(shell).toContain('aria-expanded={!navCollapsed}')
+    expect(shell).toContain('aria-controls="main-navigation"')
+    expect(shell).toContain('aria-label={t(item.nhan)}')
+    expect(shell).toContain('title={navCollapsed ? t(item.nhan) : undefined}')
+    expect(shell).toContain('className="app__nav-icon"')
+    expect(css).toContain('.app--nav-thu-gon .app__nav-label')
+  })
+
+  it('nút co/mở chỉ hiện icon sidebar, vẫn giữ nhãn và tooltip', () => {
+    const toggle = shell.slice(shell.indexOf('className="app__nav-toggle"'), shell.indexOf('</nav>'))
+    expect(toggle).toContain('<svg className="app__nav-toggle-icon"')
+    expect(toggle).toContain('stroke="currentColor"')
+    expect(toggle).toContain('aria-label={t(navCollapsed')
+    expect(toggle).toContain('title={t(navCollapsed')
+    expect(toggle).not.toContain('app__nav-toggle-text')
+    expect(rule('.app__nav-toggle')).toContain('width: 42px')
+    // Nút phải nằm SAU danh sách route trong DOM và dùng margin-top để neo xuống đáy.
+    expect(shell.indexOf('app__nav-links')).toBeLessThan(shell.indexOf('className="app__nav-toggle"'))
+    expect(rule('.app__nav')).toContain('flex-direction: column')
+  })
+
+  it('mobile giữ menu ngang và bỏ ảnh hưởng từ preference desktop', () => {
+    const mobile = mobileRules()
+    expect(mobile).toContain('.app--nav-thu-gon')
+    expect(mobile).toContain('grid-template-columns: minmax(0, 1fr)')
+    expect(mobile).toContain('.app__nav-toggle')
+    expect(mobile).toContain('display: none')
+    expect(mobile).toContain('.app--nav-thu-gon .app__nav-label')
+    expect(mobile).toContain('white-space: nowrap')
+    // Desktop đặt nhóm thành grid khi thu gọn; mobile phải trả về hàng ngang.
+    expect(mobile).toContain('.app--nav-thu-gon .app__nav-group-wrap')
+    expect(mobile).toContain('display: flex')
+  })
+
+  it('có nhãn truy cập đã dịch vi/en cho nút sidebar', () => {
+    for (const key of ['nav.label', 'nav.collapse', 'nav.expand']) {
+      expect(vi).toContain(`'${key}'`)
+      expect(en).toContain(`'${key}'`)
+    }
+    expect(shell).toContain("t(navCollapsed ? 'nav.expand' : 'nav.collapse')")
   })
 
   it('tên công ty/người dùng dài không ép header tràn ngang', () => {

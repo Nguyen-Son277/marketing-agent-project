@@ -559,20 +559,24 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
           đúng mức, và bất biến "chỉ một vùng cuộn" vẫn giữ.
         */}
         <div className="chat__thanh">
-          <select className="o-chon" style={{width:'auto',maxWidth:'100%'}} aria-label={t('wf.chatMode')} value={cheDoGiaoViec} disabled={dangGui} onChange={e=>setCheDoGiaoViec(e.target.value as 'campaign'|'workforce')}>
-            <option value="campaign">{t('wf.campaign')}</option><option value="workforce">{t('wf.designerChat')}</option>
-          </select>
           <Nut
             nho
             bien="phu"
+            className="chat__nut-menu"
             diVa={nutDanhSachRef}
+            ariaLabel={t('chat.listConversations')}
             ariaExpanded={moDanhSach}
             ariaHasPopup
             ariaControls="ds-phien"
             onClick={() => setMoDanhSach((truoc) => !truoc)}
           >
-            {t('chat.listConversations')}
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
           </Nut>
+          <select className="o-chon" style={{width:'auto',maxWidth:'100%'}} aria-label={t('wf.chatMode')} value={cheDoGiaoViec} disabled={dangGui} onChange={e=>setCheDoGiaoViec(e.target.value as 'campaign'|'workforce')}>
+            <option value="campaign">{t('wf.campaign')}</option><option value="workforce">{t('wf.designerChat')}</option>
+          </select>
           <Nut nho onClick={() => void taoCuocMoi()}>
             {t('chat.newConversation')}
           </Nut>

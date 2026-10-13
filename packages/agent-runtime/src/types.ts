@@ -107,6 +107,11 @@ export interface AdapterResolver {
    * dùng `adapterFor` (test cũ giữ nguyên hành vi).
    */
   adaptersFor?(model: LlmModelRecord): readonly ChatAdapter[]
+  selectAdapterFor?(model: LlmModelRecord, options: {
+    preferredKeyId?: string | null
+    excludeKeyIds?: readonly string[]
+  }): { adapter: ChatAdapter; keyId: string | null; keyLabel: string | null; mode: 'failover' | 'round_robin'; blockId?: string } | undefined
+  skipFailedKey?(model: LlmModelRecord, keyId: string, blockId?: string): void
 }
 
 /** Tham số mở một run để ghi nhận chi phí. */

@@ -20,7 +20,7 @@ export const vi_settings = {
   /* ------------------------------------------------- nhà cung cấp */
   'settings.providers.title': 'Nhà cung cấp model',
   'settings.providers.subtitle':
-    'Mỗi URL là một nhà cung cấp và có thể có nhiều API key: khoá lỗi thì hệ thống tự dùng khoá kế tiếp. API key là chỉ-ghi, server mã hoá và không bao giờ trả lại giá trị gốc.',
+    'Mỗi URL là một nhà cung cấp và có thể có nhiều API key, dùng theo chế độ dự phòng hoặc luân phiên. API key là chỉ-ghi, server mã hoá và không bao giờ trả lại giá trị gốc.',
   'settings.providers.empty':
     'Chưa có nhà cung cấp nào. Thêm một nhà cung cấp OpenAI-compatible để agent gọi được model.',
   'settings.providers.table.name': 'Tên',
@@ -35,6 +35,13 @@ export const vi_settings = {
   'settings.providers.keyMissing': 'Chưa có khoá',
   'settings.providers.enabled': 'Đang bật',
   'settings.providers.disabled': 'Đã tắt',
+  'settings.providers.keyUsageMode.label': 'Chế độ dùng khoá',
+  'settings.providers.keyUsageMode.failover': 'Dự phòng (failover)',
+  'settings.providers.keyUsageMode.roundRobin': 'Luân phiên (round robin)',
+  'settings.providers.keyUsageMode.hint':
+    'Dự phòng: ưu tiên khoá đầu tiên dùng được, chuyển khoá khi lỗi. Luân phiên: chuyển sang khoá kế tiếp sau mỗi 3 lần gọi model; số lần gọi này cố định, không chỉnh được.',
+  'settings.providers.keyUsageMode.rateLimitNote':
+    'Nhà cung cấp có thể áp dụng chung giới hạn tốc độ cho tài khoản hoặc dự án. Luân phiên khoá không đảm bảo tránh giới hạn số yêu cầu mỗi phút (RPM).',
   'settings.providers.test': 'Kiểm tra',
   'settings.providers.testResult': '{{message}} · {{ms}} ms',
   'settings.providers.testModelsSeen': '· thấy {{count}} model',
@@ -67,7 +74,7 @@ export const vi_settings = {
   /* --------------------------------------------------------- api key */
   'settings.providers.keys.title': 'Khoá API ({{count}})',
   'settings.providers.keys.hint':
-    'Một URL có thể có nhiều khoá. Hệ thống thử lần lượt theo thứ tự; khoá lỗi thì tự dùng khoá kế tiếp.',
+    'Một URL có thể có nhiều khoá. Chế độ dùng khoá của nhà cung cấp quyết định dùng dự phòng hay luân phiên; thứ tự khoá xác định thứ tự chọn.',
   'settings.providers.keys.empty': 'Chưa có khoá nào. Gateway nội bộ có thể không cần khoá.',
   'settings.providers.keys.label': 'Nhãn',
   'settings.providers.keys.priority': 'Thứ tự',

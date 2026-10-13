@@ -22,6 +22,8 @@ export function createRuntimeDeps(repos: RuntimeRepos): AgentRuntimeDeps {
     router,
     adapters: {
       adapterFor: (model) => registry.adapterFor(model),
+      selectAdapterFor: (model, options) => registry.selectAdapterFor(model, options),
+      skipFailedKey: (model, keyId, blockId) => registry.skipFailedKey(model, keyId, blockId),
       // Một adapter cho mỗi API key: vòng lặp thử lần lượt khi khoá hỏng.
       adaptersFor: (model) => registry.adaptersFor(model).map((candidate) => candidate.adapter),
     },

@@ -105,6 +105,36 @@ export class ModelRegistry {
     }))
   }
 
+  /** Reserve a key immediately before an actual chat request, not when listing adapters. */
+  selectAdapterFor(model: LlmModelRecord, options: {
+    preferredKeyId?: string | null
+    excludeKeyIds?: readonly string[]
+  } = {}): (ModelAdapterCandidate & { mode: LlmProviderRecord['keyUsageMode']; blockId?: string }) | undefined {
+    const provider = this.providerOf(model)
+    if (!provider.enabled) throw needsConfiguration(`Nhà cung cấp ${provider.name} đang bị tắt`)
+    const selected = this.llm.selectProviderKey(provider.id, options)
+    if (!selected) return undefined
+    const extra = parseProviderExtra(provider.extraJson)
+    const config = {
+      baseUrl: provider.baseUrl,
+      apiKey: selected.key?.apiKey || undefined,
+      headers: extra.headers,
+      anthropicVersion: extra.anthropicVersion,
+      includeStreamUsage: extra.includeStreamUsage,
+    }
+    return {
+      mode: selected.mode,
+      ...(selected.blockId ? { blockId: selected.blockId } : {}),
+      keyId: selected.key?.id ?? null,
+      keyLabel: selected.key?.label ?? null,
+      adapter: provider.kind === 'anthropic' ? new AnthropicAdapter(config) : new OpenAiCompatibleAdapter(config),
+    }
+  }
+
+  skipFailedKey(model: LlmModelRecord, keyId: string, blockId?: string): void {
+    if (blockId) this.llm.skipFailedProviderKey(model.providerId, keyId, blockId)
+  }
+
   /** Adapter đầu tiên (khoá ưu tiên cao nhất), dùng cho chỗ chỉ cần một cách gọi. */
   adapterFor(model: LlmModelRecord): ProviderAdapter {
     const [first] = this.adaptersFor(model)

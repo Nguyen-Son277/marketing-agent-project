@@ -73,12 +73,15 @@ export interface MembershipRecord {
  * cài đặt xong nhưng quên điền `.env`, và mọi lượt chạy đều hỏng. Khoá do người dùng
  * nhập trực tiếp trong giao diện mới là nguồn sự thật.
  */
+export type ProviderKeyUsageMode = 'failover' | 'round_robin'
+
 export interface LlmProviderRecord {
   readonly id: string
   readonly companyId: string | null
   readonly name: string
   readonly kind: ProviderKind
   readonly baseUrl: string
+  readonly keyUsageMode: ProviderKeyUsageMode
   readonly extraJson: string | null
   readonly enabled: boolean
   readonly createdAt: string

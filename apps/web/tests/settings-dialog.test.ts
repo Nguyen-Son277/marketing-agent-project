@@ -85,6 +85,66 @@ describe('bố cục mục Nhà cung cấp', () => {
   })
 })
 
+describe('chế độ dùng khoá của nhà cung cấp', () => {
+  const providers = caiDat.slice(caiDat.indexOf('function PhanNhaCungCap'), caiDat.indexOf('function PhanKhoaProvider'))
+  const keys = caiDat.slice(caiDat.indexOf('function PhanKhoaProvider'), caiDat.indexOf('function PhanModel'))
+
+  it('mặc định dự phòng, nạp chế độ khi sửa và đặt lại khi xoá nháp', () => {
+    expect(providers).toContain("useState<ProviderView['keyUsageMode']>('failover')")
+    const load = providers.slice(providers.indexOf('function napVaoBieuMau'), providers.indexOf('function moTaoMoi'))
+    expect(load).toContain('setKeyUsageMode(provider.keyUsageMode)')
+    const reset = providers.slice(providers.indexOf('function xoaBieuMau'), providers.indexOf('function dongHopThoai'))
+    expect(reset).toContain("setKeyUsageMode('failover')")
+  })
+
+  it('select có nhãn và hai chế độ nằm trong hộp thoại tạo/sửa', () => {
+    const start = providers.indexOf('<HopThoai\n')
+    const end = providers.indexOf('</HopThoai>', start)
+    const select = providers.indexOf('value={keyUsageMode}')
+    expect(select).toBeGreaterThan(start)
+    expect(select).toBeLessThan(end)
+    const dialog = providers.slice(start, end)
+    expect(dialog).toContain("t('settings.providers.keyUsageMode.label')")
+    expect(dialog).toContain("{ value: 'failover', label: t(NHAN_KEY_USAGE_MODE.failover) }")
+    expect(dialog).toContain("{ value: 'round_robin', label: t(NHAN_KEY_USAGE_MODE.round_robin) }")
+    expect(dialog).toContain("if (giaTri === 'failover' || giaTri === 'round_robin') setKeyUsageMode(giaTri)")
+  })
+
+  it('gửi chế độ trong cả yêu cầu tạo mới và cập nhật', () => {
+    const save = providers.slice(providers.indexOf('async function luu'), providers.indexOf('async function test'))
+    const update = save.slice(save.indexOf('await api.updateProvider'), save.indexOf('await api.createProvider'))
+    const create = save.slice(save.indexOf('await api.createProvider'), save.indexOf('dongHopThoai()'))
+    expect(update).toMatch(/\n\s*keyUsageMode,/)
+    expect(create).toMatch(/\n\s*keyUsageMode,/)
+  })
+
+  it('bảng quản lý khoá hiện chế độ, chu kỳ cố định và cảnh báo giới hạn', () => {
+    expect(keys).toContain('t(NHAN_KEY_USAGE_MODE[provider.keyUsageMode])')
+    for (const key of ['label', 'hint', 'rateLimitNote']) {
+      expect(keys).toContain(`t('settings.providers.keyUsageMode.${key}')`)
+      expect(providers).toContain(`t('settings.providers.keyUsageMode.${key}')`)
+    }
+  })
+
+  it('dịch đủ hai ngôn ngữ và không còn hướng dẫn chỉ mô tả dự phòng', () => {
+    for (const catalog of [vi, en]) {
+      for (const key of ['label', 'failover', 'roundRobin', 'hint', 'rateLimitNote']) {
+        expect(catalog).toContain(`'settings.providers.keyUsageMode.${key}'`)
+      }
+    }
+    expect(vi).toContain('sau mỗi 3 lần gọi model')
+    expect(en).toContain('after every 3 model calls')
+    expect(vi).toContain('số lần gọi này cố định, không chỉnh được')
+    expect(en).toContain('this call count is fixed and cannot be changed')
+    expect(vi).toContain('tài khoản hoặc dự án')
+    expect(en).toContain('account or project')
+    expect(vi).toContain('không đảm bảo tránh')
+    expect(en).toContain('does not guarantee avoiding')
+    expect(vi).not.toContain('Hệ thống thử lần lượt theo thứ tự; khoá lỗi thì tự dùng khoá kế tiếp.')
+    expect(en).not.toContain('They are tried in order; when a key fails the next one is used automatically.')
+  })
+})
+
 describe('catalog không còn khoá chết', () => {
   /**
    * Vì sao kiểm cả catalog: khi khối fetch model cũ trong bảng khoá bị thay bằng hộp thoại,

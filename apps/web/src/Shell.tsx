@@ -46,6 +46,25 @@ export const ROUTES = [
 
 export type RouteId = (typeof ROUTES)[number]['id']
 
+/** Trạng thái sidebar là sở thích riêng của trình duyệt, độc lập với công ty/tài khoản. */
+const NAV_COLLAPSED_KEY = 'ma.navCollapsed'
+function docNavCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(NAV_COLLAPSED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+function storeNavCollapsed(value: boolean): void {
+  try {
+    window.localStorage.setItem(NAV_COLLAPSED_KEY, String(value))
+  } catch {
+    // Sidebar vẫn dùng được trong bộ nhớ nếu trình duyệt chặn localStorage.
+  }
+}
+
+export { NAV_COLLAPSED_KEY }
+
 function docRoute(): RouteId {
   const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0]
   const found = ROUTES.find((route) => route.id === raw)
@@ -73,6 +92,16 @@ export function Shell(): ReactNode {
   const { user, companies, company, companyId, selectCompany, signOut } = useSession()
   const { t } = useI18n()
   const [route, navigate] = useRoute()
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(docNavCollapsed)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+
+  const chuyenTrangThaiNav = useCallback(() => {
+    setNavCollapsed((truoc) => {
+      const tiep = !truoc
+      storeNavCollapsed(tiep)
+      return tiep
+    })
+  }, [])
 
   // Kiểu của map ghi rõ `MessageKey` cho tên nhóm: nếu để TypeScript suy từ mảng,
   // khoá sẽ bị nới thành `string` và `t(tenNhom)` mất kiểm tra khoá.
@@ -114,7 +143,7 @@ export function Shell(): ReactNode {
   }, [route, companyId, navigate])
 
   return (
-    <div className="app">
+    <div className={navCollapsed ? 'app app--nav-thu-gon' : 'app'}>
       <header className="app__header">
         <span className="app__brand">{t('nav.brand')}</span>
 
@@ -137,31 +166,74 @@ export function Shell(): ReactNode {
 
         <span className="app__spacer" />
 
-        <span className="app__user" title={user?.name}>{user?.name}</span>
         <LocaleSwitcher compact />
         <ThemeSwitcher compact />
-        <Nut bien="phu" nho onClick={() => void signOut()}>
-          {t('nav.signOut')}
-        </Nut>
       </header>
 
-      <nav className="app__nav">
-        {nhom.map(([tenNhom, items]) => (
-          <div key={tenNhom}>
-            <div className="app__nav-group">{t(tenNhom)}</div>
-            {items.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={route === item.id ? 'app__nav-item app__nav-item--active' : 'app__nav-item'}
-                onClick={() => navigate(item.id)}
-              >
-                <span aria-hidden>{item.bieuTuong}</span>
-                {t(item.nhan)}
-              </button>
-            ))}
-          </div>
-        ))}
+      <nav className="app__nav" id="main-navigation" aria-label={t('nav.label')}>
+        {/* Danh sách route nằm trong khối cuộn riêng để nút co/mở neo được ở đáy sidebar,
+            không trôi theo nội dung khi menu dài. */}
+        <div className="app__nav-links">
+          {nhom.map(([tenNhom, items]) => (
+            <div key={tenNhom} className="app__nav-group-wrap">
+              <div className="app__nav-group">{t(tenNhom)}</div>
+              {items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={route === item.id ? 'app__nav-item app__nav-item--active' : 'app__nav-item'}
+                  aria-label={t(item.nhan)}
+                  title={navCollapsed ? t(item.nhan) : undefined}
+                  onClick={() => navigate(item.id)}
+                >
+                  <span className="app__nav-icon" aria-hidden>{item.bieuTuong}</span>
+                  <span className="app__nav-label">{t(item.nhan)}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="app__nav-toggle"
+          aria-expanded={!navCollapsed}
+          aria-controls="main-navigation"
+          aria-label={t(navCollapsed ? 'nav.expand' : 'nav.collapse')}
+          title={t(navCollapsed ? 'nav.expand' : 'nav.collapse')}
+          onClick={chuyenTrangThaiNav}
+        >
+          <svg className="app__nav-toggle-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M9 4v16" />
+            <path d={navCollapsed ? 'm13 9 3 3-3 3' : 'm16 9-3 3 3 3'} />
+          </svg>
+        </button>
+        <div className="app__sidebar-user" data-menu-open={userMenuOpen}>
+          <button
+            type="button"
+            className="app__sidebar-user-trigger"
+            aria-label={user?.name ?? t('nav.userMenu')}
+            aria-expanded={userMenuOpen}
+            aria-haspopup="true"
+            onClick={() => setUserMenuOpen((open) => !open)}
+          >
+            <span className="app__sidebar-user-avatar" aria-hidden="true">{user?.name?.trim().charAt(0).toLocaleUpperCase() || 'U'}</span>
+            <span className="app__sidebar-user-name" title={user?.name}>{user?.name}</span>
+          </button>
+          <button
+            type="button"
+            className="app__sidebar-signout"
+            aria-label={t('nav.signOut')}
+            title={t('nav.signOut')}
+            onClick={() => void signOut()}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+              <path d="M10 17l5-5-5-5" />
+              <path d="M15 12H3" />
+              <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
+            </svg>
+          </button>
+        </div>
       </nav>
 
       {/* Màn Trao đổi cần khoá cuộn trang để khung nhập tin luôn nằm trong tầm nhìn;

@@ -166,6 +166,7 @@ a {
   /* Track minmax cho phép vùng nội dung co trong viewport thay vì lớn theo nội dung. */
   grid-template-columns: 248px minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
+  transition: grid-template-columns 180ms ease;
   height: 100vh;
   height: 100dvh;
 }
@@ -214,10 +215,231 @@ a {
 .app__nav {
   background: var(--mau-be-mat);
   border-right: 1px solid var(--mau-vien);
-  padding: var(--khoang) 10px;
+  padding: var(--khoang) 10px 10px;
   min-width: 0;
   min-height: 0;
+  /* Cột dọc: danh sách route cuộn ở giữa, nút co/mở neo ở đáy sidebar. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app__nav-links {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+}
+
+/* Nút co/mở và thông tin người dùng được neo dưới sidebar; danh sách route tự cuộn phía trên. */
+.app__nav-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  margin-top: 12px;
+  margin-left: auto;
+  padding: 8px;
+  border: 1px solid var(--mau-vien);
+  border-radius: var(--ban-kinh-nho);
+  background: var(--mau-be-mat);
+  color: var(--mau-chu-mo);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app__nav-toggle:hover {
+  background: var(--mau-chinh-nhat);
+  color: var(--mau-chu);
+}
+
+.app__sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-top: 10px;
+  padding: 10px 8px 2px;
+  border-top: 1px solid var(--mau-vien);
+}
+
+.app__sidebar-user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.app__sidebar-user-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  background: var(--mau-chinh-nhat);
+  color: var(--mau-chinh-dam);
+  font-weight: 700;
+}
+
+.app__sidebar-user-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mau-chu-mo);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app__sidebar-signout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  padding: 7px;
+  border: 1px solid transparent;
+  border-radius: var(--ban-kinh-nho);
+  background: transparent;
+  color: var(--mau-loi);
+  cursor: pointer;
+}
+
+.app__sidebar-signout:hover {
+  border-color: var(--mau-vien-loi);
+  background: var(--mau-loi-nen);
+  color: var(--mau-loi);
+}
+
+.app__sidebar-signout:focus-visible {
+  outline: 3px solid var(--mau-chinh);
+  outline-offset: 2px;
+}
+
+.app__sidebar-user-trigger:focus-visible {
+  outline: 3px solid var(--mau-chinh);
+  outline-offset: 2px;
+  border-radius: var(--ban-kinh-nho);
+}
+
+.app--nav-thu-gon .app__sidebar-user {
+  position: relative;
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0;
+}
+
+.app--nav-thu-gon .app__sidebar-user-trigger {
+  flex: 0 0 auto;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.app--nav-thu-gon .app__sidebar-signout {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: 36px;
+  height: 36px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  background: var(--mau-be-mat);
+  border-color: var(--mau-vien);
+  box-shadow: var(--bong-nho);
+}
+
+.app--nav-thu-gon .app__sidebar-user[data-menu-open='true'] .app__sidebar-signout,
+.app--nav-thu-gon .app__sidebar-user:focus-within .app__sidebar-signout {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.app--nav-thu-gon .app__sidebar-signout:focus-visible {
+  outline-offset: 2px;
+}
+
+.app--nav-thu-gon .app__sidebar-user-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.app__nav-toggle-icon {
+  display: block;
+  flex: 0 0 22px;
+}
+
+.app__nav-toggle:focus-visible,
+.app__nav-item:focus-visible {
+  outline: 3px solid var(--mau-chinh);
+  outline-offset: 2px;
+}
+
+.app--nav-thu-gon {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.app--nav-thu-gon .app__nav {
+  padding-inline: 8px;
+}
+
+.app--nav-thu-gon .app__nav-toggle {
+  margin-inline: auto;
+}
+
+.app--nav-thu-gon .app__nav-group,
+.app--nav-thu-gon .app__nav-label {
+  /* Giữ nhãn trong DOM để aria-label/focus vẫn đọc được; chỉ ẩn phần chữ bằng CSS. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app--nav-thu-gon .app__nav-group-wrap {
+  display: grid;
+  gap: 4px;
+}
+
+.app--nav-thu-gon .app__nav-item {
+  justify-content: center;
+  gap: 0;
+  padding: 10px 6px;
+  min-height: 42px;
+}
+
+.app--nav-thu-gon .app__nav-icon {
+  font-size: 19px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app { transition: none; }
 }
 
 .app__main {
@@ -983,15 +1205,65 @@ a {
     padding: 16px;
   }
 
+  .app,
+  .app--nav-thu-gon {
+    /* Ở mobile preference desktop không được giữ lại cột 72px; giữ menu ngang. */
+    grid-template-columns: minmax(0, 1fr);
+    transition: none;
+  }
+
+  .app__nav-toggle,
+  .app__sidebar-user {
+    display: none;
+  }
+
+  .app--nav-thu-gon .app__nav-group,
+  .app--nav-thu-gon .app__nav-label {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: nowrap;
+  }
+
+  .app--nav-thu-gon .app__nav-item {
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 9px 12px;
+    min-height: 0;
+  }
+
+  /* Desktop đặt nhóm thành `grid` khi thu gọn; ở mobile phải trả về hàng ngang, nếu
+     không mỗi nhóm xếp dọc và menu chiếm nhiều hàng. */
+  .app--nav-thu-gon .app__nav-group-wrap {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+
   .app__nav {
     display: flex;
+    /* Bắt buộc ghi lại `row`: desktop đặt `column` cho cột dọc, nếu không mobile sẽ
+       xếp các nhóm thành nhiều hàng và chiếm gần nửa màn hình. */
+    flex-direction: row;
     overflow-x: auto;
+    overflow-y: hidden;
     border-right: 0;
     border-bottom: 1px solid var(--mau-vien);
     padding: 8px;
   }
 
-  .app__nav > div {
+  /* Mobile không có cột dọc: danh sách route trở lại một hàng ngang. */
+  .app__nav-links {
+    display: flex;
+    flex: 1;
+    overflow: visible;
+  }
+
+  .app__nav-links > div {
     display: flex;
     flex: 0 0 auto;
     gap: 4px;
@@ -1425,13 +1697,37 @@ a {
 .chat__thanh {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   flex-wrap: wrap;
   /* `flex: 0 0 auto`: thanh công cụ giữ nguyên chiều cao, không giành chỗ của khung tin nhắn.
      Vì nó nằm TRONG luồng flex (không `position: absolute`) nên khung tin nhắn tự giảm đúng
      mức, và bất biến "chỉ một vùng cuộn" vẫn giữ. */
   flex: 0 0 auto;
+}
+
+.chat__nut-menu {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat__nut-menu svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.chat__nut-menu:focus-visible {
+  outline: 2px solid var(--mau-chinh);
+  outline-offset: 2px;
 }
 
 .chat__than {

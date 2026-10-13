@@ -167,6 +167,84 @@ describe('settings routes', () => {
     expect(readLimits.json<{ maxStepsPerRun: number }>().maxStepsPerRun).toBe(8)
   })
 
+  it('provider mặc định failover, tạo round_robin và PATCH giữ hoặc đổi keyUsageMode', async () => {
+    const { ownerCookie, company } = await tenant(ctx, 'set-key-mode@example.com', 'Settings Key Mode')
+    const path = `/api/companies/${company.id}/providers`
+    const defaultResponse = await ctx.client.request('POST', path, {
+      headers: ownerCookie,
+      body: { name: 'Failover mặc định', baseUrl: 'http://127.0.0.1:1/v1' },
+    })
+    expect(defaultResponse.status).toBe(201)
+    const defaultProvider = defaultResponse.json<{ provider: { id: string; keyUsageMode: string } }>().provider
+    expect(defaultProvider.keyUsageMode).toBe('failover')
+    expect(ctx.repos.llm.requireProvider(defaultProvider.id).keyUsageMode).toBe('failover')
+
+    const created = await ctx.client.request('POST', path, {
+      headers: ownerCookie,
+      body: { name: 'Luân phiên', baseUrl: 'http://127.0.0.1:1/v1', keyUsageMode: 'round_robin' },
+    })
+    expect(created.status).toBe(201)
+    const provider = created.json<{ provider: { id: string; keyUsageMode: string } }>().provider
+    expect(provider.keyUsageMode).toBe('round_robin')
+    expect(ctx.repos.llm.requireProvider(provider.id).keyUsageMode).toBe('round_robin')
+
+    const preserved = await ctx.client.request('PATCH', `${path}/${provider.id}`, {
+      headers: ownerCookie,
+      body: { name: 'Đổi tên, không đổi chế độ' },
+    })
+    expect(preserved.status).toBe(200)
+    expect(preserved.json<{ provider: { keyUsageMode: string } }>().provider.keyUsageMode).toBe('round_robin')
+    expect(ctx.repos.llm.requireProvider(provider.id).keyUsageMode).toBe('round_robin')
+
+    for (const keyUsageMode of ['failover', 'round_robin']) {
+      const updated = await ctx.client.request('PATCH', `${path}/${provider.id}`, {
+        headers: ownerCookie,
+        body: { keyUsageMode },
+      })
+      expect(updated.status).toBe(200)
+      expect(updated.json<{ provider: { keyUsageMode: string } }>().provider.keyUsageMode).toBe(keyUsageMode)
+      expect(ctx.repos.llm.requireProvider(provider.id).keyUsageMode).toBe(keyUsageMode)
+    }
+
+    const listed = await ctx.client.request('GET', path, { headers: ownerCookie })
+    expect(listed.status).toBe(200)
+    expect(listed.json<{ providers: { id: string; keyUsageMode: string }[] }>().providers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: defaultProvider.id, keyUsageMode: 'failover' }),
+        expect.objectContaining({ id: provider.id, keyUsageMode: 'round_robin' }),
+      ]),
+    )
+  })
+
+  it('từ chối keyUsageMode không hợp lệ khi tạo và PATCH, không đổi dữ liệu', async () => {
+    const { ownerCookie, company } = await tenant(ctx, 'set-key-mode-invalid@example.com', 'Settings Key Mode Invalid')
+    const path = `/api/companies/${company.id}/providers`
+    const created = await ctx.client.request('POST', path, {
+      headers: ownerCookie,
+      body: { name: 'Luân phiên hợp lệ', baseUrl: 'http://127.0.0.1:1/v1', keyUsageMode: 'round_robin' },
+    })
+    expect(created.status).toBe(201)
+    const providerId = created.json<{ provider: { id: string } }>().provider.id
+    for (const keyUsageMode of ['random', 'ROUND_ROBIN', '', null, 1]) {
+      const invalidCreate = await ctx.client.request('POST', path, {
+        headers: ownerCookie,
+        body: { name: 'Chế độ sai', baseUrl: 'http://127.0.0.1:1/v1', keyUsageMode },
+      })
+      expect(invalidCreate.status).toBe(400)
+      expect(errorCode(invalidCreate)).toBe('validation')
+      const invalidPatch = await ctx.client.request('PATCH', `${path}/${providerId}`, {
+        headers: ownerCookie,
+        body: { name: 'Không được lưu', keyUsageMode },
+      })
+      expect(invalidPatch.status).toBe(400)
+      expect(errorCode(invalidPatch)).toBe('validation')
+      expect(ctx.repos.llm.requireProvider(providerId)).toMatchObject({
+        name: 'Luân phiên hợp lệ', keyUsageMode: 'round_robin',
+      })
+    }
+    expect(ctx.repos.llm.listProviders(company.id, { includeDisabled: true })).toHaveLength(1)
+  })
+
   it('fetch model rồi nhập các model đã chọn, và xoá model không dùng', async () => {
     const { ownerCookie, company } = await tenant(ctx, 'set-fetch@example.com', 'Settings Fetch')
     const base = `/api/companies/${company.id}`
@@ -254,22 +332,35 @@ describe('settings routes', () => {
 
   it('không bao giờ trả khoá API đã mã hoá', async () => {
     const { ownerCookie, company } = await tenant(ctx, 'set-secret@example.com', 'Settings Secret')
-    await ctx.client.request('POST', `/api/companies/${company.id}/providers`, {
+    const path = `/api/companies/${company.id}/providers`
+    const created = await ctx.client.request('POST', path, {
       headers: ownerCookie,
       body: {
         name: 'Provider có khoá',
         kind: 'openai_compatible',
         baseUrl: 'http://127.0.0.1:1/v1',
         apiKey: 'sk-tuyet-mat-0987654321',
+        keyUsageMode: 'round_robin',
       },
     })
-    const response = await ctx.client.request('GET', `/api/companies/${company.id}/providers`, {
+    expect(created.status).toBe(201)
+    const providerId = created.json<{ provider: { id: string; keyUsageMode: string } }>().provider.id
+    expect(created.json<{ provider: { keyUsageMode: string } }>().provider.keyUsageMode).toBe('round_robin')
+    const updated = await ctx.client.request('PATCH', `${path}/${providerId}`, {
       headers: ownerCookie,
+      body: { keyUsageMode: 'failover' },
     })
+    expect(updated.status).toBe(200)
+    expect(updated.json<{ provider: { keyUsageMode: string } }>().provider.keyUsageMode).toBe('failover')
+    const response = await ctx.client.request('GET', path, { headers: ownerCookie })
     expect(response.status).toBe(200)
-    expect(response.body).not.toContain('apiKeyEnc')
-    expect(response.body).not.toContain('apiKeyIv')
-    expect(response.body).not.toContain('sk-tuyet-mat-0987654321')
+    for (const result of [created, updated, response]) {
+      expect(result.body).not.toContain('apiKeyEnc')
+      expect(result.body).not.toContain('apiKeyIv')
+      expect(result.body).not.toContain('keyEnc')
+      expect(result.body).not.toContain('keyIv')
+      expect(result.body).not.toContain('sk-tuyet-mat-0987654321')
+    }
   })
 
   it('từ chối sửa provider toàn cục từ route của công ty (fail closed)', async () => {
@@ -286,7 +377,7 @@ describe('settings routes', () => {
     const response = await ctx.client.request(
       'PATCH',
       `/api/companies/${company.id}/providers/${global.id}`,
-      { headers: ownerCookie, body: { enabled: false } },
+      { headers: ownerCookie, body: { enabled: false, keyUsageMode: 'round_robin' } },
     )
     expect(response.status).toBe(404)
 
@@ -309,13 +400,31 @@ describe('settings routes', () => {
   })
 
   it('viewer KHÔNG đổi được cài đặt', async () => {
-    const { company } = await tenant(ctx, 'set-owner2@example.com', 'Settings Viewer')
+    const { ownerCookie, company } = await tenant(ctx, 'set-owner2@example.com', 'Settings Viewer')
     const viewer = await addMember(ctx, company.id, 'set-viewer@example.com', 'viewer')
-    const response = await ctx.client.request('POST', `/api/companies/${company.id}/providers`, {
+    const path = `/api/companies/${company.id}/providers`
+    const created = await ctx.client.request('POST', path, {
+      headers: ownerCookie,
+      body: { name: 'Provider chủ sở hữu', baseUrl: 'http://127.0.0.1:1/v1' },
+    })
+    expect(created.status).toBe(201)
+    const providerId = created.json<{ provider: { id: string } }>().provider.id
+    const response = await ctx.client.request('POST', path, {
       headers: viewer.cookie,
-      body: { name: 'Viewer thử', kind: 'openai_compatible', baseUrl: 'http://127.0.0.1:1/v1' },
+      body: { name: 'Viewer thử', kind: 'openai_compatible', baseUrl: 'http://127.0.0.1:1/v1', keyUsageMode: 'round_robin' },
     })
     expect(response.status).toBe(403)
+    const patch = await ctx.client.request('PATCH', `${path}/${providerId}`, {
+      headers: viewer.cookie,
+      body: { keyUsageMode: 'round_robin' },
+    })
+    expect(patch.status).toBe(403)
+    expect(ctx.repos.llm.requireProvider(providerId).keyUsageMode).toBe('failover')
+    const read = await ctx.client.request('GET', path, { headers: viewer.cookie })
+    expect(read.status).toBe(200)
+    expect(read.json<{ providers: { id: string; keyUsageMode: string }[] }>().providers).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: providerId, keyUsageMode: 'failover' })]),
+    )
     const limits = await ctx.client.request('PATCH', `/api/companies/${company.id}/limits`, {
       headers: viewer.cookie,
       body: { dailyCostUsd: 999 },
@@ -326,6 +435,12 @@ describe('settings routes', () => {
   it('cô lập tenant: công ty B không xem/ghi được cài đặt công ty A', async () => {
     const a = await tenant(ctx, 'set-a@example.com', 'Set A')
     const b = await tenant(ctx, 'set-b@example.com', 'Set B')
+    const provider = ctx.repos.llm.createProvider({
+      companyId: a.company.id,
+      name: 'Provider A',
+      kind: 'openai_compatible',
+      baseUrl: 'http://127.0.0.1:1/v1',
+    })
 
     const read = await ctx.client.request('GET', `/api/companies/${a.company.id}/providers`, {
       headers: b.ownerCookie,
@@ -337,5 +452,11 @@ describe('settings routes', () => {
       body: { name: 'B ghi vào A', kind: 'openai_compatible', baseUrl: 'http://127.0.0.1:1/v1' },
     })
     expect(write.status).toBe(404)
+    const patch = await ctx.client.request('PATCH', `/api/companies/${b.company.id}/providers/${provider.id}`, {
+      headers: b.ownerCookie,
+      body: { keyUsageMode: 'round_robin' },
+    })
+    expect(patch.status).toBe(404)
+    expect(ctx.repos.llm.requireProvider(provider.id).keyUsageMode).toBe('failover')
   })
 })
