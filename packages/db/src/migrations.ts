@@ -554,4 +554,95 @@ CREATE TABLE llm_provider_key_rotation (
 );
 `,
   },
+  {
+    id: '0012_workflow_indexes',
+    sql: `
+CREATE INDEX idx_runs_workflow_history ON runs(company_id, conversation_id, created_at DESC, id DESC);
+CREATE INDEX idx_tasks_workflow_stable ON tasks(company_id, conversation_id, created_at ASC, id ASC);
+`,
+  },
+  {
+    id: '0013_daily_reports',
+    sql: `
+CREATE TABLE daily_report_groups (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ name TEXT NOT NULL, title TEXT NOT NULL, enabled INTEGER NOT NULL, model_id TEXT,
+ members_json TEXT NOT NULL, start_date TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE daily_report_rounds (
+ id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES daily_report_groups(id) ON DELETE CASCADE,
+ date TEXT NOT NULL, opens_at TEXT NOT NULL, deadline TEXT NOT NULL, closes_at TEXT NOT NULL,
+ members_json TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, token_enc TEXT NOT NULL, token_iv TEXT NOT NULL,
+ sealed_at TEXT, UNIQUE(group_id,date)
+);
+CREATE TABLE daily_report_submissions (
+ id TEXT PRIMARY KEY, round_id TEXT NOT NULL REFERENCES daily_report_rounds(id) ON DELETE CASCADE,
+ member_id TEXT NOT NULL, edit_hash TEXT NOT NULL, UNIQUE(round_id,member_id)
+);
+CREATE TABLE daily_report_revisions (
+ submission_id TEXT NOT NULL REFERENCES daily_report_submissions(id) ON DELETE CASCADE,
+ version INTEGER NOT NULL, work TEXT NOT NULL, blockers TEXT NOT NULL, next_steps TEXT NOT NULL,
+ created_at TEXT NOT NULL, PRIMARY KEY(submission_id,version)
+);
+CREATE TABLE daily_report_versions (
+ id TEXT PRIMARY KEY, round_id TEXT NOT NULL REFERENCES daily_report_rounds(id) ON DELETE CASCADE,
+ number INTEGER NOT NULL, snapshot_json TEXT NOT NULL, english_json TEXT,
+ status TEXT NOT NULL CHECK(status IN ('pending','running','ready','failed')),
+ error TEXT, created_at TEXT NOT NULL, started_at TEXT, UNIQUE(round_id,number)
+);
+CREATE INDEX idx_daily_rounds_deadline ON daily_report_rounds(sealed_at,deadline);
+CREATE INDEX idx_daily_versions_jobs ON daily_report_versions(status,created_at);
+`,
+  },
+  {
+    id: '0014_kb_canonical_content_upload_metadata',
+    sql: `
+ALTER TABLE kb_documents ADD COLUMN content TEXT;
+ALTER TABLE kb_documents ADD COLUMN original_name TEXT;
+ALTER TABLE kb_documents ADD COLUMN mime_type TEXT;
+ALTER TABLE kb_documents ADD COLUMN size_bytes INTEGER;
+ALTER TABLE kb_documents ADD COLUMN storage_key TEXT;
+ALTER TABLE kb_documents ADD COLUMN original_checksum TEXT;
+`,
+  },
+  {
+    id: '0015_kb_auto_classification',
+    sql: `
+ALTER TABLE kb_chunks ADD COLUMN section_id TEXT REFERENCES kb_sections(id) ON DELETE SET NULL;
+ALTER TABLE kb_chunks ADD COLUMN category TEXT;
+
+CREATE TABLE kb_sections (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  document_id TEXT NOT NULL REFERENCES kb_documents(id) ON DELETE CASCADE,
+  ordinal INTEGER NOT NULL,
+  start_offset INTEGER NOT NULL CHECK (start_offset >= 0),
+  end_offset INTEGER NOT NULL CHECK (end_offset >= start_offset),
+  title TEXT NOT NULL,
+  category TEXT NOT NULL,
+  tags_json TEXT NOT NULL DEFAULT '[]',
+  confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+  assignment_source TEXT NOT NULL,
+  UNIQUE (document_id, ordinal)
+);
+CREATE INDEX idx_kb_sections_doc ON kb_sections(company_id, document_id, ordinal);
+
+CREATE TABLE kb_classification_jobs (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  document_id TEXT NOT NULL REFERENCES kb_documents(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','ready','failed')),
+  error TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (company_id, document_id)
+);
+CREATE INDEX idx_kb_classification_pending ON kb_classification_jobs(status, created_at);
+`,
+  },
+  {
+    id: '0016_kb_classification_retry_schedule',
+    sql: `ALTER TABLE kb_classification_jobs ADD COLUMN next_attempt_at TEXT;`,
+  },
 ]

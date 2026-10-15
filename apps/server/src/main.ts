@@ -14,6 +14,9 @@ import { toAppError } from '@marketing-agent/shared'
 import { buildApp, type OptionalRouteModule } from './app.ts'
 import { loadConfig, loadDotEnv, type ServerConfig } from './config.ts'
 import { EventBus, type AppContext } from './context.ts'
+import { startKnowledgeClassificationWorker } from './services/knowledge-classifier.ts'
+import { embeddingFor } from './services/agent-services.ts'
+import { startDailyReportWorker } from './services/daily-report-worker.ts'
 import { preflight } from './services/company-service.ts'
 
 export interface StartedServer {
@@ -86,6 +89,8 @@ export async function startServer(overrides: Partial<ServerConfig> = {}): Promis
     }
   }, 60 * 60 * 1000)
   sweeper.unref()
+  const dailyWorker = startDailyReportWorker(repos)
+  const knowledgeWorker = startKnowledgeClassificationWorker(repos,{embeddingFor:async()=>embeddingFor(context),intervalMs:2000})
 
   return {
     server,
@@ -93,6 +98,8 @@ export async function startServer(overrides: Partial<ServerConfig> = {}): Promis
     repos,
     async close() {
       clearInterval(sweeper)
+      await knowledgeWorker.close()
+      await dailyWorker.close()
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
       repos.db.close()
     },

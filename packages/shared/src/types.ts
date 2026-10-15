@@ -209,6 +209,14 @@ export interface KbDocumentRecord {
   readonly category: string
   readonly tagsJson: string
   readonly checksum: string
+  /** Canonical source Markdown; null for legacy records until reindexed. */
+  readonly content?: string | null
+  readonly originalName?: string | null
+  readonly mimeType?: string | null
+  readonly sizeBytes?: number | null
+  readonly storageKey?: string | null
+  readonly originalChecksum?: string | null
+  readonly classificationStatus?: 'pending' | 'running' | 'ready' | 'failed'
   readonly mtime: string | null
   readonly version: number
   readonly source: string
@@ -217,7 +225,35 @@ export interface KbDocumentRecord {
   readonly updatedAt: string
 }
 
+export interface KbSectionRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly documentId: string
+  readonly ordinal: number
+  readonly startOffset: number
+  readonly endOffset: number
+  readonly title: string
+  readonly category: string
+  readonly tagsJson: string
+  readonly confidence: number
+  readonly assignmentSource: string
+}
+
+export interface ClassificationJobRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly documentId: string
+  readonly status: 'pending' | 'running' | 'ready' | 'failed'
+  readonly error: string | null
+  readonly attempts: number
+  readonly nextAttemptAt?: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
 export interface KbChunkRecord {
+  readonly category?: string | null
+  readonly sectionId?: string | null
   readonly id: string
   readonly documentId: string
   readonly companyId: string
@@ -234,6 +270,7 @@ export interface KbHit {
   readonly path: string
   readonly title: string
   readonly category: string
+  readonly sectionId?: string | null
   readonly headingPath: string | null
   readonly headingUrl: string | null
   readonly text: string

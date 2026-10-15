@@ -265,4 +265,22 @@ export const vi_settings = {
   // Tiêu đề cho hộp thoại xác nhận thay `window.confirm` ở mục Model.
   'settings.models.deleteTitle': 'Xoá model',
   'settings.models.purgeTitle': 'Xoá model không dùng',
+
+  /* ----------------------------------- phân loại tri thức */
+  'settings.knowledgeModel.title': 'Model phân loại tri thức',
+  'settings.knowledgeModel.subtitle': 'Chọn model dùng để phân loại tài liệu và các model dự phòng của công ty.',
+  'settings.knowledgeModel.mode': 'Cách chọn model',
+  'settings.knowledgeModel.modeLeader': 'Theo model trưởng nhóm',
+  'settings.knowledgeModel.modeCustom': 'Tự chọn model',
+  'settings.knowledgeModel.primary': 'Model chính',
+  'settings.knowledgeModel.fallback': 'Model dự phòng {{number}}',
+  'settings.knowledgeModel.addFallback': 'Thêm model dự phòng',
+  'settings.knowledgeModel.chooseModel': '— Chọn model —',
+  'settings.knowledgeModel.costWarning': 'Kiểm tra sẽ gửi một yêu cầu tổng hợp rất nhỏ tới model và có thể phát sinh chi phí. Không gửi nội dung tài liệu.',
+  'settings.knowledgeModel.save': 'Lưu cấu hình',
+  'settings.knowledgeModel.test': 'Kiểm tra cấu hình đã lưu',
+  'settings.knowledgeModel.saved': 'Đã lưu cấu hình model phân loại.',
+  'settings.knowledgeModel.loadFailed': 'Không tải được cấu hình model phân loại.',
+  'settings.knowledgeModel.saveFailed': 'Không lưu được cấu hình model phân loại.',
+  'settings.knowledgeModel.testFailed': 'Không kiểm tra được cấu hình model phân loại.',
 } as const

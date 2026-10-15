@@ -23,7 +23,7 @@ import type { Repos } from '@marketing-agent/db'
 import type { AgentRuntimeDeps } from '@marketing-agent/agent-runtime'
 import type { EmbeddingProvider } from '@marketing-agent/kb'
 import type { CoordinationHost, PlannedTaskInput, ToolRegistry } from '@marketing-agent/tools'
-import { runAgentForTask } from './agent-runner.ts'
+import { runAgentForTask, taskStatusForRun } from './agent-runner.ts'
 import { dispatchPlan } from './dispatcher.ts'
 import { event, type AppEvent } from './events.ts'
 import {
@@ -93,7 +93,14 @@ export class ConversationOrchestrator implements CoordinationHost {
     this.tools = deps.tools
     this.embedding = deps.embedding
     this.limits = { ...DEFAULT_LIMITS, ...(deps.limits ?? {}) }
-    this.publish = deps.publish
+    this.publish = (appEvent) => {
+      const payload = appEvent.payload as { conversationId?: unknown } | null
+      if (!payload?.conversationId) return
+      try {
+        const published: unknown = deps.publish?.(appEvent)
+        if (published instanceof Promise) void published.catch(() => undefined)
+      } catch { /* telemetry is best-effort */ }
+    }
     this.log = deps.log
     this.runtimeOverrides = deps.runtimeOverrides
     this.writeDiagnostic = deps.writeDiagnostic
@@ -110,7 +117,7 @@ export class ConversationOrchestrator implements CoordinationHost {
       try{return JSON.parse(m.metaJson??'{}').mode==='workforce'}catch{return false}
     }).map(m=>`${m.role}: ${m.contentMd}`).join('\n')
     const employees=this.repos.workforce.employees(input.userId).filter(e=>e.active&&e.companyIds.includes(input.companyId)).map(e=>({id:e.id,name:e.name}))
-    const run=await runAgentForTask({repos:this.repos,tools:this.tools,embedding:this.embedding,runtimeOverrides:this.runtimeOverrides,companyId:input.companyId,role:'marketing-leader',taskId:null,conversationId:input.conversationId,actorUserId:input.userId,requestId:message.id,locale,toolNames:['employee_list','employee_task_draft'],
+    const run=await runAgentForTask({repos:this.repos,tools:this.tools,embedding:this.embedding,runtimeOverrides:this.runtimeOverrides,publish:this.publish,companyId:input.companyId,role:'marketing-leader',taskId:null,conversationId:input.conversationId,actorUserId:input.userId,requestId:message.id,locale,toolNames:['employee_list','employee_task_draft'],
       taskBrief:`MODE: designer employee assignment, NOT campaign planning. Company ${conversation.companyId} only. Employees ${JSON.stringify(employees)}. Vietnam timezone UTC+7, week Monday-Sunday. Current time ${new Date().toISOString()}.
 Ask only missing assignee, design brief/type, planned week/day and explicit deadline date/time. Do NOT ask KPI/budget/campaign scope. Do not invent IDs, deadline or claim to have assigned work. Prepare clear design brief and call employee_task_draft only when all fields supplied. Relative ambiguous deadlines require clarification. Tool creates draft, manager must click confirmation. No automatic assignment or completion. Respond in ${locale==='en'?'English':'Vietnamese'}.
 Conversation:\n${history}`})
@@ -220,6 +227,7 @@ Conversation:\n${history}`})
       // Lưu phần đã trích được: người dùng trả lời từng câu qua nhiều lượt, nên
       // brief phải tích luỹ chứ không được hỏi lại từ đầu.
       this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'clarify', brief })
+      this.publish?.(event('conversation.updated', input.companyId, { conversationId: conversation.id, id: conversation.id, phase: 'clarify' }))
       this.publish?.(event('brief.updated', input.companyId, { conversationId: conversation.id, missing: check.missing }))
 
       return {
@@ -235,6 +243,7 @@ Conversation:\n${history}`})
 
     // Đã đủ brief: lưu lại và để Leader quyết định bước tiếp theo.
     this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'brief', brief })
+    this.publish?.(event('conversation.updated', input.companyId, { conversationId: conversation.id, id: conversation.id, phase: 'brief' }))
     this.publish?.(event('brief.updated', input.companyId, { conversationId: conversation.id, complete: true }))
 
     const turn = await this.runLeaderTurn(input.companyId, conversation.id, 'plan-request')
@@ -249,6 +258,7 @@ Conversation:\n${history}`})
       contentMd: reply.length > 0 ? reply : 'Đã ghi nhận yêu cầu. Tôi sẽ lập kế hoạch và trình bạn duyệt.',
     })
     this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'plan' })
+    this.publish?.(event('conversation.updated', input.companyId, { conversationId: conversation.id, id: conversation.id, phase: 'plan' }))
     this.publish?.(event('leader.replied', input.companyId, { conversationId: conversation.id }))
 
     return {
@@ -379,6 +389,7 @@ Conversation:\n${history}`})
     )
 
     this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'assign' })
+    this.publish?.(event('conversation.updated', input.companyId, { conversationId: conversation.id, id: conversation.id, phase: 'assign' }))
     this.publish?.(
       event('plan.created', input.companyId, {
         conversationId: conversation.id,
@@ -397,6 +408,7 @@ Conversation:\n${history}`})
     }
 
     this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'execute' })
+    this.publish?.(event('conversation.updated', input.companyId, { conversationId: conversation.id, id: conversation.id, phase: 'execute' }))
 
     const dependencies = this.repos.work.listDependencies(
       input.companyId,
@@ -423,21 +435,23 @@ Conversation:\n${history}`})
       tools: this.tools,
       embedding: this.embedding,
       runtimeOverrides: this.runtimeOverrides,
+      publish: this.publish,
       companyId: input.companyId,
       conversationId: conversation.id,
       plan,
       limits: this.limits,
-      publish: this.publish,
       log: this.log,
     })
 
     this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'review' })
+    this.publish?.(event('conversation.updated', input.companyId, { conversationId: conversation.id, id: conversation.id, phase: 'review' }))
     const brief = parseBrief(conversation.briefJson)
     const review = await reviewOutcomes({
       repos: this.repos,
       tools: this.tools,
       embedding: this.embedding,
       runtimeOverrides: this.runtimeOverrides,
+      publish: this.publish,
       companyId: input.companyId,
       conversationId: conversation.id,
       brief: brief ? formatBrief(brief) : conversation.title,
@@ -492,6 +506,7 @@ Conversation:\n${history}`})
       costUsd,
     })
     this.repos.work.updateConversation(conversation.id, input.companyId, { phase: 'report' })
+    this.publish?.(event('conversation.updated', input.companyId, { conversationId: conversation.id, id: conversation.id, phase: 'report' }))
     this.publish?.(
       event('report.created', input.companyId, {
         conversationId: conversation.id,
@@ -566,29 +581,50 @@ Conversation:\n${history}`})
     const def = task.assigneeAgentDefId ? this.repos.team.findAgentDef(task.assigneeAgentDefId) : undefined
     const role = def?.role ?? 'marketing-leader'
 
-    const result = await runAgentForTask({
-      repos: this.repos,
-      tools: this.tools,
-      embedding: this.embedding,
-      runtimeOverrides: this.runtimeOverrides,
-      companyId: ctx.companyId,
-      role,
-      taskId,
-      conversationId: ctx.conversationId,
-      taskBrief: `${task.title}\n\n${task.briefMd}`,
-      // Ngôn ngữ lấy theo phiên CỦA VIỆC, không theo phiên đang mở: việc có thể được
-      // chạy lại từ một màn hình khác, và kết quả phải khớp ngôn ngữ của phiên đã tạo ra nó.
-      locale: this.localeOf(ctx.companyId, task.conversationId ?? ctx.conversationId),
-      maxSteps: this.limits.maxStepsPerRun,
-      ...(this.log ? { log: this.log } : {}),
-    })
-
-    const artifactIds = this.repos.work
-      .listArtifacts(ctx.companyId, { taskId, limit: 50 })
-      .map((artifact) => artifact.id)
-    const status =
-      result.run.status === 'succeeded' ? 'done' : result.run.status === 'budget_exceeded' ? 'blocked' : 'failed'
-    return { status, resultMd: result.run.output, artifactIds }
+    const conversationId = task.conversationId ?? ctx.conversationId
+    const publishStatus = (status: string) => this.publish?.(event('task.updated', ctx.companyId, {
+      conversationId, taskId, title: task.title, assigneeRole: role, status,
+    }))
+    try {
+      this.repos.work.setTaskStatus(taskId, ctx.companyId, 'in_progress')
+      this.repos.work.addTaskEvent(taskId, ctx.companyId, 'started', { role })
+      publishStatus('in_progress')
+      this.publish?.(event('agent.started', ctx.companyId, { conversationId, taskId, assigneeRole: role }))
+      const result = await runAgentForTask({
+        repos: this.repos,
+        tools: this.tools,
+        embedding: this.embedding,
+        runtimeOverrides: this.runtimeOverrides,
+        publish: this.publish,
+        companyId: ctx.companyId,
+        role,
+        taskId,
+        conversationId,
+        taskBrief: `${task.title}\n\n${task.briefMd}`,
+        locale: this.localeOf(ctx.companyId, conversationId),
+        maxSteps: this.limits.maxStepsPerRun,
+        ...(this.log ? { log: this.log } : {}),
+      })
+      const storedTask = this.repos.work.findTask(taskId, ctx.companyId)
+      const status = taskStatusForRun(result.run, storedTask?.status)
+      const explicitBlocker = storedTask?.status === 'blocked' || storedTask?.status === 'cancelled'
+      const resultMd = explicitBlocker && storedTask?.resultMd ? storedTask.resultMd : result.run.output || result.summary
+      this.repos.work.updateTask(taskId, ctx.companyId, { status, resultMd })
+      this.repos.work.addTaskEvent(taskId, ctx.companyId, 'finished', { status, stopReason: result.run.stopReason })
+      publishStatus(status)
+      const artifactIds = this.repos.work.listArtifacts(ctx.companyId, { taskId, limit: 50 }).map((artifact) => artifact.id)
+      if (artifactIds.length) this.publish?.(event('artifact.created', ctx.companyId, { conversationId, taskId, artifactIds, agentRole: role }))
+      return { status, resultMd, artifactIds }
+    } catch (error) {
+      const storedTask = this.repos.work.findTask(taskId, ctx.companyId)
+      const status = storedTask?.status === 'cancelled' ? 'cancelled' : storedTask?.status === 'blocked' ? 'blocked' : 'failed'
+      const message = error instanceof Error ? error.message : String(error)
+      const resultMd = (status === 'cancelled' || status === 'blocked') && storedTask?.resultMd ? storedTask.resultMd : `Lỗi: ${message}`
+      this.repos.work.updateTask(taskId, ctx.companyId, { status, resultMd })
+      this.repos.work.addTaskEvent(taskId, ctx.companyId, 'error', { message })
+      publishStatus(status)
+      return { status, resultMd, artifactIds: [] }
+    }
   }
 
   /**
@@ -625,6 +661,7 @@ Conversation:\n${history}`})
     })
     this.publish?.(
       event('agent.message', input.companyId, {
+        conversationId: input.conversationId,
         from: input.fromRole,
         to: input.toRole,
         kind: 'request',
@@ -639,6 +676,7 @@ Conversation:\n${history}`})
       tools: this.tools,
       embedding: this.embedding,
       runtimeOverrides: this.runtimeOverrides,
+      publish: this.publish,
       companyId: input.companyId,
       role: input.toRole as never,
       taskId: input.taskId,
@@ -680,6 +718,7 @@ Conversation:\n${history}`})
     })
     this.publish?.(
       event('agent.message', input.companyId, {
+        conversationId: input.conversationId,
         from: input.toRole,
         to: input.fromRole,
         kind: 'reply',
@@ -716,11 +755,18 @@ Conversation:\n${history}`})
       contentMd: content.join('\n'),
     })
     if (input.taskId) {
-      this.repos.work.updateTask(input.taskId, input.companyId, { status: 'blocked', resultMd: content.join('\n') })
+      const task = this.repos.work.findTask(input.taskId, input.companyId)
+      // A late escalation must not revive work the user already cancelled.
+      const status = task?.status === 'cancelled' ? 'cancelled' : 'blocked'
+      if (status !== 'cancelled') this.repos.work.updateTask(input.taskId, input.companyId, { status, resultMd: content.join('\n') })
       this.repos.work.addTaskEvent(input.taskId, input.companyId, 'escalated', { reason: input.reason })
+      this.publish?.(event('task.updated', input.companyId, {
+        conversationId: input.conversationId, taskId: input.taskId, status, reason: input.reason,
+      }))
     }
     this.publish?.(
       event('agent.message', input.companyId, {
+        conversationId: input.conversationId,
         from: input.fromRole,
         to: 'marketing-leader',
         kind: 'blocker',
@@ -783,6 +829,7 @@ Conversation:\n${history}`})
       tools: this.tools,
       embedding: this.embedding,
       runtimeOverrides: this.runtimeOverrides,
+      publish: this.publish,
       companyId,
       role: 'marketing-leader',
       taskId: null,
@@ -815,6 +862,7 @@ Conversation:\n${history}`})
         tools: this.tools,
         embedding: this.embedding,
         runtimeOverrides: this.runtimeOverrides,
+        publish: this.publish,
         companyId,
         role: 'marketing-leader',
         taskId: null,
@@ -913,6 +961,7 @@ Conversation:\n${history}`})
       tools: this.tools,
       embedding: this.embedding,
       runtimeOverrides: this.runtimeOverrides,
+      publish: this.publish,
       companyId,
       role: 'marketing-leader',
       taskId: null,

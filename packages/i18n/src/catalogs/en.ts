@@ -76,6 +76,7 @@ export const en = {
   'nav.chat': 'Chat with the Leader',
   'nav.tasks': 'Tasks',
   'nav.workforce': 'Employee assignments',
+  'nav.dailyReports': 'Daily work reports',
   'nav.label': 'Main navigation',
   'nav.collapse': 'Collapse navigation bar',
   'nav.expand': 'Expand navigation bar',
@@ -85,6 +86,7 @@ export const en = {
   'nav.costs': 'Costs',
   'nav.diagram': 'Agent team diagram',
   'nav.signOut': 'Sign out',
+  'nav.userMenu': 'Account menu',
   'nav.switchCompany': 'Switch company',
 
   /* -------------------------------------------------------------- locale */

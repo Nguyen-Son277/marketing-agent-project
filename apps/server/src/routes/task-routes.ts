@@ -99,6 +99,18 @@ export function taskRoutes() {
             payload: { decision: input.decision },
           })
 
+          ctx.events.publish({
+            type: 'task.updated',
+            companyId,
+            payload: {
+              conversationId: updated.conversationId,
+              taskId,
+              status: updated.status,
+              revisionCount: updated.revisionCount,
+            },
+            at: new Date().toISOString(),
+          })
+
           const response: ReviewTaskResponse = {
             task: buildTaskView(repos, companyId, updated),
             decision: input.decision,

@@ -292,23 +292,47 @@ export interface KnowledgeDocumentView {
   readonly version: number
   readonly source: string
   readonly updatedAt: string
+  /** Metadata chỉ có ở tài liệu tải lên; khóa lưu trữ nội bộ không được trả về. */
+  readonly originalName?: string | null
+  readonly mimeType?: string | null
+  readonly sizeBytes?: number | null
+  readonly classificationStatus?: 'pending' | 'running' | 'ready' | 'failed'
+  readonly classificationError?: string | null
+  readonly categories?: readonly string[]
+  readonly sectionCount?: number
+  readonly chunkCount?: number
+  readonly classificationNextAttemptAt?: string | null
   /** Đã có vector chưa; false nghĩa là tìm kiếm chỉ dùng từ khoá. */
   readonly indexed: boolean
   /**
-   * Nội dung Markdown đầy đủ. Danh sách tài liệu LUÔN kèm nội dung: tài liệu trong
-   * kho là văn bản nhỏ, và như vậy giao diện không cần một lượt gọi riêng cho mỗi
-   * lần chọn tài liệu.
+   * Nội dung nguồn. Danh sách giữ nội dung tài liệu Markdown cũ để tương thích;
+   * file tải lên trả chuỗi rỗng trong danh sách và lấy nội dung qua endpoint chi tiết.
    */
   readonly content: string
+}
+
+export interface KnowledgeSectionView {
+  readonly id: string
+  readonly title: string
+  readonly category: string
+  readonly tags: readonly string[]
+  readonly confidence: number
+  readonly startOffset: number
+  readonly endOffset: number
+  readonly assignmentSource: 'ai' | 'manual'
 }
 
 export interface KnowledgeResponse {
   readonly documents: readonly KnowledgeDocumentView[]
   readonly categories: readonly { readonly code: string; readonly label: string; readonly count: number }[]
+  /** embedded counts documents with vectors for every chunk, not individual vectors. */
   readonly stats: { readonly documents: number; readonly chunks: number; readonly embedded: number }
 }
 
 export interface ReindexResponse {
+  readonly queued?: number
+  readonly processing?: number
+  readonly classificationFailed?: number
   readonly indexed: number
   readonly skipped: number
   readonly chunks: number
@@ -435,6 +459,14 @@ export type StreamEventType =
   | 'review.completed'
   | 'report.created'
   | 'warning'
+  | 'conversation.updated'
+  | 'run.started'
+  | 'run.finished'
+  | 'model.started'
+  | 'model.finished'
+  | 'run.retrying'
+  | 'tool.started'
+  | 'tool.finished'
 
 /* ------------------------------------------------------------------ tasks */
 
@@ -684,6 +716,7 @@ export const API_ROUTES = {
   conversation: (id: string) => `/api/conversations/${id}`,
   conversationMessages: (id: string) => `/api/conversations/${id}/messages`,
   conversationStream: (id: string) => `/api/conversations/${id}/stream`,
+  conversationWorkflow: (id: string) => `/api/conversations/${id}/workflow`,
   conversationPlan: (id: string) => `/api/conversations/${id}/plan`,
   conversationRun: (id: string) => `/api/conversations/${id}/run`,
   conversationReport: (id: string) => `/api/conversations/${id}/report`,

@@ -77,6 +77,7 @@ export const vi = {
   'nav.chat': 'Trao đổi với Leader',
   'nav.tasks': 'Công việc',
   'nav.workforce': 'Giao việc nhân viên',
+  'nav.dailyReports': 'Báo cáo hằng ngày',
   'nav.label': 'Thanh điều hướng chính',
   'nav.collapse': 'Thu gọn thanh điều hướng',
   'nav.expand': 'Mở rộng thanh điều hướng',
@@ -86,6 +87,7 @@ export const vi = {
   'nav.costs': 'Chi phí',
   'nav.diagram': 'Sơ đồ đội agent',
   'nav.signOut': 'Đăng xuất',
+  'nav.userMenu': 'Menu tài khoản',
   'nav.switchCompany': 'Chọn công ty',
 
   /* ------------------------------------------------------ ngôn ngữ */

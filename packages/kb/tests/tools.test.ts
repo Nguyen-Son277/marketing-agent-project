@@ -1,7 +1,7 @@
 /** Test tool kb_search / kb_read / kb_write: quyền đọc, quyền ghi và provenance. */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { AgentRole, ToolContext, ToolDefinition } from '@marketing-agent/shared'
-import { indexCompany } from '../src/indexer.ts'
+import { indexCompany, indexDocument } from '../src/indexer.ts'
 import { createKbTools, KB_TOOL_NAMES } from '../src/tools.ts'
 import { makeFixture, writeDocs, type KbFixture } from './support.ts'
 
@@ -57,6 +57,18 @@ const ctxFor = (role: AgentRole, agentDefId = defId(role)): ToolContext => ({
   log: () => {},
 })
 
+describe('uploaded sources', () => {
+  it('does not let agents overwrite the original uploaded knowledge', async () => {
+    const doc = await indexDocument(fixture.repos, {companyId:fixture.company.id,path:'30-kenh/uploads/original.txt',content:'Nguồn gốc bất biến.',category:'30-kenh',source:'upload'})
+    const result = await tool('kb_write').handler({path:doc.document.path,content:'Nội dung giả',category:'30-kenh'},ctxFor('social-media'))
+    expect(result.isError).toBe(true)
+    expect(fixture.repos.knowledge.documentContent(fixture.company.id,doc.document.id)).toBe('Nguồn gốc bất biến.')
+    const read = await tool('kb_read').handler({path:doc.document.path},ctxFor('social-media'))
+    expect(read.isError).toBeFalsy()
+    expect(read.content).toContain('Nguồn gốc bất biến.')
+  })
+})
+
 describe('metadata', () => {
   it('đăng ký đủ ba tool với tham số bắt buộc', () => {
     expect(tools.map((entry) => entry.name)).toEqual([...KB_TOOL_NAMES])
@@ -109,6 +121,42 @@ describe('kb_search', () => {
 })
 
 describe('kb_read', () => {
+  it('returns only ACL-readable classified sections from upload-auto sources', async () => {
+    const content = '# Company upload\n\nPublic brand guidance.\n\nSecret analytics KPI and revenue.\n'
+    const indexed = await indexDocument(fixture.repos, {
+      companyId: fixture.company.id, path: '10-brand/classified.md', content,
+      category: '10-brand', source: 'upload-auto',
+    })
+    const visibleStart = content.indexOf('Public brand guidance.')
+    const hiddenStart = content.indexOf('Secret analytics KPI')
+    fixture.repos.knowledge.replaceSectionsAndChunks(fixture.company.id, indexed.document.id, [
+      { ordinal: 0, startOffset: visibleStart, endOffset: hiddenStart, title: 'Brand', category: '10-brand', tags: [], confidence: 1, assignmentSource: 'auto' },
+      { ordinal: 1, startOffset: hiddenStart, endOffset: content.length, title: 'Analytics', category: '40-du-lieu', tags: [], confidence: 1, assignmentSource: 'auto' },
+    ], [
+      { ordinal: 0, sectionOrdinal: 0, text: content.slice(visibleStart, hiddenStart), headingPath: 'Brand', tokens: 4, category: '10-brand' },
+      { ordinal: 1, sectionOrdinal: 1, text: content.slice(hiddenStart), headingPath: 'Analytics', tokens: 5, category: '40-du-lieu' },
+    ])
+
+    const result = await tool('kb_read').handler({ path: indexed.document.path }, ctxFor('content-writer'))
+    expect(result.isError).toBeFalsy()
+    expect(result.content).toContain('Public brand guidance.')
+    expect(result.content).not.toContain('Secret analytics KPI')
+    expect(result.content).toContain('section:')
+    expect(result.content).toContain('Chỉ hiển thị các mục đã phân loại')
+    expect((result.data as { sectionIds: string[] }).sectionIds).toHaveLength(1)
+  })
+
+  it('does not reveal canonical upload-auto content before sections are classified', async () => {
+    const secret = 'Unclassified source ZQSECRET.'
+    const indexed = await indexDocument(fixture.repos, {
+      companyId: fixture.company.id, path: '10-brand/pending.md', content: secret,
+      category: '10-brand', source: 'upload-auto',
+    })
+    const result = await tool('kb_read').handler({ path: indexed.document.path }, ctxFor('content-writer'))
+    expect(result.content).not.toContain(secret)
+    expect(result.content).toMatch(/không có dữ liệu đã phân loại/i)
+  })
+
   it('từ chối đọc tài liệu thuộc danh mục không có quyền', async () => {
     const denied = await tool('kb_read').handler({ path: '40-du-lieu/kpi.md' }, ctxFor('content-writer'))
     expect(denied.isError).toBe(true)

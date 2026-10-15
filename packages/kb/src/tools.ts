@@ -196,38 +196,76 @@ async function readHandler(deps: KbToolDeps, args: Record<string, unknown>, ctx:
   if (!parsed.success) return invalidArguments('kb_read', parsed.error.issues.map((issue) => issue.message))
 
   try {
-    const path = normalizeDocPath(parsed.data.path)
-    const document = deps.repos.knowledge.findDocument(ctx.companyId, path)
+    const normalized = normalizeDocPath(parsed.data.path)
+    const exact = parsed.data.path.trim().replace(/\\/g, '/').replace(/^\.\//, '')
+    const document = deps.repos.knowledge.findDocument(ctx.companyId, exact) ?? deps.repos.knowledge.findDocument(ctx.companyId, normalized)
+    const path = document?.path ?? normalized
     if (!document) {
       return { content: `Không tìm thấy tài liệu "${path}" trong kho kiến thức của công ty.`, isError: true }
     }
-    if (!deps.repos.team.canReadCategory(ctx.companyId, ctx.agentDefId, document.category)) {
-      return {
-        content: `Bị từ chối: tài liệu "${path}" thuộc danh mục "${document.category}" mà agent này không được phép đọc.`,
-        isError: true,
+    let body: string[]
+    let chunkCount = 0
+    let sectionIds: string[] = []
+    let citations: { sectionId: string; category: string; title: string }[] = []
+    let categories: string[] = []
+    if (document.source === 'upload-auto') {
+      const sections = deps.repos.knowledge.listSections(ctx.companyId, document.id)
+      const readable = deps.repos.team.readableCategories(ctx.companyId, ctx.agentDefId)
+      const allowed = sections.filter((section) => readable.includes(section.category))
+      if (allowed.length === 0) {
+        return {
+          content: 'Không có dữ liệu đã phân loại nào trong tài liệu mà agent này được phép đọc.',
+          data: { path: document.path, title: document.title, sectionIds: [], chunks: 0 },
+        }
       }
+      // Do not fetch the canonical source until section ACLs have been applied.
+      const canonical = deps.repos.knowledge.documentContent(ctx.companyId, document.id)
+      if (canonical === null) {
+        return { content: 'Không có dữ liệu đã phân loại khả dụng cho tài liệu này.', data: { path: document.path, title: document.title, sectionIds: [], chunks: 0 } }
+      }
+      body = allowed.map((section) => {
+        const exactText = canonical.slice(section.startOffset, section.endOffset)
+        return `<!-- section:${section.id} | citation:${document.path}#section-${section.id} | category:${section.category} -->\n${exactText}`
+      })
+      sectionIds = allowed.map((section) => section.id)
+      citations = allowed.map((section) => ({ sectionId: section.id, category: section.category, title: section.title }))
+      categories = [...new Set(allowed.map((section) => section.category))]
+    } else {
+      if (!deps.repos.team.canReadCategory(ctx.companyId, ctx.agentDefId, document.category)) {
+        return {
+          content: `Bị từ chối: tài liệu "${path}" thuộc danh mục "${document.category}" mà agent này không được phép đọc.`,
+          isError: true,
+        }
+      }
+      const chunks = deps.repos.knowledge.listChunks(document.id)
+      chunkCount = chunks.length
+      const canonical = deps.repos.knowledge.documentContent(ctx.companyId, document.id)
+      body = canonical !== null
+        ? [canonical]
+        : chunks.map((chunk) => (chunk.headingPath ? `<!-- ${chunk.headingPath} -->\n${chunk.text}` : chunk.text))
+      categories = [document.category]
     }
-
-    const chunks = deps.repos.knowledge.listChunks(document.id)
-    const body = chunks.map((chunk) => (chunk.headingPath ? `<!-- ${chunk.headingPath} -->\n${chunk.text}` : chunk.text))
-    ctx.log('kb_read', { path, chunks: chunks.length })
+    ctx.log('kb_read', { path, chunks: body.length, sectionIds })
     return {
       content: [
         `# ${document.title}`,
         `- Đường dẫn: ${document.path}`,
-        `- Danh mục: ${document.category}`,
+        `- Danh mục: ${categories.join(', ')}`,
         `- Phiên bản: ${document.version}`,
+        ...(document.source === 'upload-auto' ? ['- Chỉ hiển thị các mục đã phân loại thuộc danh mục agent được phép đọc.'] : []),
         '',
         body.join('\n\n'),
       ].join('\n'),
       data: {
         path: document.path,
         title: document.title,
-        category: document.category,
+        category: categories.join(', '),
         version: document.version,
-        chunks: chunks.length,
+        chunks: chunkCount,
+        sectionIds,
+        citations,
       },
-    }
+    };
   } catch (error) {
     return { content: `Lỗi khi đọc tài liệu: ${errorMessage(error)}`, isError: true }
   }
@@ -239,6 +277,10 @@ async function writeHandler(deps: KbToolDeps, args: Record<string, unknown>, ctx
 
   try {
     const path = normalizeDocPath(parsed.data.path)
+    const exact = parsed.data.path.trim().replace(/\\/g, '/').replace(/^\.\//, '')
+    if (['upload', 'upload-auto'].includes(deps.repos.knowledge.findDocument(ctx.companyId, exact)?.source ?? '')) {
+      return { content: 'Nội dung file tải lên là chỉ đọc. Hãy tạo tài liệu mới thay vì ghi đè nguồn gốc.', isError: true }
+    }
     const explicit = parsed.data.category?.trim()
     if (explicit && !isKbCategory(explicit)) {
       return { content: `Danh mục "${explicit}" không hợp lệ. Chỉ chấp nhận: ${KB_CATEGORY_CODES.join(', ')}.`, isError: true }
@@ -266,6 +308,9 @@ async function writeHandler(deps: KbToolDeps, args: Record<string, unknown>, ctx
     }
 
     const existing = deps.repos.knowledge.findDocument(ctx.companyId, path)
+    if (existing && ['upload', 'upload-auto'].includes(existing.source)) {
+      return { content: 'Nội dung file tải lên là chỉ đọc. Hãy tạo tài liệu mới thay vì ghi đè nguồn gốc.', isError: true }
+    }
     if (existing && !writable.includes(existing.category)) {
       return {
         content: `Bị từ chối: tài liệu "${path}" đang thuộc danh mục "${existing.category}" mà agent này không có quyền ghi.`,

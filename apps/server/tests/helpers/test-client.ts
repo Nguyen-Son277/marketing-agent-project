@@ -6,7 +6,7 @@
  * production without pulling in an HTTP test library.
  */
 import { createServer, type Server } from 'node:http'
-import type { App } from '../src/app.ts'
+import type { App } from '../../src/app.ts'
 
 export interface TestResponse {
   readonly status: number

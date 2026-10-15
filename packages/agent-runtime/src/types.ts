@@ -16,6 +16,7 @@ import type {
   ModelTier,
   ResolvedAgent,
   RunStatus,
+  RuntimeObserver,
   ToolContext,
   ToolDefinition,
 } from '@marketing-agent/shared'
@@ -167,4 +168,6 @@ export interface AgentRunInput {
   readonly temperature?: number
   readonly signal?: AbortSignal
   readonly toolTimeoutMs?: number
+  /** Metadata-only lifecycle observer; failures must never interrupt the run. */
+  readonly observe?: RuntimeObserver
 }

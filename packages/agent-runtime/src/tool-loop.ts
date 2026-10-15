@@ -14,6 +14,8 @@
 import {
   estimateTokens,
   isAppError,
+  newId,
+  nowIso,
   truncate,
   withRetry,
   type LlmChatRequest,
@@ -23,6 +25,7 @@ import {
   type LlmToolDefinition,
   type LlmUsage,
   type RunStatus,
+  type RuntimeObservation,
   type ToolContext,
   type ToolDefinition,
   type ToolResult,
@@ -96,9 +99,59 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
     agentDefId: agent.agentDef.id,
     taskId: input.context.taskId,
     conversationId: input.context.conversationId,
-    providerId: agent.provider?.id ?? null,
-    modelId: agent.model?.id ?? null,
+    providerId: choice.provider.id,
+    modelId: choice.model.id,
   })
+
+  type ObservationDetail = Omit<RuntimeObservation, 'at' | 'companyId' | 'conversationId' | 'taskId' | 'runId' | 'agentDefId' | 'agentRole'>
+  const emit = (detail: ObservationDetail): void => {
+    if (!input.observe) return
+    try {
+      const result: unknown = input.observe({
+        ...detail,
+        at: nowIso(),
+        companyId: agent.companyId,
+        conversationId: input.context.conversationId ?? null,
+        taskId: input.context.taskId ?? null,
+        runId: meter.runId,
+        agentDefId: agent.agentDef.id,
+        agentRole: agent.role,
+      })
+      // Also isolate mistakenly async observers; the runtime never waits for them.
+      if (result instanceof Promise) void result.catch(() => undefined)
+    } catch {
+      // Observability is best-effort and must not change execution/accounting.
+    }
+  }
+  let requestCount = 0
+  let toolCount = 0
+  let pendingTransition: { strategy: 'key_rotation' | 'model_fallback'; error: unknown; previousKeyId?: string } | undefined
+  emit({ type: 'run.started', modelId: choice.model.id, providerId: choice.provider.id })
+
+  let lastRequestError: unknown
+  const observedTurn = async (adapter: ChatAdapter, request: LlmChatRequest, attemptIndex: number, selectedKeyId?: string | null): Promise<ModelTurn> => {
+    const requestIndex = ++requestCount
+    const metadata = { modelId: choice.model.id, providerId: choice.provider.id, requestIndex, attemptIndex }
+    if (pendingTransition) {
+      if (pendingTransition.previousKeyId === undefined || pendingTransition.previousKeyId !== selectedKeyId) {
+        emit({ type: 'run.retrying', ...metadata, strategy: pendingTransition.strategy, ...observationError(pendingTransition.error) })
+      }
+      pendingTransition = undefined
+    } else if (attemptIndex > 1) {
+      emit({ type: 'run.retrying', ...metadata, strategy: 'retry', ...observationError(lastRequestError) })
+    }
+    const requestStartedAt = performance.now()
+    emit({ type: 'model.started', ...metadata })
+    try {
+      const turn = await collectTurn(adapter, request, input.signal)
+      emit({ type: 'model.finished', ...metadata, outcome: 'succeeded', durationMs: performance.now() - requestStartedAt })
+      return turn
+    } catch (thrown) {
+      lastRequestError = thrown
+      emit({ type: 'model.finished', ...metadata, outcome: input.signal?.aborted || isAbortError(thrown) ? 'cancelled' : 'failed', durationMs: performance.now() - requestStartedAt, ...observationError(thrown) })
+      throw thrown
+    }
+  }
 
   const compactions: CompactionRecord[] = []
   const toolCallLogs: AgentToolCallLog[] = []
@@ -151,7 +204,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
       let selected: ReturnType<NonNullable<AgentRuntimeDeps['adapters']['selectAdapterFor']>>
       try {
         if (dynamicKeys) {
-          turn = await withRetry(async () => {
+          turn = await withRetry(async (attemptIndex) => {
             if (input.signal?.aborted) throw abortError()
             if (steps >= maxSteps) throw new StepLimitError()
             if (input.budget) meter.checkBudget(agent.companyId, input.budget)
@@ -163,7 +216,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
             if (!selected) throw new Error('Không còn khoá API khả dụng cho model')
             preferredKeyId = selected.keyId
             steps += 1
-            return collectTurn(selected.adapter, request, input.signal)
+            return observedTurn(selected.adapter, request, attemptIndex, selected.keyId)
           }, {
             attempts: RETRY_ATTEMPTS,
             // Rotation skips a broken key immediately; failover retains retry/backoff.
@@ -174,7 +227,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
           steps += 1
           const adapter = deps.adapter ?? adapters[keyIndex] ?? adapters[0]
           if (!adapter) throw new Error('Không có adapter nào cho model đã chọn')
-          turn = await withRetry(() => collectTurn(adapter, request, input.signal), {
+          turn = await withRetry((attemptIndex) => observedTurn(adapter, request, attemptIndex), {
             attempts: RETRY_ATTEMPTS,
             isRetryable: isRetryableProviderError,
           })
@@ -199,6 +252,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
           deps.adapters.skipFailedKey?.(choice.model, selected.keyId, selected.blockId)
           input.context.log('Khoá API lỗi; thử khoá kế tiếp', { model: choice.model.modelId, keyId: selected.keyId })
           preferredKeyId = null
+          pendingTransition = { strategy: 'key_rotation', error: thrown, previousKeyId: selected.keyId }
           // Next iteration selects a new key without reserving a speculative request.
           if (steps >= maxSteps) {
             stopReason = 'max_steps'
@@ -216,6 +270,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
         // 1) Còn API key khác của cùng model: thử khoá kế tiếp, chưa đổi model.
         if (!deps.adapter && keyIndex + 1 < adapters.length) {
           keyIndex += 1
+          pendingTransition = { strategy: 'key_rotation', error: thrown }
           input.context.log('Khoá API lỗi; thử khoá kế tiếp', {
             model: choice.model.modelId,
             keyIndex,
@@ -240,6 +295,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
             adapters = dynamicKeys ? [] : pickAdapters(deps, choice.model)
             keyIndex = 0
             preferredKeyId = null
+            pendingTransition = { strategy: 'model_fallback', error: thrown }
             input.context.log('Model lỗi; chuyển model dự phòng', {
               from: previous.modelId,
               to: choice.model.modelId,
@@ -284,6 +340,10 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
         toolTimeoutMs,
         input.signal,
         toolCallLogs,
+        (detail) => {
+          if (detail.type === 'tool.finished') toolCount += 1
+          emit({ ...detail, modelId: choice.model.id, providerId: choice.provider.id, requestIndex: requestCount })
+        },
       )
       for (const outcome of outcomes) {
         conversation.push({ role: 'tool', toolCallId: outcome.callId, name: outcome.name, content: outcome.content })
@@ -316,12 +376,21 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
   const status = statusFor(stopReason)
   const usageSnapshot = meter.snapshot()
 
+  let accountingStatus: 'recorded' | 'failed' = 'recorded'
   try {
     meter.finish({ status, steps, latencyMs: Date.now() - startedAt, error: errorMessage, modelId })
   } catch (thrown) {
+    accountingStatus = 'failed'
     // Ghi sổ thất bại không được làm mất câu trả lời agent đã tạo ra.
-    input.context.log('Không ghi được bản ghi lượt chạy', { error: describeError(thrown) })
+    try {
+      input.context.log('Không ghi được bản ghi lượt chạy', { error: describeError(thrown) })
+    } catch { /* Logging cannot prevent the terminal observation either. */ }
   }
+  emit({
+    type: 'run.finished', modelId, providerId: choice.provider.id, status, stopReason,
+    durationMs: Date.now() - startedAt, requestCount, toolCount, accountingStatus,
+    usage: { tokensIn: usageSnapshot.tokensIn, tokensOut: usageSnapshot.tokensOut, cachedTokens: usageSnapshot.cachedTokens, costUsd: usageSnapshot.costUsd },
+  })
 
   return {
     status,
@@ -414,6 +483,8 @@ function messageContentForEstimate(message: LlmMessage): string {
   return `${message.content} ${calls}`.trim()
 }
 
+type ToolObservation = Pick<RuntimeObservation, 'type' | 'toolInvocationId' | 'toolName' | 'outcome' | 'durationMs' | 'errorCode' | 'httpStatus'>
+
 async function executeToolCalls(
   calls: readonly LlmToolCall[],
   granted: ReadonlyMap<string, ToolDefinition>,
@@ -421,14 +492,21 @@ async function executeToolCalls(
   timeoutMs: number,
   signal: AbortSignal | undefined,
   logs: AgentToolCallLog[],
+  observe: (detail: ToolObservation) => void,
 ): Promise<ToolOutcome[]> {
   return Promise.all(
     calls.map(async (call): Promise<ToolOutcome> => {
       const startedAt = Date.now()
       const tool = granted.get(call.name)
+      const toolInvocationId = newId()
+      const toolName = tool?.name ?? 'unknown_tool'
+      const finish = (outcome: RuntimeObservation['outcome'], error?: unknown, errorCode?: string): void => {
+        observe({ type: 'tool.finished', toolInvocationId, toolName, outcome, durationMs: Date.now() - startedAt, ...observationError(error), ...(errorCode ? { errorCode } : {}) })
+      }
 
       // Biên bảo mật: công cụ không được cấp thì không bao giờ chạm tới handler.
       if (!tool) {
+        finish('denied', undefined, 'not_granted')
         logs.push({ name: call.name, argumentsJson: call.argumentsJson, ok: false, durationMs: 0, error: 'not_granted' })
         return {
           callId: call.id,
@@ -441,6 +519,7 @@ async function executeToolCalls(
       try {
         args = parseArguments(call.argumentsJson)
       } catch (thrown) {
+        finish('invalid_arguments', undefined, 'invalid_arguments')
         logs.push({
           name: call.name,
           argumentsJson: call.argumentsJson,
@@ -455,12 +534,15 @@ async function executeToolCalls(
         }
       }
 
+      // Start means a validated, granted handler is about to execute, not a proposal.
+      observe({ type: 'tool.started', toolInvocationId, toolName })
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), timeoutMs)
       try {
         const toolSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
         const result = await withTimeout(tool.handler(args, { ...context, toolCallId: call.id, signal: toolSignal }), timeoutMs)
         const durationMs = Date.now() - startedAt
+        finish(signal?.aborted ? 'cancelled' : result.isError ? 'failed' : 'succeeded', undefined, signal?.aborted ? 'cancelled' : result.isError ? 'tool_error' : undefined)
         logs.push({
           name: call.name,
           argumentsJson: call.argumentsJson,
@@ -472,6 +554,9 @@ async function executeToolCalls(
       } catch (thrown) {
         const durationMs = Date.now() - startedAt
         const message = controller.signal.aborted ? `quá thời gian ${timeoutMs}ms` : describeError(thrown)
+        // A timed-out handler may still complete side effects; this is not rollback.
+        const outcome = signal?.aborted ? 'cancelled' : controller.signal.aborted ? 'timed_out' : isAbortError(thrown) ? 'cancelled' : 'failed'
+        finish(outcome, thrown, outcome === 'timed_out' ? 'tool_timeout' : outcome === 'cancelled' ? 'cancelled' : undefined)
         logs.push({ name: call.name, argumentsJson: call.argumentsJson, ok: false, durationMs, error: message })
         return {
           callId: call.id,
@@ -525,6 +610,23 @@ function abortError(): Error {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
+}
+
+const OBSERVATION_ERROR_CODES = new Set([
+  'unauthorized', 'forbidden', 'not_found', 'validation', 'conflict', 'rate_limited',
+  'provider_error', 'tool_error', 'needs_configuration', 'budget_exceeded', 'internal',
+])
+
+/** Whitelist enum codes and numeric HTTP status only; never forward arbitrary error fields. */
+function observationError(error: unknown): Pick<RuntimeObservation, 'errorCode' | 'httpStatus'> {
+  if (error === undefined) return {}
+  if (isAbortError(error)) return { errorCode: 'cancelled' }
+  if (!isAppError(error)) return { errorCode: 'internal' }
+  const errorCode = OBSERVATION_ERROR_CODES.has(error.code) ? error.code : 'internal'
+  const details = error.details
+  const providerStatus = details && typeof details === 'object' && 'status' in details ? details.status : undefined
+  const status = providerStatus ?? error.status
+  return { errorCode, ...(typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599 ? { httpStatus: status } : {}) }
 }
 
 function describeError(error: unknown): string {

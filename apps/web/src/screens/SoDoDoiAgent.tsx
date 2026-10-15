@@ -6,12 +6,13 @@
  * qua những bước nào". Sơ đồ lấy dữ liệu sống từ `/diagram`, nên khi đổi cấu hình
  * trong màn Đội agent thì sơ đồ đổi theo; đây là lý do không vẽ hình tĩnh.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { AgentRole, DiagramNode, DiagramResponse } from '@marketing-agent/shared'
 import type { MessageKey } from '@marketing-agent/i18n'
-import { api, ApiError } from '../lib/api.ts'
+import { api } from '../lib/api.ts'
+import { WorkflowRealtime } from '../components/workflow/WorkflowRealtime.tsx'
 import { useI18n } from '../lib/i18n.tsx'
-import { Card, DangTai, Nhan, Nut, ThongBao, Trang, TieuDeTrang } from '../components/ui.tsx'
+import { Card, DangTai, Nhan, ThongBao, Trang, TieuDeTrang } from '../components/ui.tsx'
 
 /**
  * Nhãn lớp và thứ tự hiển thị, khớp `layer` trong hợp đồng API.
@@ -48,21 +49,41 @@ const NHAN_VAI_TRO: Readonly<Record<string, MessageKey>> = {
 }
 
 export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, translateError } = useI18n()
   const [duLieu, setDuLieu] = useState<DiagramResponse | null>(null)
-  const [loi, setLoi] = useState<string | null>(null)
+  const [loi, setLoi] = useState<unknown>(null)
   const [dangTai, setDangTai] = useState(true)
-  const [cheDo, setCheDo] = useState<'so-do' | 'luong'>('so-do')
+  const [configCompanyId, setConfigCompanyId] = useState(companyId)
+  const configIsStale = configCompanyId !== companyId
+  const [cheDo, setCheDo] = useState<'so-do' | 'luong' | 'workflow'>('so-do')
+  const tabId = useId()
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const tabs = ['so-do', 'luong', 'workflow'] as const
+  const tabKeys = ['diagram.tab.team', 'diagram.tab.flow', 'diagram.tab.workflow'] as const
+  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let next = index
+    if (event.key === 'ArrowRight') next = (index + 1) % tabs.length
+    else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = tabs.length - 1
+    else return
+    event.preventDefault()
+    setCheDo(tabs[next]!)
+    tabRefs.current[next]?.focus()
+  }
 
   useEffect(() => {
     let cancelled = false
     setDangTai(true)
+    setConfigCompanyId(companyId)
+    setDuLieu(null)
+    setLoi(null)
     void (async () => {
       try {
         const ketQua = await api.diagram(companyId)
         if (!cancelled) setDuLieu(ketQua)
       } catch (error) {
-        if (!cancelled) setLoi(error instanceof ApiError ? error.message : t('diagram.loadFailed'))
+        if (!cancelled) setLoi(error)
       } finally {
         if (!cancelled) setDangTai(false)
       }
@@ -80,25 +101,7 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
     })).filter((lop) => lop.nut.length > 0)
   }, [duLieu])
 
-  const soAgentBat = duLieu?.nodes.filter((node) => node.enabled).length ?? 0
-
-  if (dangTai) {
-    return (
-      <Trang>
-        <DangTai nhan={t('diagram.loading')} />
-      </Trang>
-    )
-  }
-
-  if (loi) {
-    return (
-      <Trang>
-        <ThongBao loai="loi">{loi}</ThongBao>
-      </Trang>
-    )
-  }
-
-  if (!duLieu) return null
+  const soAgentBat = configIsStale ? 0 : duLieu?.nodes.filter((node) => node.enabled).length ?? 0
 
   // Vai trò là mã backend: catalog chỉ dịch mã đã biết, còn lại hiện nguyên mã để sơ đồ
   // không mất tên khi hợp đồng thêm vai trò mới mà giao diện chưa cập nhật.
@@ -110,20 +113,28 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
   return (
     <Trang rong>
       <TieuDeTrang
-        moTa={t('diagram.subtitle', { enabled: formatNumber(soAgentBat), total: formatNumber(duLieu.nodes.length) })}
+        moTa={t('diagram.subtitle', { enabled: formatNumber(soAgentBat), total: formatNumber(configIsStale ? 0 : duLieu?.nodes.length ?? 0) })}
       >
         {t('diagram.title')}
       </TieuDeTrang>
 
-      <div className="hang" style={{ marginBottom: 16 }}>
-        <Nut bien={cheDo === 'so-do' ? 'chinh' : 'phu'} nho onClick={() => setCheDo('so-do')}>
-          {t('diagram.tab.team')}
-        </Nut>
-        <Nut bien={cheDo === 'luong' ? 'chinh' : 'phu'} nho onClick={() => setCheDo('luong')}>
-          {t('diagram.tab.flow')}
-        </Nut>
+      <div className="workflow__tabs" role="tablist" aria-label={t('diagram.title')}>
+        {tabs.map((tab, index) => (
+          <button key={tab} type="button" role="tab" id={`${tabId}-${tab}`}
+            aria-selected={cheDo === tab} aria-controls={`${tabId}-panel-${tab}`}
+            tabIndex={cheDo === tab ? 0 : -1} ref={(element) => { tabRefs.current[index] = element }}
+            onKeyDown={(event) => onTabKeyDown(event, index)} onClick={() => setCheDo(tab)}>
+            {t(tabKeys[index]!)}
+          </button>
+        ))}
       </div>
-
+      {tabs.map((tab) => (
+        <div key={tab} role="tabpanel" id={`${tabId}-panel-${tab}`} aria-labelledby={`${tabId}-${tab}`}
+          hidden={cheDo !== tab} tabIndex={0} className="workflow__tab-panel">
+          {cheDo === tab && (tab === 'workflow' ? <WorkflowRealtime key={companyId} companyId={companyId} /> :
+            (dangTai || configIsStale) ? <DangTai nhan={t('diagram.loading')} /> :
+            loi ? <ThongBao loai="loi">{translateError(loi)}</ThongBao> : duLieu ? (
+      <>
       {cheDo === 'so-do' ? (
         <>
           <Card tieuDe={t('diagram.structure.title')} phu={t('diagram.structure.subtitle')}>
@@ -231,6 +242,10 @@ export function SoDoDoiAgent({ companyId }: { companyId: string }): ReactNode {
           </Card>
         </>
       )}
+      </>
+      ) : null)}
+        </div>
+      ))}
     </Trang>
   )
 }

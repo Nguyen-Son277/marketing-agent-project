@@ -27,6 +27,16 @@ export const ORCHESTRATOR_EVENT_TYPES = [
   'agent.started',
   /** Một công cụ đã được gọi. */
   'tool.called',
+  /** Metadata-only runtime lifecycle (shared WorkflowRuntimeEventType). */
+  'run.started',
+  'run.finished',
+  'model.started',
+  'model.finished',
+  'run.retrying',
+  'tool.started',
+  'tool.finished',
+  /** Conversation phase changed. */
+  'conversation.updated',
   /** Tài sản đầu ra mới. */
   'artifact.created',
   /** Trao đổi giữa các agent. */

@@ -22,11 +22,12 @@ import type {
   SendMessageResponse,
 } from '@marketing-agent/shared'
 import type { AppContext } from '../context.ts'
-import { readAuth, requireMembership, requireWork } from '../http/middleware.ts'
+import { readAuth, requireMembership, requireWork, SESSION_COOKIE } from '../http/middleware.ts'
 import type { RequestContext, Router } from '../http/router.ts'
 import { orchestratorFor } from '../services/agent-services.ts'
 import { readRunState, saveRunState } from '../services/company-settings.ts'
 import { conversationMembership } from '../services/resource-access.ts'
+import { workflowSnapshot } from '../services/workflow-snapshot.ts'
 import {
   buildTaskViews,
   conversationCost,
@@ -95,6 +96,15 @@ export function chatRoutes() {
             usage: { tokensIn: usage.tokensIn, tokensOut: usage.tokensOut, runs: usage.runs },
           }
           request.json(200, response)
+        },
+        [conversationMembership(repos)],
+      )
+
+      router.get(
+        '/api/conversations/:id/workflow',
+        (request) => {
+          const { companyId, conversationId } = conversationScope(request)
+          request.json(200, workflowSnapshot(ctx, companyId, conversationId))
         },
         [conversationMembership(repos)],
       )
@@ -257,19 +267,29 @@ function streamConversation(
   conversationId: string,
 ): void {
   const writer = request.sse()
+  // These are best-effort in-process hints only. Reconnects must reconcile GET /workflow;
+  // the timestamp header is not a lossless Last-Event-ID replay cursor.
   const since =
     request.query('since') ?? (typeof request.req.headers['last-event-id'] === 'string' ? request.req.headers['last-event-id'] : undefined)
 
   for (const past of ctx.events.since(companyId, since)) {
-    if (eventMatchesConversation(past.payload, conversationId)) writer.send(past.type, past)
+    if (eventMatchesConversation(ctx, past.payload, companyId, conversationId)) writer.send(past.type, past)
   }
 
   const unsubscribe = ctx.events.subscribe(companyId, (event) => {
-    if (!eventMatchesConversation(event.payload, conversationId)) return
+    if (!eventMatchesConversation(ctx, event.payload, companyId, conversationId)) return
+    if (!streamAccessStillValid(ctx, request, companyId, conversationId)) {
+      writer.end()
+      return
+    }
     writer.send(event.type, event)
   })
   const heartbeat = setInterval(() => {
     if (writer.closed) return
+    if (!streamAccessStillValid(ctx, request, companyId, conversationId)) {
+      writer.end()
+      return
+    }
     writer.comment(`heartbeat ${new Date().toISOString()}`)
   }, 25_000)
   heartbeat.unref?.()
@@ -280,10 +300,41 @@ function streamConversation(
   })
 }
 
-/** Sự kiện thuộc phiên khi payload nhắc tới phiên này, hoặc không nhắc phiên nào. */
-function eventMatchesConversation(payload: unknown, conversationId: string): boolean {
-  if (!payload || typeof payload !== 'object') return true
-  const value = (payload as Record<string, unknown>)['conversationId']
-  if (value === undefined || value === null) return true
-  return value === conversationId
+/** Producer conversation scope wins; old task-only events resolve within the company. */
+export function eventMatchesConversation(
+  ctx: AppContext,
+  payload: unknown,
+  companyId: string,
+  conversationId: string,
+): boolean {
+  if (!payload || typeof payload !== 'object') return false
+  const value = payload as Record<string, unknown>
+  if (value.companyId !== undefined && value.companyId !== companyId) return false
+  if (typeof value.conversationId === 'string') return value.conversationId === conversationId
+  if (value.conversationId !== undefined && value.conversationId !== null) return false
+  if (typeof value.taskId !== 'string' || !value.taskId) return false
+  return ctx.repos.work.findTask(value.taskId, companyId)?.conversationId === conversationId
+}
+
+/** Re-read session/user/member/account restrictions instead of trusting the opening request. */
+export function streamAccessStillValid(
+  ctx: AppContext,
+  request: RequestContext,
+  companyId: string,
+  conversationId: string,
+): boolean {
+  try {
+    const auth = readAuth(request)
+    const token = request.cookies()[SESSION_COOKIE]
+    if (!auth || !token) return false
+    const resolved = ctx.repos.auth.resolveSession(token)
+    if (!resolved || resolved.sessionId !== auth.sessionId || resolved.user.id !== auth.user.id) return false
+    const user = resolved.user
+    if (user.approvalStatus !== 'approved' || user.mustChangePassword || user.accountType === 'employee' || user.isAdmin) return false
+    return !!ctx.repos.auth.membership(companyId, user.id) &&
+      !!ctx.repos.work.findConversation(conversationId, companyId)
+  } catch {
+    // Fail closed without publishing session tokens or raw auth/repository errors.
+    return false
+  }
 }

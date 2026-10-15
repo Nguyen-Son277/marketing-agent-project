@@ -14,6 +14,7 @@ import { LlmRepo } from './repos/llm.ts'
 import { TeamRepo } from './repos/team.ts'
 import { WorkRepo } from './repos/work.ts'
 import { WorkforceRepo } from './repos/workforce.ts'
+import { DailyReportsRepo } from './repos/daily-reports.ts'
 
 export interface Repos {
   readonly db: Database
@@ -25,6 +26,7 @@ export interface Repos {
   readonly work: WorkRepo
   readonly accounting: AccountingRepo
   readonly workforce: WorkforceRepo
+  readonly dailyReports: DailyReportsRepo
 }
 
 export interface CreateReposOptions extends OpenDatabaseOptions {
@@ -55,6 +57,7 @@ export function createRepos(options: CreateReposOptions): Repos {
     secrets,
     auth,
     workforce: new WorkforceRepo(db, auth),
+    dailyReports: new DailyReportsRepo(db, secrets),
     llm,
     team,
     knowledge: new KnowledgeRepo(db),
@@ -71,6 +74,7 @@ export * from './vector.ts'
 export * from './repos/accounting.ts'
 export * from './repos/auth.ts'
 export * from './repos/knowledge.ts'
+export type { ClassificationJobRecord, KbSectionRecord } from '@marketing-agent/shared'
 export * from './repos/llm.ts'
 export * from './repos/team.ts'
 export * from './repos/work.ts'

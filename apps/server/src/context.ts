@@ -6,7 +6,9 @@
  * resolve anything else per request (provider keys, ACLs) through these.
  */
 import type { Repos } from '@marketing-agent/db'
+import type { WorkflowActiveRun } from '@marketing-agent/shared'
 import type { ServerConfig } from './config.ts'
+import { WorkflowLiveRegistry } from './services/workflow-live.ts'
 
 /** A registered raw tool plus the roles allowed to call it by default. */
 export interface ToolCatalogEntry {
@@ -43,7 +45,8 @@ type Listener = (event: AppEvent) => void
  */
 export class EventBus {
   private readonly listeners = new Map<string, Set<Listener>>()
-  /** Bounded ring of recent events per company, so a reconnecting client can catch up. */
+  private readonly workflow = new WorkflowLiveRegistry()
+  /** Best-effort bounded hints only; snapshot reconciliation, not durable replay. */
   private readonly recent = new Map<string, AppEvent[]>()
   private readonly recentLimit: number
 
@@ -65,6 +68,11 @@ export class EventBus {
   }
 
   publish(event: AppEvent): void {
+    try {
+      this.workflow.observe(event.companyId, event.payload)
+    } catch {
+      // Observability must not break execution or notification delivery.
+    }
     let buffer = this.recent.get(event.companyId)
     if (!buffer) {
       buffer = []
@@ -84,7 +92,12 @@ export class EventBus {
     }
   }
 
-  /** Events after an instant, for a reconnecting SSE client. */
+  /** Exact-scope in-memory activity; persisted running rows are not consulted. */
+  workflowActivity(companyId: string, conversationId: string): WorkflowActiveRun[] {
+    return this.workflow.activity(companyId, conversationId)
+  }
+
+  /** Best-effort events after an instant. No lossless Last-Event-ID guarantee. */
   since(companyId: string, sinceIso: string | undefined): AppEvent[] {
     const buffer = this.recent.get(companyId) ?? []
     if (!sinceIso) return []

@@ -538,7 +538,7 @@ describe('dispatchPlan', () => {
     expect(blocked?.reason).toMatch(/phụ thuộc/i)
   })
 
-  it('phát sự kiện cho mỗi việc kết thúc', async () => {
+  it('không phát sự kiện của task thiếu scope sang stream cuộc trao đổi', async () => {
     const plan = makePlan()
     seedTasks(plan)
     const events: string[] = []
@@ -556,8 +556,8 @@ describe('dispatchPlan', () => {
       log: () => {},
     })
 
-    expect(events).toContain('agent.started')
-    expect(events).toContain('task.updated')
+    expect(events).not.toContain('agent.started')
+    expect(events).not.toContain('task.updated')
   })
 })
 

@@ -14,6 +14,9 @@ import {
   type MessageRecord,
   type TaskRecord,
   type TaskStatus,
+  type WorkflowDependency,
+  type WorkflowRunSummary,
+  type WorkflowTaskNode,
   TERMINAL_TASK_STATUSES,
 } from '@marketing-agent/shared'
 import type { Database } from '../database.ts'
@@ -61,6 +64,43 @@ interface TaskRow {
   revision_count: number
   created_at: string
   updated_at: string
+}
+
+interface WorkflowTaskRow {
+  id: string
+  conversation_id: string
+  parent_task_id: string | null
+  assignee_agent_def_id: string | null
+  assignee_role: string | null
+  assignee_name: string | null
+  title: string
+  status: TaskStatus
+  priority: number
+  revision_count: number
+  deadline: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface WorkflowRunRow {
+  id: string
+  task_id: string | null
+  conversation_id: string
+  agent_def_id: string
+  agent_role: string
+  agent_name: string
+  model_id: string | null
+  model_label: string | null
+  provider_id: string | null
+  effective_provider_id: string | null
+  status: WorkflowRunSummary['status']
+  tokens_in: number
+  tokens_out: number
+  cost_usd: number
+  latency_ms: number
+  steps: number
+  created_at: string
+  total_count: number
 }
 
 interface ArtifactRow {
@@ -232,6 +272,126 @@ export class WorkRepo {
     )
     if (result.changes === 0) throw notFound('Không tìm thấy cuộc trao đổi')
     return this.requireConversation(id, companyId)
+  }
+
+  /** Metadata-only, consistent workflow graph; never silently returns a cut task graph. */
+  workflowData(companyId: string, conversationId: string): {
+    tasks: WorkflowTaskNode[]
+    dependencies: WorkflowDependency[]
+    runs: WorkflowRunSummary[]
+    historyTruncated: boolean
+  } {
+    // Empty scope must not degrade to a company-wide read.
+    if (!companyId || !conversationId) {
+      return { tasks: [], dependencies: [], runs: [], historyTruncated: false }
+    }
+    return this.db.tx(() => {
+      const scope = { companyId, conversationId }
+      const taskRows = this.db.all<WorkflowTaskRow>(
+        `SELECT t.id, t.conversation_id, parent.id AS parent_task_id,
+                t.assignee_agent_def_id, a.role AS assignee_role,
+                COALESCE(p.display_name, a.name) AS assignee_name,
+                t.title, t.status, t.priority, t.revision_count, t.deadline, t.created_at, t.updated_at
+           FROM tasks t
+           LEFT JOIN tasks parent ON parent.id = t.parent_task_id
+             AND parent.company_id = @companyId AND parent.conversation_id = @conversationId
+           LEFT JOIN agent_defs a ON a.id = t.assignee_agent_def_id
+           LEFT JOIN agent_presets p ON p.agent_def_id = a.id AND p.company_id = @companyId
+          WHERE t.company_id = @companyId AND t.conversation_id = @conversationId
+          ORDER BY t.created_at ASC, t.id ASC LIMIT 501`,
+        scope,
+      )
+      if (taskRows.length > 500) {
+        throw conflict('Workflow exceeds the supported limit of 500 tasks')
+      }
+      const artifactCounts = new Map(this.db.all<{ task_id: string; n: number }>(
+        `SELECT a.task_id, COUNT(*) AS n FROM artifacts a
+           JOIN tasks t ON t.id = a.task_id
+          WHERE a.company_id = @companyId AND t.company_id = @companyId
+            AND t.conversation_id = @conversationId
+          GROUP BY a.task_id`,
+        scope,
+      ).map((row) => [row.task_id, row.n]))
+      const tasks: WorkflowTaskNode[] = taskRows.map((row) => ({
+        id: row.id,
+        conversationId: row.conversation_id,
+        parentTaskId: row.parent_task_id,
+        agentDefId: row.assignee_agent_def_id,
+        assigneeRole: row.assignee_role,
+        assigneeName: row.assignee_name,
+        title: row.title,
+        status: row.status,
+        priority: row.priority,
+        revisionCount: row.revision_count,
+        deadline: row.deadline,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        artifactCount: artifactCounts.get(row.id) ?? 0,
+      }))
+      const dependencies = this.db.all<{ task_id: string; depends_on_task_id: string }>(
+        `SELECT d.task_id, d.depends_on_task_id FROM task_deps d
+           JOIN tasks target ON target.id = d.task_id
+           JOIN tasks source ON source.id = d.depends_on_task_id
+          WHERE target.company_id = @companyId AND target.conversation_id = @conversationId
+            AND source.company_id = @companyId AND source.conversation_id = @conversationId
+          ORDER BY d.depends_on_task_id ASC, d.task_id ASC`,
+        scope,
+      ).map((row): WorkflowDependency => ({
+        id: JSON.stringify([row.depends_on_task_id, row.task_id]),
+        sourceTaskId: row.depends_on_task_id,
+        targetTaskId: row.task_id,
+      }))
+      // Rank in SQLite so historical rows (and raw error text) never become a huge
+      // application payload. Null-task leaders form their own per-agent groups.
+      const runRows = this.db.all<WorkflowRunRow>(
+        `WITH ranked AS (
+           SELECT r.id, r.task_id, r.conversation_id, r.agent_def_id, r.model_id, r.provider_id,
+                  r.status, r.tokens_in, r.tokens_out, r.cost_usd, r.latency_ms, r.steps, r.created_at,
+                  ROW_NUMBER() OVER (PARTITION BY r.task_id, r.agent_def_id ORDER BY r.created_at DESC, r.id DESC) AS pair_rank,
+                  ROW_NUMBER() OVER (ORDER BY r.created_at DESC, r.id DESC) AS history_rank,
+                  COUNT(*) OVER () AS total_count
+             FROM runs r
+            WHERE r.company_id = @companyId AND r.conversation_id = @conversationId
+              AND (r.task_id IS NULL OR EXISTS (
+                SELECT 1 FROM tasks t WHERE t.id = r.task_id
+                  AND t.company_id = @companyId AND t.conversation_id = @conversationId
+              ))
+         )
+         SELECT r.id, r.task_id, r.conversation_id, r.agent_def_id, r.model_id, r.provider_id,
+                r.status, r.tokens_in, r.tokens_out, r.cost_usd, r.latency_ms, r.steps, r.created_at, r.total_count,
+                COALESCE(a.role, r.agent_def_id) AS agent_role,
+                COALESCE(p.display_name, a.name, r.agent_def_id) AS agent_name, m.label AS model_label, COALESCE(m.provider_id, r.provider_id) AS effective_provider_id
+           FROM ranked r
+           LEFT JOIN agent_defs a ON a.id = r.agent_def_id
+           LEFT JOIN agent_presets p ON p.agent_def_id = a.id AND p.company_id = @companyId
+           LEFT JOIN llm_models m ON m.id = r.model_id AND EXISTS (
+             SELECT 1 FROM llm_providers provider WHERE provider.id = m.provider_id AND provider.company_id = @companyId
+           )
+          WHERE r.status = 'running' OR r.pair_rank = 1 OR r.history_rank <= 50
+          ORDER BY r.created_at DESC, r.id DESC`,
+        scope,
+      )
+      const runs: WorkflowRunSummary[] = runRows.map((row) => ({
+        id: row.id,
+        taskId: row.task_id,
+        conversationId: row.conversation_id,
+        agentDefId: row.agent_def_id,
+        agentRole: row.agent_role,
+        agentName: row.agent_name,
+        modelId: row.model_id,
+        modelLabel: row.model_label,
+        providerId: row.effective_provider_id,
+        status: row.status,
+        tokensIn: row.tokens_in,
+        tokensOut: row.tokens_out,
+        costUsd: row.cost_usd,
+        latencyMs: row.latency_ms,
+        steps: row.steps,
+        createdAt: row.created_at,
+        activity: row.status === 'running' ? 'unverified' : 'terminal',
+      }))
+      return { tasks, dependencies, runs, historyTruncated: (runRows[0]?.total_count ?? 0) > runs.length }
+    })
   }
 
   /* ------------------------------------------------------------- messages */
@@ -429,11 +589,16 @@ export class WorkRepo {
   }
 
   listDependencies(companyId: string, taskIds?: readonly string[]): { taskId: string; dependsOnTaskId: string }[] {
-    if (taskIds && taskIds.length > 0) {
+    if (taskIds) {
+      if (taskIds.length === 0) return []
       const placeholders = taskIds.map(() => '?').join(', ')
       return this.db.all<{ task_id: string; depends_on_task_id: string }>(
-        `SELECT task_id, depends_on_task_id FROM task_deps WHERE task_id IN (${placeholders})`,
-        [...taskIds],
+        `SELECT d.task_id, d.depends_on_task_id FROM task_deps d
+           JOIN tasks target ON target.id = d.task_id
+           JOIN tasks source ON source.id = d.depends_on_task_id
+          WHERE target.company_id = ? AND source.company_id = ?
+            AND d.task_id IN (${placeholders}) AND d.depends_on_task_id IN (${placeholders})`,
+        [companyId, companyId, ...taskIds, ...taskIds],
       ).map((row) => ({ taskId: row.task_id, dependsOnTaskId: row.depends_on_task_id }))
     }
     return this.db
@@ -441,8 +606,9 @@ export class WorkRepo {
         `SELECT d.task_id, d.depends_on_task_id
            FROM task_deps d
            JOIN tasks t ON t.id = d.task_id
-          WHERE t.company_id = ?`,
-        [companyId],
+            JOIN tasks source ON source.id = d.depends_on_task_id
+          WHERE t.company_id = ? AND source.company_id = ?`,
+        [companyId, companyId],
       )
       .map((row) => ({ taskId: row.task_id, dependsOnTaskId: row.depends_on_task_id }))
   }
@@ -573,6 +739,7 @@ export class WorkRepo {
     companyId: string,
     options: { taskId?: string; conversationTaskIds?: readonly string[]; limit?: number } = {},
   ): AgentMessageRecord[] {
+    if (!options.taskId && options.conversationTaskIds?.length === 0) return []
     const params: unknown[] = [companyId]
     let sql = 'SELECT * FROM agent_messages WHERE company_id = ?'
     if (options.taskId) {

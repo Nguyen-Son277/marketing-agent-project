@@ -14,6 +14,7 @@ import type { AgentRuntimeDeps } from '@marketing-agent/agent-runtime'
 import type { EmbeddingProvider } from '@marketing-agent/kb'
 import type { ToolRegistry } from '@marketing-agent/tools'
 import { runAgentForTask } from './agent-runner.ts'
+import type { AppEvent } from './events.ts'
 import type { DispatchSummary, OrchestratorLimits, ReviewDecision, TaskOutcome } from './types.ts'
 
 export interface ReviewInput {
@@ -26,6 +27,7 @@ export interface ReviewInput {
   readonly brief: string
   readonly summary: DispatchSummary
   readonly limits: OrchestratorLimits
+  readonly publish?: ((event: AppEvent) => void) | undefined
   readonly log?: ((message: string, data?: unknown) => void) | undefined
 }
 
@@ -51,7 +53,7 @@ export function mechanicalChecks(summary: DispatchSummary): ReviewIssue[] {
       })
       continue
     }
-    if (outcome.status === 'failed') {
+    if (outcome.status === 'failed' || outcome.status === 'cancelled') {
       issues.push({
         kind: 'failed_task',
         severity: 'blocker',
@@ -175,6 +177,7 @@ async function askLeaderToJudge(input: ReviewInput, issues: readonly ReviewIssue
     tools: input.tools,
     embedding: input.embedding,
     runtimeOverrides: input.runtimeOverrides,
+    publish: input.publish,
     companyId: input.companyId,
     role: 'marketing-leader',
     taskId: null,

@@ -19,6 +19,12 @@ liệu và mã lệch nhau, **mã nguồn thắng** — và chỗ lệch đượ
 
 ---
 
+## Kho kiến thức tải file (đã triển khai)
+
+`POST /api/companies/:companyId/knowledge/upload` nhận multipart một file; UI gửi tuần tự tối đa 10 file. Trường `category` là mã danh mục hợp lệ, `tags` là mảng JSON tùy chọn. Định dạng: PDF có lớp văn bản, DOCX, TXT UTF-8, Markdown; tối đa 10 MiB bản gốc và 2 triệu ký tự sau trích. PDF scan/ảnh, file có mật khẩu/hỏng hoặc không có văn bản bị từ chối rõ ràng.
+
+`GET .../knowledge/:docId` trả `{document}` với nội dung; `GET .../knowledge/:docId/download` tải bản gốc có kiểm membership. File upload trong danh sách chỉ có metadata và `content: ''`, không lộ storage key. PATCH file upload chỉ sửa metadata; nội dung gốc chỉ đọc. DELETE xóa cả nguồn được quản lý, chunks và vector. Reindex dùng cả nguồn trong DB và Markdown cũ nếu có, không báo lỗi khi chưa có thư mục. Chỉ số `embedded` trong danh sách là số tài liệu có đủ vector (không phải tổng vector).
+
 ## 1. Quy ước chung
 
 | Quy ước | Chi tiết |
@@ -118,6 +124,8 @@ Body: `updateTeamMemberSchema` — mọi trường đều tuỳ chọn; `knowled
 
 | Method | Path | Quyền | Mô tả | Phản hồi | Trạng thái |
 |---|---|---|---|---|---|
+| `POST` | `/api/companies/:companyId/knowledge/upload` | `requireWork` | Multipart một `file`, `category`, optional `title`, `tags` JSON array; PDF văn bản/DOCX/TXT/MD, 10 MiB/file | `201 { document, warning? }` hoặc `200 { document, duplicate: true }` | ✅ |
+| `GET` | `/api/companies/:companyId/knowledge/:docId/download` | membership | Tải bản gốc riêng tư, attachment | binary | ✅ |
 | `GET` | `/api/companies/:companyId/knowledge` | membership | Danh sách tài liệu + 6 danh mục kèm số lượng + thống kê `{documents, chunks, embedded}` | `KnowledgeResponse` | ⏳ |
 | `POST` | `/api/companies/:companyId/knowledge` | `requireWork` | Thêm tài liệu; server index ngay | `KnowledgeDocumentView` | ⏳ |
 | `GET` | `/api/companies/:companyId/knowledge/:docId` | membership | Chi tiết tài liệu, kèm `content` | `KnowledgeDocumentView` | ⏳ |
@@ -143,7 +151,8 @@ Body: `upsertKnowledgeSchema` `{ path, title, category, tags[], content }`;
 | `POST` | `/api/conversations/:id/plan` | `requireWork` | Sinh DAG từ brief đã chốt (validate chu trình + role) | `{ tasks: TaskView[] }` hoặc lỗi `validation` | ⏳ |
 | `POST` | `/api/conversations/:id/run` | `requireWork` | Thực thi kế hoạch theo thứ tự topo (task cùng mức chạy song song) | `{ tasks: TaskView[], status }` | ⏳ |
 | `POST` | `/api/conversations/:id/report` | `requireWork` | Tổng hợp báo cáo **7 mục** thành artifact | `{ artifact: ArtifactView }` | ⏳ |
-| `GET` | `/api/conversations/:id/stream` | membership | **SSE** — nhận sự kiện trực tiếp (§3) | `text/event-stream` | ⏳ |
+| `GET` | `/api/conversations/:id/stream` | membership | **SSE** — nhận sự kiện trực tiếp (§3) | `text/event-stream` | ✅ |
+| `GET` | `/api/conversations/:id/workflow` | membership (kể cả viewer) | Snapshot task-DAG theo ID, run tóm tắt và hoạt động runtime của đúng cuộc trao đổi; không khởi động công việc | `WorkflowSnapshotResponse` | ✅ |
 
 Body: `createConversationSchema` `{ title }`; `sendMessageSchema`
 `{ content, autoPlan }`.
@@ -268,17 +277,50 @@ data: <json>
 Payload chính xác tuỳ từng nơi phát; giao diện nên đọc `type` trước rồi mới đọc
 `payload`, và bỏ qua an toàn những sự kiện chưa biết.
 
-### 3.2 Ví dụ thô
+### 3.2 Workflow realtime và giới hạn đồng bộ
+
+Tab **Workflow realtime** trong **Sơ đồ đội agent** là màn theo dõi chỉ đọc, không
+phải workflow editor hay bộ điều khiển Run/Stop. Snapshot là nguồn sự thật:
+
+- Node là task ID; cạnh đi từ prerequisite đến task phụ thuộc. Hai task cùng tên
+  hoặc cùng agent vẫn là các node khác nhau. Quan hệ đội agent cấu hình tĩnh không
+  phải bằng chứng của luồng đang thực thi.
+- `activeRuns` lấy từ registry của tiến trình đang chạy. Run DB còn `running` nhưng
+  không có trong registry được đánh dấu `unverified`, không tự phát animation sau
+  restart. Không có cơ chế tự resume công việc hoặc rollback tool.
+- Snapshot trả mọi task tới trần 500; quá trần là lỗi rõ ràng, không cắt DAG âm thầm.
+  Trên 100 task dùng danh sách thay vì canvas. Run history chỉ giữ phần cần thiết
+  (active/latest per task-agent và 50 lịch sử gần nhất); `historyTruncated` báo phần
+  lịch sử bị giới hạn.
+- Usage là số đã ghi sổ, không phải token/cost streaming chính xác trong lúc model
+  chạy. Nội dung brief/kết quả/tài sản tải riêng từ task detail khi chọn node.
+- SSE chỉ là tín hiệu invalidation/best-effort live metadata: không bảo đảm durable
+  replay hoặc lịch sử đầy đủ qua `Last-Event-ID`. Client refetch khi mở/reconnect,
+  gom các cập nhật nhanh, kiểm chứng định kỳ và bỏ response lỗi thời khi đổi scope.
+
+Các sự kiện runtime mới là `run.started`, `run.finished`, `model.started`,
+`model.finished`, `run.retrying`, `tool.started`, `tool.finished`; thêm
+`conversation.updated` cho phase. Payload runtime gồm IDs phạm vi đáng tin, enum
+kết quả, bộ đếm request, thời lượng và usage số; **không** gồm prompt, reasoning,
+raw arguments/results, lỗi provider nguyên văn, key/nhãn key hay headers. Tool
+start phát ngay trước handler, không chờ cả agent kết thúc. Task kết thúc được
+thông báo ngay cả khi một task song song khác vẫn đang chạy.
+
+Wire `data` có phong bì `{ type, companyId, payload, at }`; client helper tách
+`payload` cho nơi sử dụng. Stream chỉ nhận sự kiện thuộc cuộc trao đổi được kiểm
+quyền, không coi một sự kiện thiếu scope là của tất cả cuộc trao đổi.
+
+### 3.3 Ví dụ thô
 
 ```
 event: brief.updated
-data: {"briefComplete":false,"missingFields":["ngân sách","thời hạn"]}
+data: {"type":"brief.updated","companyId":"co_1","payload":{"conversationId":"conv_1","complete":false,"missing":["budget","deadline"]},"at":"2026-10-14T03:00:00.000Z"}
 
 event: task.updated
-data: {"taskId":"tsk_ab12","status":"in_progress"}
+data: {"type":"task.updated","companyId":"co_1","payload":{"conversationId":"conv_1","taskId":"tsk_ab12","status":"in_progress"},"at":"2026-10-14T03:00:01.000Z"}
 
 event: report.created
-data: {"artifactId":"art_9f3c"}
+data: {"type":"report.created","companyId":"co_1","payload":{"conversationId":"conv_1","artifactId":"art_9f3c"},"at":"2026-10-14T03:00:02.000Z"}
 ```
 
 ---

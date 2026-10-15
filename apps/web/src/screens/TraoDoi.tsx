@@ -792,6 +792,10 @@ export function moTaSuKien(event: StreamEvent, t: Translate): string | null {
       const thamSo = { role: String(data['agentRole'] ?? ''), tool: String(data['tool'] ?? '') }
       return data['ok'] === false ? t('chat.event.toolCalledFailed', thamSo) : t('chat.event.toolCalled', thamSo)
     }
+    case 'tool.finished': {
+      const thamSo = { role: String(data['agentRole'] ?? ''), tool: String(data['toolName'] ?? '') }
+      return data['outcome'] === 'succeeded' ? t('chat.event.toolCalled', thamSo) : t('chat.event.toolCalledFailed', thamSo)
+    }
     case 'task.updated': {
       const title = String(data['title'] ?? '')
       // Trạng thái trong payload là mã máy; dịch qua cùng bảng với bảng kế hoạch để nhật

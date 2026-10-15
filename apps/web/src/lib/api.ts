@@ -29,6 +29,7 @@ import type {
   IntegrationView,
   IntegrationsResponse,
   KnowledgeResponse,
+  KnowledgeDocumentView,
   ModelOptionView,
   ModelRouteView,
   ProviderKeyView,
@@ -53,6 +54,7 @@ import type {
   UpdateTeamMemberBody,
   UpsertIntegrationBody,
   UpsertRouteBody,
+  WorkflowSnapshotResponse,
 } from '@marketing-agent/shared'
 
 export class ApiError extends Error {
@@ -131,14 +133,17 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     Accept: 'application/json',
     'Accept-Language': readLocale(),
   }
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
   const response = await fetch(path, {
     method: options.method ?? 'GET',
     credentials: 'same-origin',
     headers:
-      options.body === undefined
+      options.body === undefined || isFormData
         ? baseHeaders
         : { ...baseHeaders, 'Content-Type': 'application/json' },
-    ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+    ...(options.body === undefined
+      ? {}
+      : { body: isFormData ? (options.body as FormData) : JSON.stringify(options.body) }),
     ...(options.signal ? { signal: options.signal } : {}),
   })
 
@@ -173,6 +178,60 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   return payload as T
+}
+
+/** Classification data added by the file-upload workflow; kept local to the web client. */
+export interface ClassificationModelSettings {
+  mode: 'leader' | 'custom'
+  modelFk: string | null
+  fallbackModelFks: string[]
+}
+
+export interface ClassificationEffectiveModel {
+  id: string
+  modelId: string
+  label: string
+  providerId: string
+  providerName: string
+}
+
+export interface ClassificationModelSettingsResponse {
+  settings: ClassificationModelSettings
+  effectiveModels: ClassificationEffectiveModel[]
+  valid: boolean
+  issues: string[]
+  source: 'leader' | 'custom'
+}
+
+export interface ClassificationModelSettingsTestResponse {
+  ok: boolean
+  message: string
+  model?: ClassificationEffectiveModel
+}
+
+export interface KnowledgeClassificationFields {
+  classificationStatus?: 'pending' | 'running' | 'ready' | 'failed'
+  classificationError?: string | null
+  categories?: string[]
+  sectionCount?: number
+  chunkCount?: number
+  classificationNextAttemptAt?: string | null
+}
+
+export interface KnowledgeSectionView {
+  id: string
+  title: string
+  category: string
+  tags: string[]
+  confidence: number | null
+  startOffset: number
+  endOffset: number
+  assignmentSource: string
+}
+
+export interface KnowledgeDocumentDetailResponse {
+  document: KnowledgeDocumentView & KnowledgeClassificationFields
+  sections?: KnowledgeSectionView[]
 }
 
 /** Client có kiểu cho từng endpoint. */
@@ -275,6 +334,60 @@ export const api = {
     return request(`/api/companies/${companyId}/knowledge`, { method: 'POST', body: input })
   },
 
+  async uploadKnowledge(
+    companyId: string,
+    input: { file: File; category?: string; title?: string; tags?: string[] },
+  ): Promise<{ document: KnowledgeDocumentView & KnowledgeClassificationFields; job?: unknown; duplicate?: boolean; warning?: string }> {
+    const form = new FormData()
+    form.append('file', input.file)
+    if (input.category) form.append('category', input.category)
+    if (input.title) form.append('title', input.title)
+    if (input.tags) form.append('tags', JSON.stringify(input.tags))
+    return request(`/api/companies/${encodeURIComponent(companyId)}/knowledge/upload`, {
+      method: 'POST',
+      body: form,
+    })
+  },
+
+  async knowledgeDocument(companyId: string, documentId: string): Promise<KnowledgeDocumentDetailResponse> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}`)
+  },
+
+  async knowledgeClassification(companyId: string, documentId: string): Promise<{ job: unknown }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}/classification`)
+  },
+
+  async retryKnowledgeClassification(companyId: string, documentId: string): Promise<{ job: unknown }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}/classification/retry`, { method: 'POST', body: {} })
+  },
+
+  async retryFailedKnowledge(companyId: string): Promise<{ queued: number; processing: number; failed: number }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/knowledge/classification/retry`, { method: 'POST', body: {} })
+  },
+
+  async updateKnowledgeSection(
+    companyId: string,
+    documentId: string,
+    sectionId: string,
+    input: { category: string; tags: string[] },
+  ): Promise<KnowledgeDocumentDetailResponse> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}/sections/${encodeURIComponent(sectionId)}`, { method: 'PATCH', body: input })
+  },
+
+  knowledgeDownloadUrl(companyId: string, documentId: string): string {
+    return `/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}/download`
+  },
+
+  async updateKnowledgeMetadata(
+    companyId: string,
+    documentId: string,
+    input: { title: string; category?: string; tags: string[] },
+  ): Promise<{ document: KnowledgeDocumentView }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}`, {
+      method: 'PATCH', body: input,
+    })
+  },
+
   async deleteKnowledge(companyId: string, documentId: string): Promise<void> {
     await request(`/api/companies/${companyId}/knowledge/${documentId}`, { method: 'DELETE' })
   },
@@ -285,8 +398,12 @@ export const api = {
 
   /* ------------------------------------------------------------ trao đổi */
 
-  async conversations(companyId: string): Promise<{ conversations: ConversationView[] }> {
-    return request(`/api/companies/${companyId}/conversations`)
+  async conversations(companyId: string, signal?: AbortSignal): Promise<{ conversations: ConversationView[] }> {
+    return request(`/api/companies/${companyId}/conversations`, { signal })
+  },
+
+  async workflow(conversationId: string, signal?: AbortSignal): Promise<WorkflowSnapshotResponse> {
+    return request(`/api/conversations/${encodeURIComponent(conversationId)}/workflow`, { signal })
   },
 
   /**
@@ -335,8 +452,8 @@ export const api = {
     return request(`/api/companies/${companyId}/tasks`)
   },
 
-  async task(taskId: string): Promise<TaskDetailResponse> {
-    return request(`/api/tasks/${taskId}`)
+  async task(taskId: string, signal?: AbortSignal): Promise<TaskDetailResponse> {
+    return request(`/api/tasks/${encodeURIComponent(taskId)}`, signal ? { signal } : undefined)
   },
 
   async reviewTask(
@@ -355,6 +472,29 @@ export const api = {
 
   async providers(companyId: string): Promise<ProvidersResponse> {
     return request(`/api/companies/${companyId}/providers`)
+  },
+
+  async classificationModelSettings(companyId: string): Promise<ClassificationModelSettingsResponse> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/knowledge/classification/settings`)
+  },
+
+  async saveClassificationModelSettings(
+    companyId: string,
+    settings: ClassificationModelSettings,
+  ): Promise<ClassificationModelSettingsResponse> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/knowledge/classification/settings`, {
+      method: 'PUT',
+      body: settings,
+    })
+  },
+
+  async testClassificationModelSettings(
+    companyId: string,
+  ): Promise<ClassificationModelSettingsTestResponse> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/knowledge/classification/settings/test`, {
+      method: 'POST',
+      body: {},
+    })
   },
 
   async createProvider(companyId: string, input: CreateProviderBody): Promise<{ provider: ProviderView }> {
@@ -519,14 +659,14 @@ export interface StreamEvent {
   readonly type: string
   readonly data: unknown
   readonly at: number
+  /** Scope from the server envelope, when present. */
+  readonly companyId?: string
 }
 
 /**
  * Mở luồng sự kiện của một cuộc trao đổi.
- *
- * Dùng `EventSource` (không phải fetch stream) vì nó tự gửi cookie phiên, tự
- * reconnect, và resume theo `Last-Event-ID` — đúng ba thứ cần cho một luồng dài.
- * Hàm trả về disposer để component có thể huỷ khi unmount.
+ * EventSource gửi cookie cùng origin và tự reconnect. Server không replay lịch sử;
+ * caller cần tải snapshot khi kết nối mở lại. Disposer đóng luồng khi unmount.
  */
 export function openConversationStream(
   conversationId: string,
@@ -542,9 +682,20 @@ export function openConversationStream(
     try {
       data = JSON.parse(message.data) as unknown
     } catch {
-      // Giữ nguyên chuỗi thô; giao diện vẫn hiển thị được.
+      // Keep legacy data available to chat; workflow only uses validated metadata.
     }
-    handlers.onEvent({ type, data, at: Date.now() })
+    if (data !== null && typeof data === 'object' && 'payload' in data && 'type' in data) {
+      const envelope = data as { type: unknown; payload: unknown; companyId?: unknown; at?: unknown }
+      const serverAt = typeof envelope.at === 'string' ? Date.parse(envelope.at) : NaN
+      handlers.onEvent({
+        type: typeof envelope.type === 'string' ? envelope.type : type,
+        data: envelope.payload,
+        at: Number.isFinite(serverAt) ? serverAt : Date.now(),
+        ...(typeof envelope.companyId === 'string' ? { companyId: envelope.companyId } : {}),
+      })
+    } else {
+      handlers.onEvent({ type, data, at: Date.now() })
+    }
   }
 
   // Đăng ký các loại đã biết, và cả message mặc định cho loại server thêm sau.
@@ -561,6 +712,14 @@ export function openConversationStream(
     'review.completed',
     'report.created',
     'warning',
+    'conversation.updated',
+    'run.started',
+    'run.finished',
+    'model.started',
+    'model.finished',
+    'run.retrying',
+    'tool.started',
+    'tool.finished',
     'message',
   ]) {
     source.addEventListener(type, forward(type) as EventListener)

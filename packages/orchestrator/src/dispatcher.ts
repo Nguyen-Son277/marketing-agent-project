@@ -16,7 +16,7 @@ import type { Repos } from '@marketing-agent/db'
 import type { AgentRuntimeDeps } from '@marketing-agent/agent-runtime'
 import type { EmbeddingProvider } from '@marketing-agent/kb'
 import type { ToolRegistry } from '@marketing-agent/tools'
-import { runAgentForTask } from './agent-runner.ts'
+import { runAgentForTask, taskStatusForRun } from './agent-runner.ts'
 import { event, type AppEvent } from './events.ts'
 import type { DispatchSummary, OrchestratorLimits, PlanResult, TaskOutcome } from './types.ts'
 
@@ -108,7 +108,7 @@ export async function dispatchPlan(input: DispatchPlanInput): Promise<DispatchSu
       batch.map(async (title) => {
         const task = byTitle.get(title)
         if (!task) throw new AppError('internal', `Không tìm thấy việc "${title}" trong kế hoạch`)
-        return executeTask({
+        const outcome = await executeTask({
           ...input,
           taskId: taskIdByTitle.get(title) ?? null,
           title,
@@ -117,6 +117,9 @@ export async function dispatchPlan(input: DispatchPlanInput): Promise<DispatchSu
             .map((dependency) => outcomes.get(dependency))
             .filter((outcome): outcome is TaskOutcome => outcome !== undefined),
         })
+        input.onOutcome?.(outcome)
+        publishOutcome(input, outcome)
+        return outcome
       }),
     )
 
@@ -126,8 +129,6 @@ export async function dispatchPlan(input: DispatchPlanInput): Promise<DispatchSu
       const outcome = results[index]
       if (!outcome) continue
       outcomes.set(title, outcome)
-      input.onOutcome?.(outcome)
-      publishOutcome(input, outcome)
     }
   }
 
@@ -139,7 +140,7 @@ export async function dispatchPlan(input: DispatchPlanInput): Promise<DispatchSu
     outcomes: all,
     completed: all.filter((outcome) => outcome.status === 'done').length,
     blocked: all.filter((outcome) => outcome.status === 'blocked').length,
-    failed: all.filter((outcome) => outcome.status === 'failed').length,
+    failed: all.filter((outcome) => outcome.status === 'failed' || outcome.status === 'cancelled').length,
   }
 }
 
@@ -154,26 +155,28 @@ async function executeTask(input: ExecuteTaskInput): Promise<TaskOutcome> {
   const { repos, companyId, taskId } = input
   const startedAt = Date.now()
 
-  if (taskId) {
-    repos.work.setTaskStatus(taskId, companyId, 'in_progress')
-    repos.work.addTaskEvent(taskId, companyId, 'started', { role: input.assigneeRole })
-  }
-  input.publish?.(
-    event('agent.started', companyId, {
-      taskId,
-      title: input.title,
-      assigneeRole: input.assigneeRole,
-    }),
-  )
-
   const extraContext = composeDependencyContext(input.dependencyOutcomes)
 
   try {
+    if (taskId) {
+      repos.work.setTaskStatus(taskId, companyId, 'in_progress')
+      repos.work.addTaskEvent(taskId, companyId, 'started', { role: input.assigneeRole })
+      publishScoped(input, event('task.updated', companyId, {
+        conversationId: input.conversationId, taskId, title: input.title,
+        assigneeRole: input.assigneeRole, status: 'in_progress',
+      }))
+    }
+    publishScoped(input, event('agent.started', companyId, {
+      conversationId: input.conversationId, taskId, title: input.title,
+      assigneeRole: input.assigneeRole,
+    }))
+
     const result = await runAgentForTask({
       repos,
       tools: input.tools,
       embedding: input.embedding,
       runtimeOverrides: input.runtimeOverrides,
+      publish: input.publish,
       companyId,
       role: input.assigneeRole as AgentRole,
       taskId,
@@ -185,12 +188,9 @@ async function executeTask(input: ExecuteTaskInput): Promise<TaskOutcome> {
       ...(input.log ? { log: input.log } : {}),
     })
 
-    const status =
-      result.run.status === 'succeeded'
-        ? 'done'
-        : result.run.status === 'budget_exceeded'
-          ? 'blocked'
-          : 'failed'
+    const storedTask = taskId ? repos.work.findTask(taskId, companyId) : undefined
+    const status = taskStatusForRun(result.run, storedTask?.status)
+    const explicitBlocker = storedTask?.status === 'blocked' || storedTask?.status === 'cancelled'
 
     const artifactIds = taskId
       ? repos.work.listArtifacts(companyId, { taskId, limit: 50 }).map((artifact) => artifact.id)
@@ -201,15 +201,15 @@ async function executeTask(input: ExecuteTaskInput): Promise<TaskOutcome> {
       title: input.title,
       assigneeRole: input.assigneeRole,
       status,
-      resultMd: result.run.output.trim().length > 0 ? result.run.output : result.summary,
+      resultMd: explicitBlocker && storedTask?.resultMd ? storedTask.resultMd : result.run.output.trim().length > 0 ? result.run.output : result.summary,
       artifactIds,
       run: result.run,
-      reason: status === 'done' ? undefined : (result.run.error ?? result.summary),
+      reason: status === 'done' ? undefined : (explicitBlocker && storedTask?.resultMd ? storedTask.resultMd : result.run.error ?? result.summary),
     }
 
     if (taskId) {
       repos.work.updateTask(taskId, companyId, {
-        status: status === 'done' ? 'done' : status === 'blocked' ? 'blocked' : 'failed',
+        status,
         resultMd: outcome.resultMd,
       })
       repos.work.addTaskEvent(taskId, companyId, 'finished', {
@@ -229,20 +229,9 @@ async function executeTask(input: ExecuteTaskInput): Promise<TaskOutcome> {
       })
     }
 
-    for (const call of result.run.toolCalls) {
-      input.publish?.(
-        event('tool.called', companyId, {
-          taskId,
-          agentRole: input.assigneeRole,
-          tool: call.name,
-          ok: call.ok,
-          durationMs: call.durationMs,
-        }),
-      )
-    }
     if (artifactIds.length > 0) {
-      input.publish?.(
-        event('artifact.created', companyId, { taskId, artifactIds, agentRole: input.assigneeRole }),
+      publishScoped(input,
+        event('artifact.created', companyId, { conversationId: input.conversationId, taskId, artifactIds, agentRole: input.assigneeRole }),
       )
     }
 
@@ -250,8 +239,11 @@ async function executeTask(input: ExecuteTaskInput): Promise<TaskOutcome> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     input.log?.(`Việc "${input.title}" thất bại`, { error: message })
-    if (taskId) {
-      repos.work.updateTask(taskId, companyId, { status: 'failed', resultMd: `Lỗi: ${message}` })
+    const storedTask = taskId ? repos.work.findTask(taskId, companyId) : undefined
+    const status = storedTask?.status === 'cancelled' ? 'cancelled' : storedTask?.status === 'blocked' ? 'blocked' : 'failed'
+    const resultMd = (status === 'cancelled' || status === 'blocked') && storedTask?.resultMd ? storedTask.resultMd : `Lỗi: ${message}`
+    if (taskId && storedTask) {
+      repos.work.updateTask(taskId, companyId, { status, resultMd })
       repos.work.addTaskEvent(taskId, companyId, 'error', { message })
       repos.work.addAgentMessage({
         companyId,
@@ -266,8 +258,8 @@ async function executeTask(input: ExecuteTaskInput): Promise<TaskOutcome> {
       taskId: taskId ?? '',
       title: input.title,
       assigneeRole: input.assigneeRole,
-      status: 'failed',
-      resultMd: `Không chạy được: ${message}`,
+      status,
+      resultMd,
       artifactIds: [],
       run: null,
       reason: message,
@@ -351,8 +343,9 @@ function buildHandoffMessage(outcome: TaskOutcome): string {
 }
 
 function publishOutcome(input: DispatchPlanInput, outcome: TaskOutcome): void {
-  input.publish?.(
+  publishScoped(input,
     event('task.updated', input.companyId, {
+      conversationId: input.conversationId,
       taskId: outcome.taskId,
       title: outcome.title,
       assigneeRole: outcome.assigneeRole,
@@ -360,4 +353,13 @@ function publishOutcome(input: DispatchPlanInput, outcome: TaskOutcome): void {
       reason: outcome.reason ?? null,
     }),
   )
+}
+
+/** No null-scoped workflow events on a company-wide stream. */
+function publishScoped(input: DispatchPlanInput, appEvent: AppEvent): void {
+  if (!input.conversationId) return
+  try {
+    const published: unknown = input.publish?.(appEvent)
+    if (published instanceof Promise) void published.catch(() => undefined)
+  } catch { /* telemetry is best-effort */ }
 }

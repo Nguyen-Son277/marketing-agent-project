@@ -38,6 +38,30 @@ describe('migrations', () => {
   })
 })
 
+describe('knowledge canonical source and upload metadata', () => {
+  it('persists nullable canonical content and upload fields, scoped by company', () => {
+    repos.db.run('INSERT INTO companies (id, name, slug, created_at) VALUES (?, ?, ?, ?)', [
+      'kb-a', 'KB A', 'kb-a', 'now',
+    ])
+    repos.db.run('INSERT INTO companies (id, name, slug, created_at) VALUES (?, ?, ?, ?)', [
+      'kb-b', 'KB B', 'kb-b', 'now',
+    ])
+    const doc = repos.knowledge.upsertDocumentAndChunks({
+      companyId: 'kb-a', path: '10-brand/source.md', title: 'Source', category: '10-brand', tags: [],
+      content: '# Exact source\n\n*Keep formatting*\n',
+    }, [])
+    expect(doc.content).toBe('# Exact source\n\n*Keep formatting*\n')
+    expect(repos.knowledge.documentContent('kb-a', doc.id)).toBe(doc.content)
+    expect(repos.knowledge.documentContent('kb-b', doc.id)).toBeNull()
+    expect(repos.knowledge.setUploadMetadata('kb-a', doc.id, {
+      originalName: 'source.docx', mimeType: 'application/docx', sizeBytes: 55,
+      storageKey: 'uploads/source.docx', originalChecksum: 'sha256-origin',
+    })).toBe(true)
+    expect(repos.knowledge.findUploadByChecksum('kb-a', 'sha256-origin')?.id).toBe(doc.id)
+    expect(repos.knowledge.findUploadByChecksum('kb-b', 'sha256-origin')).toBeUndefined()
+  })
+})
+
 describe('database helpers', () => {
   it('rolls back a throwing transaction', () => {
     expect(() =>

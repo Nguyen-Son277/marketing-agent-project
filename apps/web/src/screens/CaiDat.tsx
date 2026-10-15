@@ -28,6 +28,7 @@ import { useI18n } from '../lib/i18n.tsx'
 import { useSession } from '../lib/session.tsx'
 import { HopThoai, HopThoaiXacNhan } from '../components/HopThoai.tsx'
 import { HopThoaiChonModel } from '../components/HopThoaiChonModel.tsx'
+import { KnowledgeModelSettings } from '../components/KnowledgeModelSettings.tsx'
 import {
   Card,
   DangTai,
@@ -1878,6 +1879,7 @@ export function CaiDat({ companyId }: { companyId: string }): ReactNode {
 
       <PhanNhaCungCap companyId={companyId} />
       <PhanModel companyId={companyId} />
+      <KnowledgeModelSettings companyId={companyId} />
       <PhanRoute companyId={companyId} />
       <PhanKetNoi companyId={companyId} />
       <PhanGioiHan companyId={companyId} />

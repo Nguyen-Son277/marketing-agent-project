@@ -643,6 +643,23 @@ a {
   width: 100%;
 }
 
+/* The file picker is the primary entry point, not an unstyled text label. */
+.knowledge__choose-files {
+  min-height: 52px;
+  width: 100%;
+  padding: 12px 22px;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  border: 2px solid var(--mau-chinh);
+  box-shadow: var(--bong-lon);
+}
+
+.knowledge__choose-files:focus-visible {
+  outline: 3px solid var(--mau-chinh);
+  outline-offset: 4px;
+}
+
 .o-nhap,
 .o-chon,
 .o-van-ban {
@@ -1977,3 +1994,96 @@ a {
 @media (min-width: 1700px) { .wf__week { grid-template-columns: repeat(8,minmax(0,1fr)); } }
 @media (max-width: 1000px) { .wf__week { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 600px) { .wf__week { grid-template-columns: minmax(0,1fr); } .wf-employee > .the { padding: 16px; } }
+
+/* Runtime workflow is separate from the workforce calendar's wf__ namespace. */
+.workflow__tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; border-bottom: 1px solid var(--mau-vien); padding-bottom: 8px; }
+.workflow__tabs > button, .workflow__button, .workflow__controls button {
+  border: 1px solid var(--mau-vien); border-radius: var(--ban-kinh-nho); background: var(--mau-be-mat);
+  color: var(--mau-chu); font: inherit; padding: 8px 12px; min-height: 40px; cursor: pointer;
+}
+.workflow__tabs > button[aria-selected='true'], .workflow__button[aria-pressed='true'] { background: var(--mau-chinh); color: var(--mau-chu-tren-chinh); border-color: var(--mau-chinh); }
+.workflow__button:disabled, .workflow__controls button:disabled { opacity: .55; cursor: not-allowed; }
+.workflow__tabs > button:hover, .workflow__button:not(:disabled):hover, .workflow__controls button:hover { border-color: var(--mau-chinh); }
+.workflow__tab-panel:focus-visible, .workflow__realtime :is(button,select,summary):focus-visible, .workflow__tabs > button:focus-visible, .workflow__viewport:focus-visible { outline: 3px solid var(--mau-chinh); outline-offset: 3px; }
+.workflow__tab-panel[hidden] { display: none; }
+.workflow__realtime { display: grid; gap: 16px; min-width: 0; }
+.workflow__realtime p, .workflow__realtime h3, .workflow__realtime h4 { margin: 0; }
+.workflow__muted { color: var(--mau-chu-mo); font-size: 13px; }
+.workflow__toolbar, .workflow__refresh, .workflow__connection, .workflow__view-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.workflow__toolbar { justify-content: space-between; align-items: flex-end; }
+.workflow__chooser { display: grid; gap: 5px; min-width: min(320px,100%); max-width: 100%; }
+.workflow__chooser label { font-weight: 600; }
+.workflow__chooser select { width: 100%; min-height: 42px; padding: 8px 10px; background: var(--mau-be-mat); color: var(--mau-chu); border: 1px solid var(--mau-vien); border-radius: var(--ban-kinh-nho); font: inherit; }
+.workflow__connection { padding: 12px; background: var(--mau-nen-phu); border-radius: var(--ban-kinh); font-size: 13px; }
+.workflow__connection-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--mau-chu-mo); flex: 0 0 auto; }
+.workflow__connection-dot--live { background: var(--mau-thanh-cong); }
+.workflow__connection-dot--connecting, .workflow__connection-dot--reconnecting { background: var(--mau-canh-bao); }
+.workflow__error { padding: 12px; background: var(--mau-loi-nen); color: var(--mau-chu-loi); border: 1px solid var(--mau-vien-loi); border-radius: var(--ban-kinh); overflow-wrap: anywhere; }
+.workflow__notice { padding: 12px; background: var(--mau-canh-bao-nen); color: var(--mau-chu-canh-bao); border: 1px solid var(--mau-vien-canh-bao); border-radius: var(--ban-kinh); }
+.workflow__empty { padding: 28px 16px; border: 1px dashed var(--mau-vien); border-radius: var(--ban-kinh); text-align: center; color: var(--mau-chu-mo); }
+.workflow__counts { display: grid; grid-template-columns: repeat(auto-fit,minmax(95px,1fr)); gap: 8px; }
+.workflow__count { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--mau-vien); background: var(--mau-be-mat); border-radius: var(--ban-kinh-nho); }
+.workflow__count strong { font-size: 20px; }
+.workflow__count span { color: var(--mau-chu-mo); font-size: 12px; }
+.workflow__count--failed { border-color: var(--mau-loi); }
+.workflow__count--done { border-color: var(--mau-thanh-cong); }
+.workflow__workspace { display: grid; grid-template-columns: minmax(0,1fr) minmax(280px,360px); gap: 16px; align-items: start; min-width: 0; }
+.workflow__main { min-width: 0; }
+.workflow__details, .workflow__leader, .workflow__observed { min-width: 0; border: 1px solid var(--mau-vien); padding: 16px; border-radius: var(--ban-kinh); background: var(--mau-be-mat); overflow-wrap: anywhere; }
+.workflow__details { display: grid; gap: 12px; max-height: 850px; overflow-y: auto; }
+.workflow__details h4, .workflow__leader h3, .workflow__observed h3 { margin-top: 8px; }
+.workflow__leader, .workflow__observed { display: grid; gap: 10px; }
+.workflow__metadata { display: grid; grid-template-columns: minmax(90px,1fr) minmax(0,1.5fr); gap: 5px 10px; font-size: 13px; margin: 0; }
+.workflow__metadata dt { color: var(--mau-chu-mo); }
+.workflow__metadata dd { margin: 0; overflow-wrap: anywhere; }
+.workflow__task-list, .workflow__run-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.workflow__task-row { width: 100%; display: flex; flex-wrap: wrap; gap: 7px 12px; align-items: center; text-align: left; font: inherit; background: var(--mau-be-mat); color: var(--mau-chu); padding: 14px; border: 1px solid var(--mau-vien); border-radius: var(--ban-kinh); cursor: pointer; overflow-wrap: anywhere; }
+.workflow__task-row > strong { flex: 1 1 100%; }
+.workflow__task-row--selected, .workflow__task-row:hover { border-color: var(--mau-chinh); background: var(--mau-chinh-nhat); }
+.workflow__status { display: inline-block; font-size: 12px; padding: 3px 6px; border-radius: 5px; background: var(--mau-nen-phu); color: var(--mau-chu-mo); }
+.workflow__status--live { background: var(--mau-thanh-cong-nen); color: var(--mau-chu-thanh-cong); }
+.workflow__run { padding: 10px; border: 1px solid var(--mau-vien); border-radius: var(--ban-kinh-nho); display: grid; gap: 6px; }
+.workflow__run--active { border-color: var(--mau-thanh-cong); }
+.workflow__run-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; }
+.workflow__events { margin: 0; padding-left: 22px; display: grid; gap: 8px; max-height: 280px; overflow-y: auto; font-size: 13px; }
+.workflow__events time { color: var(--mau-chu-mo); margin-right: 8px; }
+.workflow__artifacts { margin: 0; padding-left: 20px; }
+.workflow__artifacts li { margin-bottom: 10px; }
+.workflow__realtime summary { cursor: pointer; padding: 6px 0; }
+.workflow__artifact-content { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; background: var(--mau-code-nen); padding: 10px; color: var(--mau-chu); }
+
+/* Canvas geometry is owned by WorkflowCanvas; no CSS transforms override its layout. */
+.workflow__canvas { position: relative; height: 560px; min-height: 340px; min-width: 0; touch-action: none; border: 1px solid var(--mau-vien); border-radius: var(--ban-kinh); background: var(--mau-nen-phu); overflow: hidden; }
+.workflow__viewport { position: relative; height: 560px; min-height: 340px; overflow: hidden; touch-action: none; cursor: grab; }
+.workflow__viewport:active { cursor: grabbing; }
+.workflow__world { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+.workflow__node { position: absolute; display: grid; gap: 6px; text-align: left; background: var(--mau-be-mat); color: var(--mau-chu); border: 1px solid var(--mau-vien); border-radius: var(--ban-kinh); padding: 12px; font: inherit; font-size: 13px; cursor: pointer; box-shadow: var(--bong); overflow: hidden; overflow-wrap: anywhere; }
+.workflow__node--selected, .workflow__node[aria-pressed='true'], .workflow__node:hover { border-color: var(--mau-chinh); box-shadow: 0 0 0 2px var(--mau-chinh); }
+.workflow__node--active { border-color: var(--mau-thanh-cong); }
+.workflow__node--failed { border-color: var(--mau-loi); }
+.workflow__node--blocked { border-color: var(--mau-canh-bao); }
+.workflow__node--done { border-color: var(--mau-thanh-cong); }
+.workflow__node-title { font-weight: 650; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; }
+.workflow__node-agent, .workflow__node-assignee, .workflow__node-status, .workflow__node-meta { font-size: 12px; color: var(--mau-chu-mo); }
+.workflow__edges { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; }
+.workflow__edge { fill: none; stroke: var(--mau-chu-mo); stroke-width: 1.5; }
+.workflow__edge--active { stroke: var(--mau-thanh-cong); stroke-width: 2; stroke-dasharray: 7 5; animation: workflow-edge-flow 1s linear infinite; }
+.workflow__edge--parent { stroke-dasharray: 4 4; opacity: .65; }
+.workflow__controls { position: absolute; z-index: 2; top: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 5px; padding: 5px; border-radius: var(--ban-kinh); background: var(--mau-be-mat); box-shadow: var(--bong); }
+.workflow__pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--mau-thanh-cong); animation: workflow-pulse 1.4s ease-in-out infinite; }
+.workflow__activity { font-size: 12px; color: var(--mau-chu-mo); }
+.workflow__activity--active { color: var(--mau-thanh-cong); }
+.workflow__activity--active::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--mau-thanh-cong); animation: workflow-pulse 1.4s ease-in-out infinite; }
+.workflow__node--unverified { border-style: dashed; }
+.workflow__node--waiting { border-color: var(--mau-canh-bao); }
+.workflow__edge--blocked { stroke: var(--mau-canh-bao); }
+.workflow__edge--complete, .workflow__edge--completed { stroke: var(--mau-thanh-cong); }
+.workflow__fallback { border: 1px solid var(--mau-vien); border-radius: var(--ban-kinh); padding: 14px; background: var(--mau-be-mat); }
+.workflow__warnings { color: var(--mau-canh-bao); font-size: 13px; }
+.workflow__fallback-list { list-style: none; display: grid; gap: 8px; padding: 0; margin: 0; }
+.workflow__fallback-list .workflow__node { position: static; width: 100%; }
+@keyframes workflow-edge-flow { to { stroke-dashoffset: -24; } }
+@keyframes workflow-pulse { 50% { opacity: .35; } }
+@media (max-width: 1000px) { .workflow__workspace { grid-template-columns: minmax(0,1fr); } .workflow__details { max-height: none; } }
+@media (max-width: 600px) { .workflow__toolbar, .workflow__chooser { width: 100%; } .workflow__refresh { width: 100%; } .workflow__refresh > button { flex: 1; } .workflow__canvas, .workflow__viewport { height: 400px; } .workflow__counts { grid-template-columns: repeat(2,minmax(0,1fr)); } .workflow__controls button { padding: 8px; } }
+@media (prefers-reduced-motion: reduce) { .workflow__edge, .workflow__pulse, .workflow__activity--active::before, .workflow__node, .workflow__status--live { animation: none !important; transition: none !important; } }

@@ -4,7 +4,8 @@
  * Vì sao tách khỏi từng màn hình: chỉ một chỗ quyết định "đã đăng nhập chưa" và
  * "đã có công ty chưa", nên không màn hình nào phải tự xử lý hai trạng thái đó.
  */
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { NhapBaoCaoHangNgay } from './screens/NhapBaoCaoHangNgay.tsx'
 import { useSession } from './lib/session.tsx'
 import { useI18n } from './lib/i18n.tsx'
 import { DangTai } from './components/ui.tsx'
@@ -19,6 +20,10 @@ import { GiaoViecNhanVien } from './screens/GiaoViecNhanVien.tsx'
 export function App(): ReactNode {
   const { user, company, ready, loading } = useSession()
   const { t } = useI18n()
+  const [hash, setHash] = useState(window.location.hash)
+  useEffect(() => { const update = () => setHash(window.location.hash); window.addEventListener('hashchange', update); return () => window.removeEventListener('hashchange', update) }, [])
+  const publicReport = /^#\/daily-report\/([A-Za-z0-9_-]{43})$/.exec(hash)
+  if (publicReport) return <NhapBaoCaoHangNgay token={publicReport[1]!} />
 
   if (!ready || (loading && !user)) {
     return (

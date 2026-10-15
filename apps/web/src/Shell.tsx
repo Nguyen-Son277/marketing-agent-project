@@ -16,6 +16,7 @@ import { ThemeSwitcher } from './components/ThemeSwitcher.tsx'
 import { BangDieuKhien } from './screens/BangDieuKhien.tsx'
 import { TraoDoi } from './screens/TraoDoi.tsx'
 import { CongViec } from './screens/CongViec.tsx'
+import { BaoCaoHangNgay } from './screens/BaoCaoHangNgay.tsx'
 import { GiaoViecNhanVien } from './screens/GiaoViecNhanVien.tsx'
 import { DoiAgent } from './screens/DoiAgent.tsx'
 import { KhoKienThuc } from './screens/KhoKienThuc.tsx'
@@ -36,6 +37,7 @@ export const ROUTES = [
   { id: 'trao-doi', nhan: 'nav.chat', nhom: 'nav.group.work', bieuTuong: '💬' },
   { id: 'cong-viec', nhan: 'nav.tasks', nhom: 'nav.group.work', bieuTuong: '🗂️' },
   { id: 'giao-viec', nhan: 'nav.workforce', nhom: 'nav.group.work', bieuTuong: '🎨' },
+  { id: 'bao-cao-hang-ngay', nhan: 'nav.dailyReports', nhom: 'nav.group.work', bieuTuong: '📝' },
   { id: 'doi-agent', nhan: 'nav.team', nhom: 'nav.group.config', bieuTuong: '🎯' },
   { id: 'kho-kien-thuc', nhan: 'nav.knowledge', nhom: 'nav.group.config', bieuTuong: '📚' },
   { id: 'cong-ty', nhan: 'nav.companies', nhom: 'nav.group.config', bieuTuong: '🏢' },
@@ -127,6 +129,8 @@ export function Shell(): ReactNode {
         return <CongViec companyId={companyId} />
       case 'giao-viec':
         return <GiaoViecNhanVien />
+      case 'bao-cao-hang-ngay':
+        return <BaoCaoHangNgay companyId={companyId} />
       case 'doi-agent':
         return <DoiAgent companyId={companyId} />
       case 'kho-kien-thuc':

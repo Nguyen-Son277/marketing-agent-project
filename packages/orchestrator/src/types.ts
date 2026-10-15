@@ -81,7 +81,7 @@ export interface TaskOutcome {
   readonly taskId: string
   readonly title: string
   readonly assigneeRole: string
-  readonly status: 'done' | 'blocked' | 'failed'
+  readonly status: 'done' | 'blocked' | 'failed' | 'cancelled'
   readonly resultMd: string
   readonly artifactIds: readonly string[]
   readonly run: AgentRunResult | null

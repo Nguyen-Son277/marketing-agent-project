@@ -18,6 +18,12 @@ truy vấn, không phải bằng lời dặn trong prompt.
 
 ## Tính năng chính
 
+**Báo cáo công việc hằng ngày cho lãnh đạo**
+- Nhóm có danh sách thành viên, link nhập không đăng nhập, lịch thứ Hai–thứ Bảy 16:20–16:50 giờ Việt Nam.
+- Bản chốt bất biến, đánh dấu người chưa nộp đúng hạn, giữ riêng bản nộp muộn và bản cập nhật.
+- Tổng hợp tiếng Anh bằng model công ty, xuất Word DOCX/PDF. Bạn tự gửi link và tài liệu.
+- Thiết lập và giới hạn: [Hướng dẫn báo cáo hằng ngày](docs/bao-cao-hang-ngay.md).
+
 **Điều phối có kiểm soát**
 - **BriefGate** — chặn ở đầu vào: chưa đủ 6 trường (mục tiêu, KPI, phạm vi, thời
   hạn, ngân sách, ràng buộc) thì chưa được tạo việc; Leader hỏi đúng trường còn thiếu.
@@ -36,6 +42,11 @@ truy vấn, không phải bằng lời dặn trong prompt.
 - Chi tiết: [docs/so-do-doi-agent.md](docs/so-do-doi-agent.md).
 
 **Kho kiến thức riêng cho từng công ty**
+- Tải file **PDF có văn bản, DOCX, TXT, Markdown** theo công ty (tối đa 10 file/lượt, 10 MiB/file). Chỉ chọn/kéo thả file: tự tải, trích nội dung và AI phân loại từng phần bằng model riêng ở **Cài đặt → Model phân loại kiến thức** hoặc kế thừa model Marketing Leader của công ty, rồi index; không cần chọn danh mục/nhãn. Job xử lý nền lưu bền trong SQLite, lỗi có thể thử lại mà không tải lại file. Cần cấu hình model/khóa và ngân sách công ty; có ghi chi phí model. Index thông thường không gọi phân loại lại; PDF scan/ảnh cần OCR trước khi tải. Không hỗ trợ `.doc`, Excel hoặc file nén.
+- Kho kiến thức hiển thị model/provider hiệu lực và model đã gọi gần nhất. Cài đặt model có chế độ riêng/kế thừa, model dự phòng có thứ tự và kiểm tra bằng dữ liệu mẫu (có tính phí model); lưu cấu hình không tự chạy lại tài liệu lỗi. Thiếu model được báo rõ, không tự chọn model có sẵn.
+- Giữ bản gốc riêng tư dưới `<KB_ROOT>/.uploads/<companyId>/`, văn bản nguồn trong SQLite; cần sao lưu cả DB và thư mục này. Người dùng có thể xem nội dung trích và tải lại bản gốc qua API có kiểm quyền.
+- Phân loại lỗi gateway/model (HTTP 530/5xx/429, timeout) dùng model dự phòng đã cấu hình và tự thử lại có giới hạn. Phân biệt tài liệu chưa phân loại (chưa truy xuất được) với tài liệu có chunks nhưng thiếu vector. Nút xử lý lại hàng loạt không cần upload lại.
+- Index lại đưa file chưa phân loại bị lỗi về hàng đợi và xử lý cả tài liệu sẵn sàng trong DB, không yêu cầu có thư mục Markdown. Kho trống không báo lỗi thiếu thư mục; lỗi vector không chặn tìm kiếm từ khóa.
 - Markdown + frontmatter, cắt theo heading, tìm kiếm lai **FTS5 từ khoá + vector
   ngữ nghĩa** gộp bằng RRF, trả về kèm nguồn (đường dẫn + heading) để trích dẫn.
 - ACL lọc **trước khi xếp hạng**: một chunk bị cấm không thể lọt vào kết quả dù có

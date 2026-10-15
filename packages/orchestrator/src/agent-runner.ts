@@ -11,6 +11,8 @@ import {
   type AgentRole,
   type ToolContext,
   type ToolDefinition,
+  type RuntimeObserver,
+  type TaskStatus,
 } from '@marketing-agent/shared'
 import type { Locale } from '@marketing-agent/i18n'
 import type { Repos } from '@marketing-agent/db'
@@ -23,6 +25,8 @@ import {
   type AgentRunResult,
   type AgentRuntimeDeps,
 } from '@marketing-agent/agent-runtime'
+
+import type { AppEvent } from './events.ts'
 
 export interface RunAgentForTaskInput {
   readonly repos: Repos
@@ -45,6 +49,7 @@ export interface RunAgentForTaskInput {
   readonly maxSteps?: number
   readonly signal?: AbortSignal | undefined
   readonly log?: ((message: string, data?: unknown) => void) | undefined
+  readonly publish?: ((event: AppEvent) => void) | undefined
 }
 
 export interface RunAgentForTaskResult {
@@ -129,12 +134,30 @@ export async function runAgentForTask(input: RunAgentForTaskInput): Promise<RunA
     ...(input.locale ? { locale: input.locale } : {}),
   })
 
+  // Runtime owns trusted scope and metadata. A telemetry sink must never fail work,
+  // and an unscoped run must not leak onto a company-wide conversation stream.
+  const observe: RuntimeObserver = (observation) => {
+    if (!input.conversationId || observation.conversationId !== input.conversationId) return
+    try {
+      const published: unknown = input.publish?.({
+        type: observation.type,
+        companyId: input.companyId,
+        payload: observation,
+        at: observation.at,
+      })
+      if (published instanceof Promise) void published.catch(() => undefined)
+    } catch {
+      // Observability is best-effort, not part of agent success.
+    }
+  }
+
   const run = await runAgent(
     {
       agent: resolved,
       context: toolContext,
       messages: [{ role: 'user', content: taskPrompt }],
       tools: granted,
+      observe,
       ...(input.maxSteps !== undefined ? { maxSteps: input.maxSteps } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
     },
@@ -149,6 +172,16 @@ export async function runAgentForTask(input: RunAgentForTaskInput): Promise<RunA
     summary: summarizeRun(run, resolved.displayName, input.locale ?? 'vi'),
     toolCalls: run.toolCalls.map((call) => ({ name: call.name, ok: call.ok, durationMs: call.durationMs })),
   }
+}
+
+/** A successful run cannot erase an explicit task blocker or cancellation. */
+export function taskStatusForRun(
+  run: AgentRunResult,
+  storedStatus?: TaskStatus,
+): 'done' | 'blocked' | 'failed' | 'cancelled' {
+  if (storedStatus === 'cancelled' || run.status === 'cancelled' || run.stopReason === 'cancelled') return 'cancelled'
+  if (storedStatus === 'blocked') return 'blocked'
+  return run.status === 'succeeded' ? 'done' : run.status === 'budget_exceeded' ? 'blocked' : 'failed'
 }
 
 /** Ghi đè chỉ những mảnh được chỉ định, giữ phần thật cho phần còn lại. */

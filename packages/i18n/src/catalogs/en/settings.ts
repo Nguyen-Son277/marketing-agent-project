@@ -255,4 +255,22 @@ export const en_settings = {
   'settings.models.fetch.importFailed': 'Could not add the selected models.',
   'settings.models.deleteTitle': 'Delete model',
   'settings.models.purgeTitle': 'Delete unused models',
+
+  /* ----------------------------------- knowledge classification */
+  'settings.knowledgeModel.title': 'Knowledge classification model',
+  'settings.knowledgeModel.subtitle': 'Choose the model used to classify company documents and its fallback models.',
+  'settings.knowledgeModel.mode': 'Model selection',
+  'settings.knowledgeModel.modeLeader': 'Follow team leader model',
+  'settings.knowledgeModel.modeCustom': 'Choose models manually',
+  'settings.knowledgeModel.primary': 'Primary model',
+  'settings.knowledgeModel.fallback': 'Fallback model {{number}}',
+  'settings.knowledgeModel.addFallback': 'Add fallback model',
+  'settings.knowledgeModel.chooseModel': '— Choose a model —',
+  'settings.knowledgeModel.costWarning': 'Testing sends a tiny synthetic request to the model and may incur a cost. No document content is sent.',
+  'settings.knowledgeModel.save': 'Save settings',
+  'settings.knowledgeModel.test': 'Test saved settings',
+  'settings.knowledgeModel.saved': 'Classification model settings saved.',
+  'settings.knowledgeModel.loadFailed': 'Could not load classification model settings.',
+  'settings.knowledgeModel.saveFailed': 'Could not save classification model settings.',
+  'settings.knowledgeModel.testFailed': 'Could not test classification model settings.',
 } as const

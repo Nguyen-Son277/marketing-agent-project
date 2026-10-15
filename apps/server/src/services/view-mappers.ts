@@ -175,47 +175,63 @@ export function toKnowledgeDocumentView(doc: KbDocumentRecord, indexed: boolean,
     version: doc.version,
     source: doc.source,
     updatedAt: doc.updatedAt,
+    originalName: doc.originalName ?? null,
+    mimeType: doc.mimeType ?? null,
+    sizeBytes: doc.sizeBytes ?? null,
     indexed,
     content,
   }
 }
 
-/** Một tài liệu được coi là đã nhúng khi có ít nhất một vector cho chunk của nó. */
+/** A document is embedded only when every chunk has a vector. */
 export function documentHasEmbedding(repos: Repos, documentId: string): boolean {
   const row = repos.db.get<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM kb_embeddings e
-       JOIN kb_chunks c ON c.id = e.chunk_id
+    `SELECT CASE WHEN COUNT(c.id) > 0 AND COUNT(c.id) = COUNT(e.chunk_id) THEN 1 ELSE 0 END AS n
+       FROM kb_chunks c LEFT JOIN kb_embeddings e ON c.id = e.chunk_id
       WHERE c.document_id = ?`,
     [documentId],
   )
   return (row?.n ?? 0) > 0
 }
 
-/** Nội dung Markdown của tài liệu được ghép lại từ các chunk đã lưu. */
+/** Canonical source Markdown, with chunk fallback for legacy documents. */
 export function documentContent(repos: Repos, documentId: string): string {
-  return repos.knowledge
-    .listChunks(documentId)
-    .map((chunk) => chunk.text)
-    .join('\n\n')
+  const canonical = repos.db.get<{ content: string | null }>(
+    'SELECT content FROM kb_documents WHERE id = ?',
+    [documentId],
+  )?.content
+  return canonical ?? repos.knowledge.listChunks(documentId).map((chunk) => chunk.text).join('\n\n')
 }
 
 /**
  * Nội dung của mọi tài liệu trong một công ty, gom bằng MỘT truy vấn.
- * `kb_documents` không lưu bản gốc Markdown — chunk mới là nơi giữ văn bản — nên
- * đây là cách duy nhất để trả `content` cho danh sách mà không N+1 truy vấn.
+ * Prefer canonical source; only legacy documents without it need chunk reconstruction.
  */
 export function documentContentMap(repos: Repos, companyId: string): Map<string, string> {
+  const canonicalRows = repos.db.all<{ id: string; content: string | null }>(
+    "SELECT id, content FROM kb_documents WHERE company_id = ? AND source != 'upload'",
+    [companyId],
+  )
+  const out = new Map<string, string>()
+  const legacy = new Set<string>()
+  for (const row of canonicalRows) {
+    if (row.content !== null) out.set(row.id, row.content)
+    else legacy.add(row.id)
+  }
+  if (legacy.size === 0) return out
   const rows = repos.db.all<{ document_id: string; text: string }>(
-    'SELECT document_id, text FROM kb_chunks WHERE company_id = ? ORDER BY document_id ASC, ordinal ASC',
+    `SELECT c.document_id, c.text FROM kb_chunks c JOIN kb_documents d ON d.id = c.document_id
+      WHERE c.company_id = ? AND d.content IS NULL AND d.source != 'upload'
+      ORDER BY c.document_id ASC, c.ordinal ASC`,
     [companyId],
   )
   const byDocument = new Map<string, string[]>()
   for (const row of rows) {
+    if (!legacy.has(row.document_id)) continue
     const bucket = byDocument.get(row.document_id) ?? []
     bucket.push(row.text)
     byDocument.set(row.document_id, bucket)
   }
-  const out = new Map<string, string>()
   for (const [documentId, parts] of byDocument) out.set(documentId, parts.join('\n\n'))
   return out
 }
@@ -223,10 +239,10 @@ export function documentContentMap(repos: Repos, companyId: string): Map<string,
 /** Tập id tài liệu đã có vector, để đánh dấu `indexed` cho cả danh sách. */
 export function embeddedDocumentIds(repos: Repos, companyId: string): Set<string> {
   const rows = repos.db.all<{ document_id: string }>(
-    `SELECT DISTINCT c.document_id AS document_id
-       FROM kb_embeddings e
-       JOIN kb_chunks c ON c.id = e.chunk_id
-      WHERE e.company_id = ?`,
+    `SELECT c.document_id AS document_id
+       FROM kb_chunks c LEFT JOIN kb_embeddings e ON c.id = e.chunk_id
+      WHERE c.company_id = ?
+      GROUP BY c.document_id HAVING COUNT(c.id) = COUNT(e.chunk_id) AND COUNT(c.id) > 0`,
     [companyId],
   )
   return new Set(rows.map((row) => row.document_id))

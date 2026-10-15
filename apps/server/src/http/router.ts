@@ -217,36 +217,49 @@ export function createRequestContext(
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
       })
-      // A short retry keeps a reconnecting browser responsive without hammering.
-      res.write('retry: 3000\n\n')
       const closeHandlers: (() => void)[] = []
       let closed = false
       const markClosed = () => {
         if (closed) return
         closed = true
-        for (const handler of closeHandlers) handler()
+        for (const handler of closeHandlers.splice(0)) {
+          try { handler() } catch { /* Cleanup failures must not skip other handlers. */ }
+        }
+      }
+      const end = () => {
+        if (closed) return
+        markClosed()
+        res.end()
+      }
+      const write = (chunk: string) => {
+        if (closed) return
+        try {
+          // Bound buffering: a slow consumer reconnects and reconciles a snapshot.
+          if (!res.write(chunk)) end()
+        } catch {
+          end()
+        }
       }
       res.on('close', markClosed)
+      res.on('error', markClosed)
+      // A short retry keeps a reconnecting browser responsive without hammering.
+      write('retry: 3000\n\n')
       return {
         get closed() {
           return closed
         },
         send(event, data) {
           if (closed) return
-          res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
         },
         comment(text) {
-          if (closed) return
-          res.write(`: ${text}\n\n`)
+          write(`: ${text}\n\n`)
         },
-        end() {
-          if (closed) return
-          closed = true
-          res.end()
-        },
+        end,
         onClose(handler) {
-          if (closed) handler()
-          else closeHandlers.push(handler)
+          if (closed) {
+            try { handler() } catch { /* Already closed; cleanup remains isolated. */ }
+          } else closeHandlers.push(handler)
         },
       }
     },

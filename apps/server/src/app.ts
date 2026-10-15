@@ -15,6 +15,7 @@ import type { Repos } from '@marketing-agent/db'
 import type { AppContext } from './context.ts'
 import { createRequestContext, Router, runChain, type Handler, type HttpMethod, type Middleware } from './http/router.ts'
 import { accountAccessMiddleware, sessionMiddleware } from './http/middleware.ts'
+import { registerDailyReportRoutes } from './routes/daily-report-routes.ts'
 import { registerAdminRoutes } from './routes/admin-routes.ts'
 import { registerWorkforceRoutes } from './routes/workforce-routes.ts'
 import { registerAuthRoutes, registerMemberRoutes } from './routes/auth-routes.ts'
@@ -46,6 +47,7 @@ export function buildApp(options: BuildAppOptions): App {
   registerMemberRoutes(router, repos)
   registerAdminRoutes(router, repos)
   registerWorkforceRoutes(router, repos)
+  registerDailyReportRoutes(router, context)
 
   for (const module of options.optionalModules ?? []) {
     try {
@@ -178,7 +180,8 @@ export function sendError(
   }
   const appError = toAppError(error)
   if (appError.status >= 500) {
-    console.error(`[error] ${path}:`, error)
+    const safePath = path.startsWith('/api/public/daily-reports/') ? '/api/public/daily-reports/[redacted]' : path
+    console.error(`[error] ${safePath}:`, error)
   }
   const exposeDetails = !isProduction && appError.status < 500
 
