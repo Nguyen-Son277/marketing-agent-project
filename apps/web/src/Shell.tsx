@@ -13,6 +13,7 @@ import { useI18n } from './lib/i18n.tsx'
 import { Nhan, Nut } from './components/ui.tsx'
 import { LocaleSwitcher } from './components/LocaleSwitcher.tsx'
 import { ThemeSwitcher } from './components/ThemeSwitcher.tsx'
+import { NotificationBell } from './components/NotificationBell.tsx'
 import { BangDieuKhien } from './screens/BangDieuKhien.tsx'
 import { TraoDoi } from './screens/TraoDoi.tsx'
 import { CongViec } from './screens/CongViec.tsx'
@@ -138,13 +139,13 @@ export function Shell(): ReactNode {
       case 'cong-ty':
         return <CongTyCuaToi />
       case 'cai-dat':
-        return <CaiDat companyId={companyId} />
+        return <CaiDat key={`${user?.id}:${companyId}`} companyId={companyId} />
       case 'chi-phi':
         return <ChiPhi companyId={companyId} />
       case 'so-do':
         return <SoDoDoiAgent companyId={companyId} />
     }
-  }, [route, companyId, navigate])
+  }, [route, companyId, user?.id, navigate])
 
   return (
     <div className={navCollapsed ? 'app app--nav-thu-gon' : 'app'}>
@@ -170,6 +171,7 @@ export function Shell(): ReactNode {
 
         <span className="app__spacer" />
 
+        {companyId && user ? <NotificationBell key={`${user.id}:${companyId}`} companyId={companyId} userId={user.id} /> : null}
         <LocaleSwitcher compact />
         <ThemeSwitcher compact />
       </header>

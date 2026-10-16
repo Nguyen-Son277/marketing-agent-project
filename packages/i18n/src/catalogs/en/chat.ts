@@ -8,6 +8,9 @@
  * Khoá trong file này PHẢI có tiền tố `chat.` để không đụng namespace khác.
  */
 export const en_chat = {
+  'chat.composerLabel': 'Message to Leader',
+  'chat.composerHint': 'Enter to send · Shift+Enter for a new line',
+  'chat.sending': 'Sending message',
   /* -------------------------------------------------------- screen frame */
   'chat.loadingList': 'Loading conversations…',
   'chat.conversations': 'Conversations',
@@ -54,6 +57,8 @@ export const en_chat = {
 
   /* ---------------------------------------------------------- plan table */
   'chat.planTitle': 'Plan',
+  'chat.viewPlan': 'View plan ({{count}})',
+  'chat.viewPlanHint': 'Open the task list in a dialog',
   'chat.planSubtitle': 'Open the Tasks tab to see each task in detail.',
   'chat.tableTask': 'Task',
   'chat.tableSpecialist': 'Specialist',

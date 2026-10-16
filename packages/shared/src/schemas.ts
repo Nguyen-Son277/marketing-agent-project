@@ -117,8 +117,8 @@ export const createModelSchema = z.object({
   maxOutput: z.number().int().positive().max(1_000_000).default(16_000),
   supportsTools: z.boolean().default(true),
   supportsVision: z.boolean().default(false),
-  costInPerMtok: z.number().min(0).default(0),
-  costOutPerMtok: z.number().min(0).default(0),
+  costInPerMtok: z.number().finite().min(0).default(0),
+  costOutPerMtok: z.number().finite().min(0).default(0),
   enabled: z.boolean().default(true),
 })
 export type CreateModelInput = z.infer<typeof createModelSchema>

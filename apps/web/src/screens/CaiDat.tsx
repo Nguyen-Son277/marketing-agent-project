@@ -10,14 +10,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
   IntegrationKind,
-  IntegrationTestResponse,
   IntegrationView,
   ModelOptionView,
   ModelRouteView,
   ModelTier,
   ProviderKeyView,
   ProviderKind,
-  ProviderTestResponse,
   ProviderView,
 } from '@marketing-agent/shared'
 import { INTEGRATION_KINDS, MODEL_TIERS, PROVIDER_KINDS } from '@marketing-agent/shared'
@@ -26,9 +24,11 @@ import { api, ApiError } from '../lib/api.ts'
 import { buildFirecrawlConfig, firecrawlConnectionName } from '../lib/firecrawl-form.ts'
 import { useI18n } from '../lib/i18n.tsx'
 import { useSession } from '../lib/session.tsx'
+import { useSettingsNotifications } from '../lib/settings-notifications.ts'
 import { HopThoai, HopThoaiXacNhan } from '../components/HopThoai.tsx'
 import { HopThoaiChonModel } from '../components/HopThoaiChonModel.tsx'
 import { KnowledgeModelSettings } from '../components/KnowledgeModelSettings.tsx'
+import { ModelPricingDialog } from '../components/ModelPricingDialog.tsx'
 import {
   Card,
   DangTai,
@@ -131,6 +131,7 @@ function TrangThai({ dangTai, loi, taiLai }: { dangTai: boolean; loi: ApiError |
 
 function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
   const { t, formatNumber } = useI18n()
+  const { begin } = useSettingsNotifications(companyId)
   const [danhSach, setDanhSach] = useState<readonly ProviderView[] | null>(null)
   const [dangTai, setDangTai] = useState(true)
   const [loi, setLoi] = useState<ApiError | null>(null)
@@ -158,15 +159,10 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
   const [dangXoa, setDangXoa] = useState(false)
 
   const [dangLuu, setDangLuu] = useState(false)
-  /** Lỗi của biểu mẫu trong hộp thoại — phải hiện ngay trong hộp thoại, xem chú thích dưới. */
+  /** Chỉ giữ lỗi kiểm tra trường nhập ngay trong biểu mẫu. */
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
-  /** Lỗi của thao tác xoá — xảy ra ngoài hộp thoại nên hiện ở đầu mục. */
-  const [loiXoa, setLoiXoa] = useState<string | null>(null)
-  const [thongBao, setThongBao] = useState<string | null>(null)
 
   const [dangTest, setDangTest] = useState<string | null>(null)
-  const [ketQuaTest, setKetQuaTest] = useState<Record<string, ProviderTestResponse>>({})
-  const [loiTest, setLoiTest] = useState<Record<string, string>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -201,15 +197,13 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     setApiKeyLabel('')
     setBat(provider.enabled)
     setLoiLuu(null)
-    // `setThongBao` cố ý KHÔNG xoá ở đây: thông báo thành công của lần lưu trước phải còn
-    // đọc được, còn dữ liệu biểu mẫu thì đã được nạp đè bằng dữ liệu của provider này.
     setHopMo(true)
   }
 
   /** Mở hộp thoại ở chế độ tạo mới, luôn bắt đầu từ biểu mẫu trắng. */
   function moTaoMoi(): void {
     xoaBieuMau()
-    setThongBao(null)
+
     setHopMo(true)
   }
 
@@ -242,32 +236,32 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
   async function xacNhanXoa(): Promise<void> {
     const provider = choXoa
     if (!provider) return
-    setLoiXoa(null)
-    setThongBao(null)
+
     setDangXoa(true)
+    const finish = begin('provider.delete')
     try {
       await api.deleteProvider(companyId, provider.id)
       if (moProvider === provider.id) setMoProvider(null)
-      setThongBao(t('settings.providers.deleted'))
+      finish('success')
       taiLai()
     } catch (error) {
-      setLoiXoa(error instanceof ApiError ? error.message : t('settings.providers.deleteFailed'))
+      finish('error')
     } finally {
       setDangXoa(false)
-      // Đóng dù thành công hay thất bại: hộp thoại xác nhận chỉ có một câu, không có chỗ
-      // hiện lỗi, mà để nó mở tiếp thì lỗi ở đầu mục bị lớp phủ che.
+      // Kết quả thao tác xuất hiện trong toast dùng chung.
       setChoXoa(null)
     }
   }
 
   async function luu(): Promise<void> {
     setLoiLuu(null)
-    setThongBao(null)
+
     if (ten.trim().length === 0 || baseUrl.trim().length === 0) {
       setLoiLuu(t('settings.providers.needNameAndBaseUrl'))
       return
     }
     setDangLuu(true)
+    const finish = begin('provider.save')
     try {
       if (suaId) {
         // Sửa provider không đổi khoá: khoá quản lý riêng từng cái ở bảng bên dưới.
@@ -278,7 +272,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
           baseUrl: baseUrl.trim(),
           enabled: bat,
         })
-        setThongBao(t('settings.providers.updated'))
+        finish('success')
       } else {
         await api.createProvider(companyId, {
           name: ten.trim(),
@@ -293,14 +287,14 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
               }
             : {}),
         })
-        setThongBao(t('settings.providers.created'))
+        finish('success')
       }
       // Đóng hộp thoại sau khi lưu xong: giữ nó mở sẽ khiến người dùng bấm Lưu lần nữa và
       // tạo bản ghi trùng.
       dongHopThoai()
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : t('settings.providers.saveFailed'))
+      finish('error')
     } finally {
       setDangLuu(false)
     }
@@ -308,15 +302,12 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
 
   async function test(provider: ProviderView): Promise<void> {
     setDangTest(provider.id)
-    setLoiTest((truoc) => ({ ...truoc, [provider.id]: '' }))
+    const finish = begin('provider.test')
     try {
       const ketQua = await api.testProvider(companyId, provider.id)
-      setKetQuaTest((truoc) => ({ ...truoc, [provider.id]: ketQua }))
+      finish(ketQua.ok ? 'success' : 'error')
     } catch (error) {
-      setLoiTest((truoc) => ({
-        ...truoc,
-        [provider.id]: error instanceof ApiError ? error.message : t('settings.providers.testFailed'),
-      }))
+      finish('error')
     } finally {
       setDangTest(null)
     }
@@ -326,16 +317,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     <Card tieuDe={t('settings.providers.title')} phu={t('settings.providers.subtitle')}>
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
-      {thongBao ? (
-        <div style={{ marginBottom: 10 }}>
-          <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
-        </div>
-      ) : null}
-      {loiXoa ? (
-        <div style={{ marginBottom: 10 }}>
-          <ThongBao loai="loi">{loiXoa}</ThongBao>
-        </div>
-      ) : null}
+
 
       {/* Nút mở hộp thoại đặt ngay trên bảng: mắt đi từ "danh sách" sang "thêm" theo một
           chiều, thay vì phải cuộn xuống cuối mục như khi biểu mẫu luôn hiện. */}
@@ -420,26 +402,8 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
                       {t('settings.providers.delete')}
                     </Nut>
                   </div>
-                  {ketQuaTest[provider.id] ? (
-                    <div style={{ marginTop: 6 }}>
-                      <ThongBao loai={ketQuaTest[provider.id]?.ok ? 'thanh-cong' : 'loi'}>
-                        {t('settings.providers.testResult', {
-                          message: ketQuaTest[provider.id]?.message ?? '',
-                          ms: formatNumber(ketQuaTest[provider.id]?.latencyMs ?? 0),
-                        })}
-                        {ketQuaTest[provider.id]?.modelsSeen !== undefined
-                          ? ` ${t('settings.providers.testModelsSeen', {
-                              count: formatNumber(ketQuaTest[provider.id]?.modelsSeen ?? 0),
-                            })}`
-                          : ''}
-                      </ThongBao>
-                    </div>
-                  ) : null}
-                  {loiTest[provider.id] ? (
-                    <div style={{ marginTop: 6 }}>
-                      <ThongBao loai="loi">{loiTest[provider.id]}</ThongBao>
-                    </div>
-                  ) : null}
+
+
                 </td>
               </tr>
             ))}
@@ -562,6 +526,7 @@ function PhanKhoaProvider({
   onChanged: () => void
 }): ReactNode {
   const { t, formatNumber } = useI18n()
+  const { begin } = useSettingsNotifications(companyId)
   const [keyForm, setKeyForm] = useState<{
     keyId: string | null
     label: string
@@ -571,9 +536,7 @@ function PhanKhoaProvider({
   } | null>(null)
   const [dangLuu, setDangLuu] = useState(false)
   const [loi, setLoi] = useState<string | null>(null)
-  const [thongBao, setThongBao] = useState<string | null>(null)
   const [dangTest, setDangTest] = useState<string | null>(null)
-  const [ketQuaTest, setKetQuaTest] = useState<Record<string, ProviderTestResponse>>({})
   /** Đang mở hộp thoại chọn model dùng chung, khoá sẵn vào provider này. */
   const [chonModelMo, setChonModelMo] = useState(false)
   const [dangPurge, setDangPurge] = useState(false)
@@ -589,13 +552,13 @@ function PhanKhoaProvider({
       enabled: true,
     })
     setLoi(null)
-    setThongBao(null)
+
   }
 
   function moSuaKhoa(key: ProviderKeyView): void {
     setKeyForm({ keyId: key.id, label: key.label, apiKey: '', priority: String(key.priority), enabled: key.enabled })
     setLoi(null)
-    setThongBao(null)
+
   }
 
   async function luuKhoa(): Promise<void> {
@@ -606,6 +569,7 @@ function PhanKhoaProvider({
     }
     setDangLuu(true)
     setLoi(null)
+    const finish = begin('key.save')
     try {
       if (keyForm.keyId === null) {
         await api.createProviderKey(companyId, provider.id, {
@@ -614,7 +578,7 @@ function PhanKhoaProvider({
           priority: Math.round(soTuChuoi(keyForm.priority)),
           enabled: keyForm.enabled,
         })
-        setThongBao(t('settings.providers.keys.created'))
+        finish('success')
       } else {
         await api.updateProviderKey(companyId, provider.id, keyForm.keyId, {
           label: keyForm.label.trim(),
@@ -622,12 +586,12 @@ function PhanKhoaProvider({
           enabled: keyForm.enabled,
           ...(keyForm.apiKey.trim().length > 0 ? { apiKey: keyForm.apiKey.trim() } : {}),
         })
-        setThongBao(t('settings.providers.keys.updated'))
+        finish('success')
       }
       setKeyForm(null)
       onChanged()
     } catch (error) {
-      setLoi(error instanceof ApiError ? error.message : t('settings.providers.keys.saveFailed'))
+      finish('error')
     } finally {
       setDangLuu(false)
     }
@@ -635,29 +599,24 @@ function PhanKhoaProvider({
 
   async function xoaKhoa(key: ProviderKeyView): Promise<void> {
     setLoi(null)
+    const finish = begin('key.delete')
     try {
       await api.deleteProviderKey(companyId, provider.id, key.id)
-      setThongBao(t('settings.providers.keys.deleted'))
+      finish('success')
       onChanged()
     } catch (error) {
-      setLoi(error instanceof ApiError ? error.message : t('settings.providers.keys.deleteFailed'))
+      finish('error')
     }
   }
 
   async function testKhoa(key: ProviderKeyView): Promise<void> {
     setDangTest(key.id)
+    const finish = begin('key.test')
     try {
       const ketQua = await api.testProviderKey(companyId, provider.id, key.id)
-      setKetQuaTest((truoc) => ({ ...truoc, [key.id]: ketQua }))
+      finish(ketQua.ok ? 'success' : 'error')
     } catch (error) {
-      setKetQuaTest((truoc) => ({
-        ...truoc,
-        [key.id]: {
-          ok: false,
-          message: error instanceof ApiError ? error.message : t('settings.providers.testFailed'),
-          latencyMs: 0,
-        },
-      }))
+      finish('error')
     } finally {
       setDangTest(null)
     }
@@ -667,16 +626,16 @@ function PhanKhoaProvider({
   async function purgeModels(): Promise<void> {
     setDangPurge(true)
     setLoi(null)
+    const finish = begin('model.purge')
     try {
-      const ketQua = await api.purgeProviderModels(companyId, provider.id)
-      setThongBao(t('settings.models.purged', { count: formatNumber(ketQua.deleted) }))
+      await api.purgeProviderModels(companyId, provider.id)
+      finish('success')
       onChanged()
     } catch (error) {
-      setLoi(error instanceof ApiError ? error.message : t('settings.models.purgeFailed'))
+      finish('error')
     } finally {
       setDangPurge(false)
-      // Đóng cả khi lỗi: hộp thoại xác nhận không có chỗ hiện lỗi, mà để nó mở tiếp thì
-      // thông báo lỗi ở trên bị lớp phủ che.
+      // Kết quả thao tác xuất hiện trong toast dùng chung.
       setXacNhanPurge(false)
     }
   }
@@ -692,11 +651,6 @@ function PhanKhoaProvider({
       <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.providers.keyUsageMode.hint')}</p>
       <p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.providers.keyUsageMode.rateLimitNote')}</p>
 
-      {thongBao ? (
-        <div style={{ marginBottom: 8 }}>
-          <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
-        </div>
-      ) : null}
       {loi ? (
         <div style={{ marginBottom: 8 }}>
           <ThongBao loai="loi">{loi}</ThongBao>
@@ -743,16 +697,7 @@ function PhanKhoaProvider({
                       {t('common.delete')}
                     </Nut>
                   </div>
-                  {ketQuaTest[key.id] ? (
-                    <div style={{ marginTop: 6 }}>
-                      <ThongBao loai={ketQuaTest[key.id]?.ok ? 'thanh-cong' : 'loi'}>
-                        {t('settings.providers.testResult', {
-                          message: ketQuaTest[key.id]?.message ?? '',
-                          ms: formatNumber(ketQuaTest[key.id]?.latencyMs ?? 0),
-                        })}
-                      </ThongBao>
-                    </div>
-                  ) : null}
+
                 </td>
               </tr>
             ))}
@@ -856,6 +801,7 @@ function PhanKhoaProvider({
 
 function PhanModel({ companyId }: { companyId: string }): ReactNode {
   const { t, formatNumber, formatCurrencyUsd } = useI18n()
+  const { begin } = useSettingsNotifications(companyId)
   const [providers, setProviders] = useState<readonly ProviderView[] | null>(null)
   const [dangTai, setDangTai] = useState(true)
   const [loi, setLoi] = useState<ApiError | null>(null)
@@ -872,9 +818,6 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
   const [dangLuu, setDangLuu] = useState(false)
   /** Lỗi của biểu mẫu thêm model — hiện BÊN TRONG hộp thoại, xem chú thích ở chỗ render. */
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
-  /** Lỗi của thao tác xoá/purge — xảy ra ngoài hộp thoại nên hiện ở đầu mục. */
-  const [loiXoa, setLoiXoa] = useState<string | null>(null)
-  const [thongBao, setThongBao] = useState<string | null>(null)
   const [dangPurge, setDangPurge] = useState<string | null>(null)
 
   // Hộp thoại lấy model đặt ngay trong mục Model: đây mới là chỗ người dùng tìm khi cần
@@ -892,6 +835,8 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
 
   // Hộp thoại xác nhận giữ ĐỐI TƯỢNG cần xoá thay vì một cờ boolean: nhờ vậy câu xác nhận
   // luôn nhắc đúng tên model/nhà cung cấp, kể cả khi danh sách đã được tải lại sau đó.
+  const [suaGia, setSuaGia] = useState<{ companyId: string; model: ModelOptionView } | null>(null)
+  useEffect(() => { setSuaGia(null) }, [companyId])
   const [choXoaModel, setChoXoaModel] = useState<ModelOptionView | null>(null)
   const [dangXoaModel, setDangXoaModel] = useState(false)
   const [choPurge, setChoPurge] = useState<ProviderView | null>(null)
@@ -926,7 +871,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     [providers],
   )
 
-  /** Xoá trắng biểu mẫu nhưng KHÔNG đụng tới `thongBao` của lần lưu trước. */
+  /** Xoá trắng biểu mẫu nhập model. */
   function xoaBieuMauModel(): void {
     setProviderId('')
     setModelId('')
@@ -953,18 +898,19 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
   /** Mở hộp thoại nhập model, luôn bắt đầu từ biểu mẫu trắng. */
   function moThemModelMoi(): void {
     xoaBieuMauModel()
-    setThongBao(null)
+
     setMoThemModel(true)
   }
 
   async function luu(): Promise<void> {
     setLoiLuu(null)
-    setThongBao(null)
+
     if (providerId.length === 0 || modelId.trim().length === 0 || label.trim().length === 0) {
       setLoiLuu(t('settings.models.needFields'))
       return
     }
     setDangLuu(true)
+    const finish = begin('model.save')
     try {
       await api.createModel(companyId, {
         providerId,
@@ -978,13 +924,12 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
       // Đóng hộp thoại và xoá biểu mẫu qua MỘT đường duy nhất (`dongHopThoaiModel`), thay vì
       // tự đặt lại từng trường ở đây: hai nơi cùng xoá biểu mẫu thì sớm muộn sẽ lệch nhau.
       // Hộp thoại mở lại lần sau vì thế luôn là biểu mẫu trắng.
-      setThongBao(t('settings.models.created'))
+      finish('success')
       dongHopThoaiModel()
       taiLai()
     } catch (error) {
-      // Lỗi thì hộp thoại Ở LẠI để người dùng sửa và thử lại; `loiLuu` hiện bên trong hộp
-      // thoại vì để ở đầu mục thì bị lớp phủ che.
-      setLoiLuu(error instanceof ApiError ? error.message : t('settings.models.saveFailed'))
+      // Giữ nguyên nháp sau lỗi để người dùng sửa và thử lại.
+      finish('error')
     } finally {
       setDangLuu(false)
     }
@@ -994,17 +939,16 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     const model = choXoaModel
     if (!model) return
     setDangXoaModel(true)
-    setLoiXoa(null)
-    setThongBao(null)
+
+    const finish = begin('model.delete')
     try {
       await api.deleteModel(companyId, model.id)
-      setThongBao(t('settings.models.deleted'))
+      finish('success')
       setChoXoaModel(null)
       taiLai()
     } catch (error) {
-      setLoiXoa(error instanceof ApiError ? error.message : t('settings.models.deleteFailed'))
-      // Đóng hộp thoại cả khi lỗi: câu lỗi hiện trên mục Model, để hộp thoại mở lại thì
-      // lớp phủ che mất chính thông báo đó.
+      finish('error')
+      // Hộp thoại xác nhận không chứa biểu mẫu cần giữ lại.
       setChoXoaModel(null)
     } finally {
       setDangXoaModel(false)
@@ -1015,15 +959,15 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     const provider = choPurge
     if (!provider) return
     setDangPurge(provider.id)
-    setLoiXoa(null)
-    setThongBao(null)
+
+    const finish = begin('model.purge')
     try {
-      const ketQua = await api.purgeProviderModels(companyId, provider.id)
-      setThongBao(t('settings.models.purged', { count: formatNumber(ketQua.deleted) }))
+      await api.purgeProviderModels(companyId, provider.id)
+      finish('success')
       setChoPurge(null)
       taiLai()
     } catch (error) {
-      setLoiXoa(error instanceof ApiError ? error.message : t('settings.models.purgeFailed'))
+      finish('error')
       setChoPurge(null)
     } finally {
       setDangPurge(null)
@@ -1051,18 +995,6 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     >
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
-      {thongBao ? (
-        <div style={{ marginBottom: 10 }}>
-          <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
-        </div>
-      ) : null}
-      {/* Lỗi xoá/purge hiện ở đây vì nó xảy ra NGOÀI hộp thoại. Lỗi của biểu mẫu thêm model
-          thì hiện bên trong hộp thoại — để ở đây sẽ bị lớp phủ che. */}
-      {loiXoa ? (
-        <div style={{ marginBottom: 10 }}>
-          <ThongBao loai="loi">{loiXoa}</ThongBao>
-        </div>
-      ) : null}
 
       {providers && providers.length === 0 ? <Trong>{t('settings.models.emptyNoProvider')}</Trong> : null}
 
@@ -1124,9 +1056,12 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
                     ? t('settings.models.usageCount', { count: formatNumber(model.usedByAgentCount) })
                     : t('common.none')}
                 </td>
-                <td className="so">{formatCurrencyUsd(model.costInPerMtok)}</td>
-                <td className="so">{formatCurrencyUsd(model.costOutPerMtok)}</td>
+                <td className="so">{formatNumber(model.costInPerMtok, { maximumFractionDigits: 12 })}</td>
+                <td className="so">{formatNumber(model.costOutPerMtok, { maximumFractionDigits: 12 })}</td>
                 <td>
+                  <Nut bien="phu" nho onClick={() => setSuaGia({ companyId, model })}>
+                    {t('settings.models.pricing.title')}
+                  </Nut>
                   <Nut
                     bien="nguy-hiem"
                     nho
@@ -1141,6 +1076,11 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
             ))}
           </tbody>
         </table>
+      ) : null}
+
+      {suaGia?.companyId === companyId ? (
+        <ModelPricingDialog key={`${companyId}:${suaGia.model.id}`} companyId={companyId} model={suaGia.model}
+          onClose={() => setSuaGia(null)} onSaved={taiLai} />
       ) : null}
 
       {/*
@@ -1234,6 +1174,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
 
 function PhanRoute({ companyId }: { companyId: string }): ReactNode {
   const { t, formatNumber } = useI18n()
+  const { begin } = useSettingsNotifications(companyId)
   const [routes, setRoutes] = useState<readonly ModelRouteView[] | null>(null)
   const [models, setModels] = useState<readonly ModelOptionView[]>([])
   const [agents, setAgents] = useState<readonly { id: string; label: string }[]>([])
@@ -1247,7 +1188,6 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
 
   const [dangLuu, setDangLuu] = useState(false)
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
-  const [thongBao, setThongBao] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -1285,18 +1225,19 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
 
   async function luu(): Promise<void> {
     setLoiLuu(null)
-    setThongBao(null)
+
     if (agentDefId.length === 0 || modelFk.length === 0) {
       setLoiLuu(t('settings.routes.needAgentAndModel'))
       return
     }
     setDangLuu(true)
+    const finish = begin('route.save')
     try {
       await api.upsertRoute(companyId, { agentDefId, tier, modelFk })
-      setThongBao(t('settings.routes.assigned', { tier: t(NHAN_TIER[tier]) }))
+      finish('success')
       taiLai()
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : t('settings.routes.saveFailed'))
+      finish('error')
     } finally {
       setDangLuu(false)
     }
@@ -1306,11 +1247,6 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
     <Card tieuDe={t('settings.routes.title')} phu={t('settings.routes.subtitle')}>
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
-      {thongBao ? (
-        <div style={{ marginBottom: 10 }}>
-          <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
-        </div>
-      ) : null}
       {loiLuu ? (
         <div style={{ marginBottom: 10 }}>
           <ThongBao loai="loi">{loiLuu}</ThongBao>
@@ -1384,6 +1320,7 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
 
 function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   const { t, formatNumber, formatDateTime } = useI18n()
+  const { begin } = useSettingsNotifications(companyId)
   const [danhSach, setDanhSach] = useState<readonly IntegrationView[] | null>(null)
   const [dangTai, setDangTai] = useState(true)
   const [loi, setLoi] = useState<ApiError | null>(null)
@@ -1396,9 +1333,6 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   const [firecrawlUrl, setFirecrawlUrl] = useState('')
   const [moNangCao, setMoNangCao] = useState(false)
   const [moThemKetNoi, setMoThemKetNoi] = useState(false)
-  // Ref cập nhật ngay khi đóng/mở, không phải đợi React render: phản hồi lưu có thể về
-  // ngay sau cú bấm đóng và cần biết nên hiện lỗi trong cửa sổ hay ở đầu mục.
-  const hopKetNoiMoRef = useRef(false)
   const congTyKetNoiRef = useRef(companyId)
   congTyKetNoiRef.current = companyId
   const luotKetNoiRef = useRef(0)
@@ -1406,8 +1340,6 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
 
   const [dangLuu, setDangLuu] = useState(false)
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
-  const [loiNgoaiHop, setLoiNgoaiHop] = useState<string | null>(null)
-  const [thongBao, setThongBao] = useState<string | null>(null)
 
   function xoaBieuMauKetNoi(): void {
     setKind('firecrawl')
@@ -1427,7 +1359,6 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   }
 
   function dongHopThoaiKetNoi(): void {
-    hopKetNoiMoRef.current = false
     setMoThemKetNoi(false)
     xoaBieuMauKetNoi()
   }
@@ -1435,9 +1366,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   function moKetNoiMoi(): void {
     if (dangLuuKetNoiRef.current) return
     xoaBieuMauKetNoi()
-    setLoiNgoaiHop(null)
-    setThongBao(null)
-    hopKetNoiMoRef.current = true
+
     setMoThemKetNoi(true)
   }
 
@@ -1445,12 +1374,10 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
     // Đổi công ty phải bỏ nháp và vô hiệu phản hồi cũ; cấu hình có thể chứa bí mật nên
     // tuyệt đối không mang nó, hay thông báo của lượt lưu trước, sang công ty mới.
     dongHopThoaiKetNoi()
-    setLoiNgoaiHop(null)
-    setThongBao(null)
+
     setDangLuu(false)
     dangLuuKetNoiRef.current = false
-    setKetQuaTest({})
-    setLoiTest({})
+
     setDangTest(null)
     return () => {
       luotKetNoiRef.current += 1
@@ -1458,8 +1385,6 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   }, [companyId])
 
   const [dangTest, setDangTest] = useState<string | null>(null)
-  const [ketQuaTest, setKetQuaTest] = useState<Record<string, IntegrationTestResponse>>({})
-  const [loiTest, setLoiTest] = useState<Record<string, string>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -1486,7 +1411,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
 
   async function luu(): Promise<void> {
     setLoiLuu(null)
-    setThongBao(null)
+
     const name = kind === 'firecrawl' ? firecrawlConnectionName(ten) : ten.trim()
     if (!name) {
       setLoiLuu(t('settings.integrations.needName'))
@@ -1520,20 +1445,17 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
     const vanDungNguCanh = (): boolean =>
       luotLuu === luotKetNoiRef.current && companyId === congTyKetNoiRef.current
     setDangLuu(true)
-    setLoiNgoaiHop(null)
+
+    const finish = begin('integration.save')
     try {
       await api.upsertIntegration(companyId, { kind, name, config })
       if (!vanDungNguCanh()) return
-      setThongBao(t('settings.integrations.saved'))
+      finish('success')
       dongHopThoaiKetNoi()
       taiLai()
     } catch (error) {
       if (!vanDungNguCanh()) return
-      const message = error instanceof ApiError ? error.message : t('settings.integrations.saveFailed')
-      // Đã đóng cửa sổ trong lúc chờ thì lỗi phải hiện bên ngoài. Còn mở thì giữ nháp
-      // để người dùng sửa và thử lại, không xoá cấu hình sau một lỗi mạng.
-      if (hopKetNoiMoRef.current) setLoiLuu(message)
-      else setLoiNgoaiHop(message)
+      finish('error')
     } finally {
       if (vanDungNguCanh()) {
         dangLuuKetNoiRef.current = false
@@ -1544,15 +1466,12 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
 
   async function test(integration: IntegrationView): Promise<void> {
     setDangTest(integration.id)
-    setLoiTest((truoc) => ({ ...truoc, [integration.id]: '' }))
+    const finish = begin('integration.test')
     try {
       const ketQua = await api.testIntegration(companyId, integration.id)
-      setKetQuaTest((truoc) => ({ ...truoc, [integration.id]: ketQua }))
+      finish(ketQua.ok ? 'success' : 'error')
     } catch (error) {
-      setLoiTest((truoc) => ({
-        ...truoc,
-        [integration.id]: error instanceof ApiError ? error.message : t('settings.integrations.testFailed'),
-      }))
+      finish('error')
     } finally {
       setDangTest(null)
     }
@@ -1570,16 +1489,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
     >
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
 
-      {thongBao ? (
-        <div style={{ marginBottom: 10 }}>
-          <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
-        </div>
-      ) : null}
-      {loiNgoaiHop ? (
-        <div style={{ marginBottom: 10 }}>
-          <ThongBao loai="loi">{loiNgoaiHop}</ThongBao>
-        </div>
-      ) : null}
+
 
       <p style={{ fontSize: 13, color: 'var(--mau-chu-mo)' }}>{t('settings.integrations.testNote')}</p>
       {danhSach && danhSach.length === 0 ? <Trong>{t('settings.integrations.empty')}</Trong> : null}
@@ -1618,22 +1528,8 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
                   <Nut bien="phu" nho onClick={() => void test(integration)} dangTai={dangTest === integration.id}>
                     {t('settings.integrations.test')}
                   </Nut>
-                  {ketQuaTest[integration.id] ? (
-                    <div style={{ marginTop: 6 }}>
-                      <ThongBao loai={ketQuaTest[integration.id]?.ok ? 'thanh-cong' : 'loi'}>
-                        {t('settings.integrations.testResult', {
-                          message: ketQuaTest[integration.id]?.message ?? '',
-                          status: ketQuaTest[integration.id]?.status ?? '',
-                          ms: formatNumber(ketQuaTest[integration.id]?.latencyMs ?? 0),
-                        })}
-                      </ThongBao>
-                    </div>
-                  ) : null}
-                  {loiTest[integration.id] ? (
-                    <div style={{ marginTop: 6 }}>
-                      <ThongBao loai="loi">{loiTest[integration.id]}</ThongBao>
-                    </div>
-                  ) : null}
+
+
                 </td>
               </tr>
             ))}
@@ -1708,6 +1604,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
 
 function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
   const { t, formatCurrencyUsd } = useI18n()
+  const { begin } = useSettingsNotifications(companyId)
   // Tên công ty đang mở: giới hạn lưu theo `companyId`, nên phải nói rõ đang sửa cho
   // công ty nào — người thuộc nhiều công ty rất dễ sửa nhầm.
   const { company: congTyDangMo } = useSession()
@@ -1725,8 +1622,6 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
   const [lanThu, setLanThu] = useState(0)
 
   const [dangLuu, setDangLuu] = useState(false)
-  const [loiLuu, setLoiLuu] = useState<string | null>(null)
-  const [thongBao, setThongBao] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -1762,9 +1657,9 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
 
   async function luu(): Promise<void> {
     if (!duLieu) return
-    setLoiLuu(null)
-    setThongBao(null)
+
     setDangLuu(true)
+    const finish = begin('limits.save')
     try {
       const ketQua = await api.updateLimits(companyId, {
         dailyCostUsd: soTuChuoi(duLieu.dailyCostUsd),
@@ -1775,9 +1670,9 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
         maxParallelTasks: Math.round(soTuChuoi(duLieu.maxParallelTasks)),
       })
       setUsedTodayUsd(ketQua.usedTodayUsd)
-      setThongBao(t('settings.limits.saved'))
+      finish('success')
     } catch (error) {
-      setLoiLuu(error instanceof ApiError ? error.message : t('settings.limits.saveFailed'))
+      finish('error')
     } finally {
       setDangLuu(false)
     }
@@ -1819,16 +1714,7 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
             {t('settings.limits.companyScope', { company: congTyDangMo?.name ?? companyId })}
           </div>
 
-          {thongBao ? (
-            <div style={{ marginTop: 12 }}>
-              <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
-            </div>
-          ) : null}
-          {loiLuu ? (
-            <div style={{ marginTop: 12 }}>
-              <ThongBao loai="loi">{loiLuu}</ThongBao>
-            </div>
-          ) : null}
+
 
           <div className="luoi luoi--3" style={{ marginTop: 14 }}>
             <div>

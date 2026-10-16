@@ -2,6 +2,7 @@
 import { newId, notFound, nowIso, round, type IntegrationKind, type IntegrationRecord, type RunRecord, type RunStatus } from '@marketing-agent/shared'
 import type { Database } from '../database.ts'
 import type { SecretBox } from '../crypto.ts'
+import { NotificationsRepo } from './notifications.ts'
 
 interface RunRow {
   id: string
@@ -127,6 +128,8 @@ export class AccountingRepo {
     return this.db.tx(() => {
       const run = this.db.get<RunRow>('SELECT * FROM runs WHERE id = ?', [id])
       if (!run) throw notFound('Không tìm thấy lượt chạy')
+      // Terminal runs and their usage/notification side effects are immutable.
+      if (run.status !== 'running') return toRun(run)
       const cost = round(input.costUsd, 6)
       this.db.run(
         `UPDATE runs
@@ -165,7 +168,16 @@ export class AccountingRepo {
         },
       )
       const finished = this.db.get<RunRow>('SELECT * FROM runs WHERE id = ?', [id])
-      return toRun(finished!)
+      const record = toRun(finished!)
+      try {
+        // Nested tx is a SQLite savepoint: delivery failures cannot erase paid usage.
+        this.db.tx(()=>{
+          const notifications = new NotificationsRepo(this.db)
+          notifications.runFinished(record)
+          notifications.budget(record.companyId,record.id,record.costUsd,this.notificationBudgetLimits(record.companyId))
+        })
+      } catch { console.warn('[notifications] Delivery failed; run accounting preserved') }
+      return record
     })
   }
 
@@ -186,6 +198,16 @@ export class AccountingRepo {
     sql += ' ORDER BY created_at DESC LIMIT ?'
     params.push(options.limit ?? 100)
     return this.db.all<RunRow>(sql, params).map(toRun)
+  }
+
+  notificationBudgetLimits(companyId:string):{dailyCostUsd:number;taskCostUsd:number} {
+    return {dailyCostUsd:20,taskCostUsd:2,...this.getSetting<{dailyCostUsd?:number;taskCostUsd?:number}>(`limits:${companyId}`)}
+  }
+
+  /** Runtime bridge: charged in-flight usage is not yet stored in runs. */
+  observeBudget(companyId:string,runId:string,runCost:number,limits:{dailyCostUsd?:number;taskCostUsd?:number}):void {
+    try { new NotificationsRepo(this.db).budget(companyId,runId,runCost,limits) }
+    catch { /* Live hints must not break a paid call; finishRun retries atomically. */ }
   }
 
   /* --------------------------------------------------------------- budget */

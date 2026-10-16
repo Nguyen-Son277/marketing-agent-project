@@ -9,15 +9,15 @@
  * Vì sao mọi trạng thái bên trong bị xoá khi đóng: giữ lại thì lần mở sau người dùng thấy
  * danh sách và những dòng đã tích của lần trước, và rất dễ bấm "Thêm" rồi nhập nhầm model.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
   FetchedModelView,
   FetchModelsResponse,
-  ImportModelsResponse,
   ProviderView,
 } from '@marketing-agent/shared'
 import { api, ApiError } from '../lib/api.ts'
 import { useI18n } from '../lib/i18n.tsx'
+import { useSettingsNotifications } from '../lib/settings-notifications.ts'
 import {
   BO_LOC_MODEL_MAC_DINH,
   chonTatCaDangHien,
@@ -51,6 +51,10 @@ export function HopThoaiChonModel({
   providerId?: string
 }): ReactNode {
   const { t, formatNumber } = useI18n()
+  const { begin } = useSettingsNotifications(companyId)
+  const activeCompany = useRef(companyId)
+  activeCompany.current = companyId
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   const [providers, setProviders] = useState<readonly ProviderView[]>([])
   const [dangTaiProvider, setDangTaiProvider] = useState(false)
@@ -60,15 +64,12 @@ export function HopThoaiChonModel({
 
   const [ketQuaFetch, setKetQuaFetch] = useState<FetchModelsResponse | null>(null)
   const [dangFetch, setDangFetch] = useState(false)
-  const [loiFetch, setLoiFetch] = useState<string | null>(null)
 
   const [tuKhoa, setTuKhoa] = useState<string>(BO_LOC_MODEL_MAC_DINH.tuKhoa)
   const [chiChuaThem, setChiChuaThem] = useState<boolean>(BO_LOC_MODEL_MAC_DINH.chiChuaThem)
   const [daChon, setDaChon] = useState<readonly string[]>([])
 
   const [dangNhap, setDangNhap] = useState(false)
-  const [ketQuaNhap, setKetQuaNhap] = useState<ImportModelsResponse | null>(null)
-  const [loiNhap, setLoiNhap] = useState<string | null>(null)
 
   /**
    * Đưa hộp thoại về trạng thái trắng.
@@ -80,12 +81,9 @@ export function HopThoaiChonModel({
     setProviderIdChon(providerId ?? '')
     setKeyId('')
     setKetQuaFetch(null)
-    setLoiFetch(null)
     setTuKhoa(BO_LOC_MODEL_MAC_DINH.tuKhoa)
     setChiChuaThem(BO_LOC_MODEL_MAC_DINH.chiChuaThem)
     setDaChon([])
-    setKetQuaNhap(null)
-    setLoiNhap(null)
   }, [providerId])
 
   useEffect(() => {
@@ -114,7 +112,7 @@ export function HopThoaiChonModel({
     return () => {
       cancelled = true
     }
-  }, [mo, companyId, t, xoaTrangThai])
+  }, [mo, companyId, t, xoaTrangThai, loadAttempt])
 
   const nhaCungCap = useMemo(
     () => providers.find((item) => item.id === providerIdChon) ?? null,
@@ -150,8 +148,6 @@ export function HopThoaiChonModel({
     // Kết quả fetch gắn với nhà cung cấp cũ. Giữ lại sẽ khiến người dùng tưởng danh sách
     // đang nhìn thuộc nhà cung cấp vừa chọn.
     setKetQuaFetch(null)
-    setLoiFetch(null)
-    setKetQuaNhap(null)
     setDaChon([])
   }
 
@@ -160,30 +156,31 @@ export function HopThoaiChonModel({
     // Có gateway giới hạn danh sách model theo từng khoá, nên đổi khoá thì kết quả cũ
     // không còn đúng nữa.
     setKetQuaFetch(null)
-    setLoiFetch(null)
     setDaChon([])
   }
 
   async function layDanhSach(): Promise<void> {
     if (providerIdChon.length === 0) return
+    const finish = begin('model.fetch')
+    const requestCompany = companyId
     setDangFetch(true)
-    setLoiFetch(null)
     setDaChon([])
-    setKetQuaNhap(null)
     try {
       const ketQua = await api.fetchProviderModels(
         companyId,
         providerIdChon,
         keyId.length > 0 ? keyId : undefined,
       )
+      finish(ketQua.ok ? 'success' : 'error')
+      if (activeCompany.current !== requestCompany) return
       setKetQuaFetch(ketQua)
-    } catch (error) {
+    } catch {
       // Xoá kết quả cũ: để danh sách của lần lấy trước nằm cạnh thông báo lỗi sẽ khiến
       // người dùng tưởng đó là dữ liệu vừa lấy được.
-      setKetQuaFetch(null)
-      setLoiFetch(error instanceof ApiError ? error.message : t('settings.models.fetch.failed'))
+      finish('error')
+      if (activeCompany.current === requestCompany) setKetQuaFetch(null)
     } finally {
-      setDangFetch(false)
+      if (activeCompany.current === requestCompany) setDangFetch(false)
     }
   }
 
@@ -196,9 +193,9 @@ export function HopThoaiChonModel({
 
   async function nhapDaChon(): Promise<void> {
     if (providerIdChon.length === 0 || daChon.length === 0) return
+    const finish = begin('model.save')
+    const requestCompany = companyId
     setDangNhap(true)
-    setLoiNhap(null)
-    setKetQuaNhap(null)
     const daGui = [...daChon]
     try {
       const ketQua = await api.importProviderModels(companyId, providerIdChon, {
@@ -208,6 +205,10 @@ export function HopThoaiChonModel({
           return model ? { modelId, label: model.label } : { modelId }
         }),
       })
+      if (activeCompany.current !== requestCompany) {
+        finish(ketQua.skipped.length > 0 ? 'warning' : 'success')
+        return
+      }
       // Mọi model đã gửi giờ đều nằm trong hệ thống: hoặc được tạo, hoặc bị server bỏ qua
       // vì đã có. Đánh dấu theo đúng nhóm đã gửi nên danh sách phản ánh trạng thái thật.
       const daCo = new Set(daGui)
@@ -222,13 +223,13 @@ export function HopThoaiChonModel({
           : truoc,
       )
       setDaChon([])
-      setKetQuaNhap(ketQua)
       // Mục Model bên ngoài cần tải lại để bảng hiện những model vừa thêm.
       onDaNhap()
-    } catch (error) {
-      setLoiNhap(error instanceof ApiError ? error.message : t('settings.models.fetch.importFailed'))
+      finish(ketQua.skipped.length > 0 ? 'warning' : 'success')
+    } catch {
+      finish('error')
     } finally {
-      setDangNhap(false)
+      if (activeCompany.current === requestCompany) setDangNhap(false)
     }
   }
 
@@ -262,7 +263,7 @@ export function HopThoaiChonModel({
         {t('settings.models.fetch.hint')}
       </p>
 
-      {loiProvider ? <ThongBao loai="loi">{loiProvider}</ThongBao> : null}
+      {loiProvider ? <><ThongBao loai="loi">{loiProvider}</ThongBao><Nut bien="phu" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>{t('common.retry')}</Nut></> : null}
       {dangTaiProvider ? <DangTai /> : null}
 
       {!providerId ? (
@@ -298,23 +299,6 @@ export function HopThoaiChonModel({
           {t('settings.models.fetch.action')}
         </Nut>
       </div>
-
-      {loiFetch ? (
-        <div style={{ marginTop: 10 }}>
-          <ThongBao loai="loi">{loiFetch}</ThongBao>
-        </div>
-      ) : null}
-
-      {ketQuaFetch ? (
-        <div style={{ marginTop: 10 }}>
-          <ThongBao loai={ketQuaFetch.ok ? 'thanh-cong' : 'loi'}>
-            {t('settings.models.fetch.result', {
-              message: ketQuaFetch.message,
-              ms: formatNumber(ketQuaFetch.latencyMs),
-            })}
-          </ThongBao>
-        </div>
-      ) : null}
 
       {/* Chỉ hiện danh sách khi lấy được: danh sách rỗng cạnh một lỗi kết nối rất dễ bị
           hiểu nhầm là "nhà cung cấp không có model nào". */}
@@ -375,21 +359,6 @@ export function HopThoaiChonModel({
             )}
           </div>
 
-          {ketQuaNhap ? (
-            <div style={{ marginTop: 10 }}>
-              <ThongBao loai="thanh-cong">
-                {t('settings.models.fetch.imported', {
-                  created: formatNumber(ketQuaNhap.created.length),
-                  skipped: formatNumber(ketQuaNhap.skipped.length),
-                })}
-              </ThongBao>
-            </div>
-          ) : null}
-          {loiNhap ? (
-            <div style={{ marginTop: 10 }}>
-              <ThongBao loai="loi">{loiNhap}</ThongBao>
-            </div>
-          ) : null}
         </>
       ) : null}
     </HopThoai>

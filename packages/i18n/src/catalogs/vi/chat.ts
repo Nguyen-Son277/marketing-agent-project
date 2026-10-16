@@ -8,6 +8,9 @@
  * Khoá trong file này PHẢI có tiền tố `chat.` để không đụng namespace khác.
  */
 export const vi_chat = {
+  'chat.composerLabel': 'Tin nhắn gửi Leader',
+  'chat.composerHint': 'Enter để gửi · Shift+Enter để xuống dòng',
+  'chat.sending': 'Đang gửi tin nhắn',
   /* ------------------------------------------------- khung màn hình */
   'chat.loadingList': 'Đang tải cuộc trao đổi…',
   'chat.conversations': 'Cuộc trao đổi',
@@ -58,6 +61,8 @@ export const vi_chat = {
 
   /* ----------------------------------------------------------- bảng kế hoạch */
   'chat.planTitle': 'Kế hoạch',
+  'chat.viewPlan': 'Xem kế hoạch ({{count}})',
+  'chat.viewPlanHint': 'Mở danh sách công việc trong hộp thoại',
   'chat.planSubtitle': 'Bấm tab Công việc để xem chi tiết từng việc.',
   'chat.tableTask': 'Công việc',
   'chat.tableSpecialist': 'Chuyên môn',

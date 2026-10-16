@@ -588,6 +588,10 @@ export const api = {
     return request(`/api/companies/${companyId}/models`, { method: 'POST', body: input })
   },
 
+  async updateModelPricing(companyId: string, modelId: string, input: { costInPerMtok: number; costOutPerMtok: number }): Promise<{ model: ModelOptionView }> {
+    return request(`/api/companies/${companyId}/models/${modelId}`, { method: 'PATCH', body: input })
+  },
+
   async deleteModel(companyId: string, modelId: string): Promise<void> {
     await request(`/api/companies/${companyId}/models/${modelId}`, { method: 'DELETE' })
   },

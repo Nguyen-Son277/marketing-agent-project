@@ -29,7 +29,10 @@ import { vi_diagram } from './vi/diagram.ts'
  *    đổi khoá (`common.save` chứ không phải `common.luuLai`)
  *  - tham số nội suy viết `{{ten}}`; không ghép chuỗi bằng tay ở nơi gọi
  */
+import { vi_notifications } from './vi/notifications.ts'
+
 export const vi = {
+  ...vi_notifications,
   /* ------------------------------------------------------------- chung */
   'common.showSecret': 'Hiện',
   'common.hideSecret': 'Ẩn',

@@ -214,6 +214,33 @@ describe('CSS thẻ chọn phương án', () => {
  */
 const traoDoi = readFileSync(fileURLToPath(new URL('../src/screens/TraoDoi.tsx', import.meta.url)), 'utf8')
 
+describe('kế hoạch mở theo yêu cầu', () => {
+  it('chuyển bảng cố định vào hộp thoại rộng', () => {
+    expect(traoDoi).toContain("from '../components/HopThoai.tsx'")
+    expect(traoDoi).not.toContain("maxHeight: 'min(35vh, 320px)'")
+    const dialog = traoDoi.slice(traoDoi.indexOf('<HopThoai'), traoDoi.indexOf('</HopThoai>'))
+    expect(dialog).toContain('rong')
+    expect(dialog).toContain('<table')
+    expect(dialog).toContain('chiTiet.tasks.map')
+    expect(dialog).toContain('onDong={() => setKeHoachDangMo(null)}')
+  })
+
+  it('nút xem riêng không thực thi kế hoạch và chỉ hiện dữ liệu đúng cuộc', () => {
+    const toolbar = traoDoi.slice(traoDoi.indexOf('className="chat__thanh"'))
+    expect(toolbar).toContain("t('chat.viewPlan', { count: chiTiet.tasks.length })")
+    expect(toolbar).toContain('onClick={() => setKeHoachDangMo(')
+    expect(toolbar).toContain('chiTiet.conversation.id === dangChon')
+  })
+
+  it('mặc định đóng, reset theo công ty/cuộc và không mở theo SSE', () => {
+    expect(traoDoi).toContain('conversationId: string } | null>(null)')
+    expect(traoDoi).toMatch(/setKeHoachDangMo\(null\)[\s\S]*?\}, \[companyId, dangChon\]\)/)
+    expect(traoDoi).toContain('keHoachDangMo?.companyId === companyId')
+    expect(traoDoi).toContain('keHoachDangMo.conversationId === dangChon')
+    expect(traoDoi.match(/setKeHoachDangMo\(\{/g)).toHaveLength(1)
+  })
+})
+
 describe('cấu trúc màn Trao đổi', () => {
   it('đặt nút hamburger danh sách trước ô chọn chế độ và giữ nhãn trợ năng', () => {
     const thanh = /<div className="chat__thanh">([\s\S]*?)<\/div>/.exec(traoDoi)?.[1] ?? ''
@@ -237,7 +264,7 @@ describe('cấu trúc màn Trao đổi', () => {
     const thanIndex = traoDoi.indexOf('className="chat__than"')
     const chatIndex = traoDoi.indexOf('className="chat"')
     const khungIndex = traoDoi.indexOf('className="chat__khung"')
-    const nhapIndex = traoDoi.indexOf('className="chat__nhap"')
+    const nhapIndex = traoDoi.indexOf('<ChatComposer')
     expect(cardIndex).toBeGreaterThan(-1)
     // `.chat__than` là lớp bọc mới; nếu nó biến mất thì `min-height: 0` của nó cũng mất và
     // khung chat sẽ cao theo nội dung, đẩy khung nhập ra ngoài màn hình.

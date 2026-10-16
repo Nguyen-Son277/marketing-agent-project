@@ -8,6 +8,7 @@
 import { SecretBox, assertAppSecret } from './crypto.ts'
 import { openDatabase, type Database, type OpenDatabaseOptions } from './database.ts'
 import { AccountingRepo } from './repos/accounting.ts'
+import { NotificationsRepo } from './repos/notifications.ts'
 import { AuthRepo } from './repos/auth.ts'
 import { KnowledgeRepo } from './repos/knowledge.ts'
 import { LlmRepo } from './repos/llm.ts'
@@ -27,6 +28,7 @@ export interface Repos {
   readonly accounting: AccountingRepo
   readonly workforce: WorkforceRepo
   readonly dailyReports: DailyReportsRepo
+  readonly notifications: NotificationsRepo
 }
 
 export interface CreateReposOptions extends OpenDatabaseOptions {
@@ -63,6 +65,7 @@ export function createRepos(options: CreateReposOptions): Repos {
     knowledge: new KnowledgeRepo(db),
     work: new WorkRepo(db),
     accounting: new AccountingRepo(db, secrets),
+    notifications: new NotificationsRepo(db),
   }
 }
 
@@ -72,6 +75,7 @@ export * from './migrations.ts'
 export * from './password.ts'
 export * from './vector.ts'
 export * from './repos/accounting.ts'
+export * from './repos/notifications.ts'
 export * from './repos/auth.ts'
 export * from './repos/knowledge.ts'
 export type { ClassificationJobRecord, KbSectionRecord } from '@marketing-agent/shared'

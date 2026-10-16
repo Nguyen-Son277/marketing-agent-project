@@ -14,6 +14,8 @@ theo thứ tự ở §4 — nó được xếp để bạn hiểu hệ thống t
 | [so-do-doi-agent.md](./so-do-doi-agent.md) | Đội có ai, làm gì, đọc được tri thức nào, dùng model nào? | Người dùng, quản trị |
 | [luong-hoat-dong.md](./luong-hoat-dong.md) | Một yêu cầu chạy qua những bước nào, khi nào bị chặn? | Người dùng, kỹ sư |
 | [api.md](./api.md) | Có endpoint nào, quyền gì, trả về hình dạng gì, SSE ra sao? | Lập trình viên tích hợp |
+| [thong-bao.md](./thong-bao.md) | Chuông thông báo, trạng thái đọc, cảnh báo chi phí và quyền trình duyệt hoạt động thế nào? | Người dùng, lập trình viên |
+| [phan-loai-model-chat.md](./phan-loai-model-chat.md) | Model chat, ChatCompletion và lỗi JSON phân loại được xử lý thế nào? | Người dùng, lập trình viên |
 | [../README.md](../README.md) | Đây là sản phẩm gì, chạy thử trong 5 lệnh | Mọi người |
 
 ---

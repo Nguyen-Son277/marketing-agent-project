@@ -34,14 +34,16 @@ import type {
 } from '@marketing-agent/shared'
 import { api, ApiError, openConversationStream, type StreamEvent } from '../lib/api.ts'
 import { useI18n } from '../lib/i18n.tsx'
+import { ChatComposer } from '../components/ChatComposer.tsx'
+import { acquireChatSend } from '../lib/chat-composer.ts'
 import { Markdown } from '../components/Markdown.tsx'
+import { HopThoai } from '../components/HopThoai.tsx'
 import { TheChonPhuongAn } from '../components/TheChonPhuongAn.tsx'
 import {
   Card,
   DangTai,
   Nhan,
   Nut,
-  OVanBan,
   ThongBao,
   Trang,
 } from '../components/ui.tsx'
@@ -128,6 +130,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
    * phần lớn thời gian người dùng chỉ đọc một cuộc.
    */
   const [moDanhSach, setMoDanhSach] = useState(false)
+  const [keHoachDangMo, setKeHoachDangMo] = useState<{ companyId: string; conversationId: string } | null>(null)
   const [chiTiet, setChiTiet] = useState<ConversationDetailResponse | null>(null)
   const [suKien, setSuKien] = useState<DongSuKien[]>([])
   const [noiDung, setNoiDung] = useState('')
@@ -147,6 +150,10 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
    */
   const [traLoiCucBo, setTraLoiCucBo] = useState<ReadonlyMap<string, ClarificationAnswer[]>>(new Map())
 
+  const composerRef = useRef<HTMLTextAreaElement>(null)
+  const sendLock = useRef(false)
+  const chatScope = useRef({ companyId, conversationId: dangChon })
+  chatScope.current = { companyId, conversationId: dangChon }
   const cuonRef = useRef<HTMLDivElement>(null)
   const demSuKien = useRef(0)
   const oGanDayRef = useRef(true)
@@ -189,6 +196,9 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   useEffect(() => {
     let cancelled = false
     setDangTai(true)
+    setDangChon(null)
+    setChiTiet(null)
+    setKeHoachDangMo(null)
     void (async () => {
       try {
         const ketQua = await api.conversations(companyId)
@@ -209,11 +219,20 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   /** Đổi cuộc thì bỏ dấu vết câu trả lời của cuộc trước để không hiện nhầm trạng thái. */
   useEffect(() => {
     setTraLoiCucBo(new Map())
-  }, [dangChon])
+    setKeHoachDangMo(null)
+  }, [companyId, dangChon])
+
+  useEffect(() => {
+    if (!chiTiet || chiTiet.conversation.id !== dangChon || chiTiet.tasks.length === 0) {
+      setKeHoachDangMo(null)
+    }
+  }, [chiTiet, dangChon])
 
   /** Tải chi tiết cuộc đang chọn. */
   const taiChiTiet = useCallback(async (conversationId: string) => {
+    const company = chatScope.current.companyId
     const ketQua = await api.conversation(conversationId)
+    if (chatScope.current.companyId !== company || chatScope.current.conversationId !== conversationId) return
     setChiTiet(ketQua)
     setSuKien([])
     demSuKien.current = 0
@@ -320,12 +339,17 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
 
   /** Gửi một lượt tin; trả về `true` khi server nhận. `answers` chỉ có khi gửi từ thẻ chọn. */
   async function guiNoiDung(content: string, answers?: ClarificationAnswer[]): Promise<boolean> {
-    if (!dangChon || content.trim().length === 0) return false
+    if (!dangChon || content.trim().length === 0 || !acquireChatSend(sendLock)) return false
+    const scope = chatScope.current
+    const currentScope = () => chatScope.current.companyId === scope.companyId && chatScope.current.conversationId === scope.conversationId
     setLoi(null)
     setBaoKetQua(null)
     setDangGui(true)
+    let accepted = false
     try {
       const ketQua = await api.sendMessage(dangChon, answers ? { content, answers, mode:cheDoGiaoViec } : { content, mode:cheDoGiaoViec })
+      accepted = true
+      if (!currentScope()) return false
       setBaoKetQua(
         ketQua.briefComplete
           ? t('chat.briefCompleteHint')
@@ -334,22 +358,25 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
             }),
       )
       await taiChiTiet(dangChon)
-      return true
+      return currentScope()
     } catch (error) {
-      setLoi(error instanceof ApiError ? error.message : t('chat.errorSendMessage'))
-      return false
+      if (currentScope()) setLoi(error instanceof ApiError ? error.message : t('chat.errorSendMessage'))
+      return accepted && currentScope()
     } finally {
+      sendLock.current = false
       setDangGui(false)
+      requestAnimationFrame(() => { if (currentScope()) composerRef.current?.focus() })
     }
   }
 
   async function gui(): Promise<void> {
-    const content = noiDung.trim()
-    if (content.length === 0) return
-    // Xoá ô nhập trước khi gửi để bấm gửi lần nữa không tạo tin trùng; hỏng thì khôi phục.
+    const original = noiDung
+    if (!original.trim() || sendLock.current) return
+    const scope = chatScope.current
+    // Keep the original multiline draft verbatim for recovery, including whitespace.
     setNoiDung('')
-    const thanhCong = await guiNoiDung(content)
-    if (!thanhCong) setNoiDung(content)
+    const thanhCong = await guiNoiDung(original)
+    if (!thanhCong && chatScope.current.companyId === scope.companyId && chatScope.current.conversationId === scope.conversationId) setNoiDung(original)
   }
 
   /** Gửi câu trả lời của thẻ chọn: kèm bản chữ để đọc lại, và `answers` để server điền brief. */
@@ -372,10 +399,13 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
 
   /** Bỏ qua thẻ chọn: gửi nội dung đã gõ ở ô nhập, hoặc một câu báo sẽ trả lời tự do. */
   async function boQuaThe(): Promise<void> {
-    const tuNhap = noiDung.trim()
-    if (tuNhap.length > 0) setNoiDung('')
-    const thanhCong = await guiNoiDung(tuNhap.length > 0 ? tuNhap : t('chat.skipAnswersMessage'))
-    if (!thanhCong && tuNhap.length > 0) setNoiDung(tuNhap)
+    if (sendLock.current) return
+    const original = noiDung
+    const scope = chatScope.current
+    const hasDraft = original.trim().length > 0
+    if (hasDraft) setNoiDung('')
+    const thanhCong = await guiNoiDung(hasDraft ? original : t('chat.skipAnswersMessage'))
+    if (!thanhCong && hasDraft && chatScope.current.companyId === scope.companyId && chatScope.current.conversationId === scope.conversationId) setNoiDung(original)
   }
 
   async function chayBuoc(buoc: 'plan' | 'run' | 'report'): Promise<void> {
@@ -515,10 +545,15 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
         ) : null}
       </div>
 
-      {/* Bảng kế hoạch cũng là phần đầu: cao tối đa rồi tự cuộn, không được chiếm chỗ chat. */}
-      {chiTiet && chiTiet.tasks.length > 0 ? (
-        <div style={{ flex: '0 0 auto', maxHeight: 'min(35vh, 320px)', overflowY: 'auto' }}>
-          <Card tieuDe={t('chat.planTitle')} phu={t('chat.planSubtitle')}>
+      {chiTiet && chiTiet.conversation.id === dangChon && chiTiet.tasks.length > 0 ? (
+        <HopThoai
+          mo={keHoachDangMo?.companyId === companyId && keHoachDangMo.conversationId === dangChon}
+          tieuDe={t('chat.planTitle')}
+          onDong={() => setKeHoachDangMo(null)}
+          rong
+        >
+          <p className="card__phu">{t('chat.planSubtitle')}</p>
+          <div className="chat__ke-hoach">
             <table className="bang">
               <thead>
                 <tr>
@@ -544,8 +579,8 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                 })}
               </tbody>
             </table>
-          </Card>
-        </div>
+          </div>
+        </HopThoai>
       ) : null}
 
       {/*
@@ -577,6 +612,16 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
           <select className="o-chon" style={{width:'auto',maxWidth:'100%'}} aria-label={t('wf.chatMode')} value={cheDoGiaoViec} disabled={dangGui} onChange={e=>setCheDoGiaoViec(e.target.value as 'campaign'|'workforce')}>
             <option value="campaign">{t('wf.campaign')}</option><option value="workforce">{t('wf.designerChat')}</option>
           </select>
+          {chiTiet && chiTiet.conversation.id === dangChon && chiTiet.tasks.length > 0 ? (
+            <Nut
+              nho
+              bien="phu"
+              onClick={() => setKeHoachDangMo({ companyId, conversationId: chiTiet.conversation.id })}
+              title={t('chat.viewPlanHint')}
+            >
+              {t('chat.viewPlan', { count: chiTiet.tasks.length })}
+            </Nut>
+          ) : null}
           <Nut nho onClick={() => void taoCuocMoi()}>
             {t('chat.newConversation')}
           </Nut>
@@ -674,18 +719,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
               ) : null}
             </div>
 
-            <div className="chat__nhap">
-              <OVanBan
-                value={noiDung}
-                onChange={setNoiDung}
-                rows={2}
-                disabled={dangGui}
-                placeholder={t('chat.placeholder')}
-              />
-              <Nut dangTai={dangGui} onClick={() => void gui()} disabled={noiDung.trim().length === 0}>
-                {t('chat.send')}
-              </Nut>
-            </div>
+            <ChatComposer value={noiDung} onChange={setNoiDung} busy={dangGui} onSend={() => void gui()} inputRef={composerRef} />
           </div>
         ) : (
           <div className="trong" style={{ flex: 1 }}>

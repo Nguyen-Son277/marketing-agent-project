@@ -15,6 +15,7 @@ import type { Repos } from '@marketing-agent/db'
 import type { AppContext } from './context.ts'
 import { createRequestContext, Router, runChain, type Handler, type HttpMethod, type Middleware } from './http/router.ts'
 import { accountAccessMiddleware, sessionMiddleware } from './http/middleware.ts'
+import { registerNotificationRoutes } from './routes/notification-routes.ts'
 import { registerDailyReportRoutes } from './routes/daily-report-routes.ts'
 import { registerAdminRoutes } from './routes/admin-routes.ts'
 import { registerWorkforceRoutes } from './routes/workforce-routes.ts'
@@ -48,6 +49,7 @@ export function buildApp(options: BuildAppOptions): App {
   registerAdminRoutes(router, repos)
   registerWorkforceRoutes(router, repos)
   registerDailyReportRoutes(router, context)
+  registerNotificationRoutes(router, repos)
 
   for (const module of options.optionalModules ?? []) {
     try {

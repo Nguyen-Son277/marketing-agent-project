@@ -645,4 +645,30 @@ CREATE INDEX idx_kb_classification_pending ON kb_classification_jobs(status, cre
     id: '0016_kb_classification_retry_schedule',
     sql: `ALTER TABLE kb_classification_jobs ADD COLUMN next_attempt_at TEXT;`,
   },
+  {
+    id: '0017_notifications',
+    sql: `
+CREATE TABLE notification_events (
+ company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ dedupe_key TEXT NOT NULL, created_at TEXT NOT NULL,
+ PRIMARY KEY(company_id,dedupe_key)
+);
+CREATE TABLE notifications (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL, user_id TEXT NOT NULL,
+ type TEXT NOT NULL, severity TEXT NOT NULL, created_at TEXT NOT NULL, read_at TEXT,
+ title TEXT NOT NULL, body TEXT NOT NULL, link TEXT,
+ FOREIGN KEY(company_id,user_id) REFERENCES memberships(company_id,user_id) ON DELETE CASCADE
+);
+CREATE INDEX idx_notifications_inbox ON notifications(company_id,user_id,created_at DESC,id DESC);
+CREATE INDEX idx_notifications_unread ON notifications(company_id,user_id) WHERE read_at IS NULL;
+CREATE TABLE notification_preferences (
+ company_id TEXT NOT NULL, user_id TEXT NOT NULL,
+ agent INTEGER NOT NULL DEFAULT 1 CHECK(agent IN (0,1)),
+ action_required INTEGER NOT NULL DEFAULT 1 CHECK(action_required IN (0,1)),
+ budget INTEGER NOT NULL DEFAULT 1 CHECK(budget IN (0,1)),
+ PRIMARY KEY(company_id,user_id),
+ FOREIGN KEY(company_id,user_id) REFERENCES memberships(company_id,user_id) ON DELETE CASCADE
+);
+`,
+  },
 ]

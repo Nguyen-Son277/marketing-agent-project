@@ -218,8 +218,8 @@ describe('mục Kết nối: chỉ mở biểu mẫu từ nút thêm', () => {
     expect(save.indexOf('dongHopThoaiKetNoi()')).toBeGreaterThan(save.indexOf('await api.upsertIntegration'))
     const error = save.slice(save.indexOf('catch (error)'), save.indexOf('finally'))
     expect(error).not.toContain('dongHopThoaiKetNoi()')
-    expect(error).toContain('if (hopKetNoiMoRef.current) setLoiLuu(message)')
-    expect(error).toContain('else setLoiNgoaiHop(message)')
+    expect(error).toContain("finish('error')")
+    expect(error).not.toContain('error.message')
   })
 
   it('không mở lượt mới khi đang lưu và bỏ phản hồi của công ty cũ', () => {
@@ -296,7 +296,9 @@ describe('mục Model: biểu mẫu nhập tay nằm trong hộp thoại', () =>
     expect(viTriHopThoaiDauTien).toBeGreaterThan(-1)
     const phanDauMuc = phanModel.slice(0, viTriHopThoaiDauTien)
 
-    expect(phanDauMuc).toMatch(/\{loiXoa \? \(/)
+    expect(phanDauMuc).not.toMatch(/\{loiXoa \? \(/)
+    expect(phanModel).toContain("begin('model.delete')")
+    expect(phanModel).toContain("finish('error')")
     expect(phanDauMuc).not.toMatch(/\{loiLuu \? \(/)
     // Và lỗi biểu mẫu phải nằm trong hộp thoại.
     expect(phanModel).toMatch(/\{loiLuu \? <ThongBao loai="loi">/)

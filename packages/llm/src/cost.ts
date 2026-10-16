@@ -78,6 +78,7 @@ export class CostMeter implements RunMeter {
   private runIdValue: string | null = null
   private finished = false
   private lastModelId: string | null = null
+  private budgetScope: {companyId:string;limits:BudgetLimits} | null = null
   private totals: CostSnapshot = { tokensIn: 0, tokensOut: 0, cachedTokens: 0, costUsd: 0, calls: 0 }
 
   constructor(private readonly accounting: AccountingRepo) {}
@@ -93,6 +94,8 @@ export class CostMeter implements RunMeter {
       modelId: input.modelId ?? null,
     })
     this.finished = false
+    this.budgetScope = {companyId:input.companyId,limits:this.accounting.notificationBudgetLimits(input.companyId)}
+    this.totals = {tokensIn:0,tokensOut:0,cachedTokens:0,costUsd:0,calls:0}
     this.lastModelId = input.modelId ?? null
     return this.runIdValue
   }
@@ -111,6 +114,7 @@ export class CostMeter implements RunMeter {
       calls: this.totals.calls + 1,
     }
     this.lastModelId = model.id
+    if(this.budgetScope && this.runIdValue) this.accounting.observeBudget(this.budgetScope.companyId,this.runIdValue,this.totals.costUsd,this.budgetScope.limits)
     return this.snapshot()
   }
 
@@ -128,6 +132,8 @@ export class CostMeter implements RunMeter {
    * hiện tại chưa nằm trong `usage_daily` cho tới khi đóng.
    */
   checkBudget(companyId: string, limits: BudgetLimits): BudgetStatus {
+    this.budgetScope={companyId,limits}
+    if(this.runIdValue) this.accounting.observeBudget(companyId,this.runIdValue,this.totals.costUsd,limits)
     const today = this.spentToday(companyId)
     const runCost = this.finished ? 0 : this.totals.costUsd
     const spentTodayUsd = round(today.costUsd + runCost, 6)

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ModelOptionView, ProviderView } from '@marketing-agent/shared'
 import { ApiError, api, type ClassificationModelSettings } from '../lib/api.ts'
 import { useI18n } from '../lib/i18n.tsx'
+import { useSettingsNotifications } from '../lib/settings-notifications.ts'
 import { Card, DangTai, Nut, OChon, ThongBao, Truong } from './ui.tsx'
 
 const EMPTY_SETTINGS: ClassificationModelSettings = { mode: 'leader', modelFk: null, fallbackModelFks: [] }
@@ -9,6 +10,7 @@ const EMPTY_SETTINGS: ClassificationModelSettings = { mode: 'leader', modelFk: n
 /** Model selection for automatic company knowledge classification. */
 export function KnowledgeModelSettings({ companyId }: { companyId: string }): ReactNode {
   const { t } = useI18n()
+  const { begin } = useSettingsNotifications(companyId)
   const activeCompany=useRef(companyId)
   activeCompany.current=companyId
   const [providers, setProviders] = useState<readonly ProviderView[]>([])
@@ -18,7 +20,7 @@ export function KnowledgeModelSettings({ companyId }: { companyId: string }): Re
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [issues, setIssues] = useState<string[]>([])
 
   useEffect(() => {
@@ -26,7 +28,6 @@ export function KnowledgeModelSettings({ companyId }: { companyId: string }): Re
     setLoading(true)
     setSaving(false);setTesting(false);setIssues([]);setProviders([])
     setError(null)
-    setNotice(null)
     Promise.all([api.providers(companyId), api.classificationModelSettings(companyId)])
       .then(([providerResponse, response]) => {
         if (cancelled) return
@@ -42,7 +43,7 @@ export function KnowledgeModelSettings({ companyId }: { companyId: string }): Re
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [companyId, t])
+  }, [companyId, t, loadAttempt])
 
   const models = useMemo<readonly ModelOptionView[]>(
     () => providers.filter((provider) => provider.enabled).flatMap((provider) => provider.models.filter((model) => model.enabled)),
@@ -57,52 +58,52 @@ export function KnowledgeModelSettings({ companyId }: { companyId: string }): Re
     if (modelFk) next[index] = modelFk
     else next.splice(index, 1)
     setDraft({ ...draft, fallbackModelFks: next })
-    setNotice(null)
   }
 
   async function save(): Promise<void> {
-    setSaving(true); setError(null); setNotice(null)
+    if (!changed || (draft.mode === 'custom' && (!draft.modelFk || draft.fallbackModelFks.some((id) => !id)))) return
+    const finish = begin('knowledgeModel.save')
+    const requestCompany = companyId
+    setSaving(true)
     try {
-      const requestCompany = companyId
       const response = await api.saveClassificationModelSettings(requestCompany, draft)
-      if (activeCompany.current !== requestCompany) return
-      setSaved(response.settings)
-      setDraft({ ...response.settings, fallbackModelFks: [...response.settings.fallbackModelFks] })
-      setIssues(response.issues)
-      setNotice(t('settings.knowledgeModel.saved'))
-    } catch (cause) {
-      if (activeCompany.current === companyId) setError(cause instanceof ApiError ? cause.message : t('settings.knowledgeModel.saveFailed'))
-    } finally { if (activeCompany.current === companyId) setSaving(false) }
+      if (activeCompany.current === requestCompany) {
+        setSaved(response.settings)
+        setDraft({ ...response.settings, fallbackModelFks: [...response.settings.fallbackModelFks] })
+        setIssues(response.issues)
+      }
+      finish(response.issues.length > 0 ? 'warning' : 'success')
+    } catch {
+      finish('error')
+    } finally { if (activeCompany.current === requestCompany) setSaving(false) }
   }
 
   async function test(): Promise<void> {
+    const finish = begin('knowledgeModel.test')
     const requestCompany = companyId
-    setTesting(true); setError(null); setNotice(null)
+    setTesting(true)
     try {
       const result = await api.testClassificationModelSettings(requestCompany)
-      if (activeCompany.current !== requestCompany) return
-      if (result.ok) setNotice(result.message)
-      else setError(result.message)
-    } catch (cause) {
-      if (activeCompany.current === requestCompany) setError(cause instanceof ApiError ? cause.message : t('settings.knowledgeModel.testFailed'))
+      finish(result.ok ? 'success' : 'error')
+    } catch {
+      finish('error')
     } finally { if (activeCompany.current === requestCompany) setTesting(false) }
   }
 
   return (
     <Card tieuDe={t('settings.knowledgeModel.title')} phu={t('settings.knowledgeModel.subtitle')}>
       {loading ? <DangTai nhan={t('common.loading')} /> : <>
-        {error ? <ThongBao loai="loi">{error}</ThongBao> : null}
-        {notice ? <ThongBao loai="thanh-cong">{notice}</ThongBao> : null}
+        {error ? <><ThongBao loai="loi">{error}</ThongBao><Nut bien="phu" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>{t('common.retry')}</Nut></> : null}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <Truong nhan={t('settings.knowledgeModel.mode')}>
-            <OChon value={draft.mode} onChange={(value) => { setDraft({ ...draft, mode: value as 'leader' | 'custom' }); setNotice(null) }} options={[
+            <OChon value={draft.mode} onChange={(value) => { setDraft({ ...draft, mode: value as 'leader' | 'custom' }) }} options={[
               { value: 'leader', label: t('settings.knowledgeModel.modeLeader') },
               { value: 'custom', label: t('settings.knowledgeModel.modeCustom') },
             ]} />
           </Truong>
           {draft.mode === 'custom' ? <>
             <Truong nhan={t('settings.knowledgeModel.primary')}>
-              <OChon value={draft.modelFk ?? ''} onChange={(value) => { setDraft({ ...draft, modelFk: value || null, fallbackModelFks: draft.fallbackModelFks.filter((id) => id !== value) }); setNotice(null) }} options={[
+              <OChon value={draft.modelFk ?? ''} onChange={(value) => { setDraft({ ...draft, modelFk: value || null, fallbackModelFks: draft.fallbackModelFks.filter((id) => id !== value) }) }} options={[
                 { value: '', label: t('settings.knowledgeModel.chooseModel') },
                 ...models.filter((model) => !draft.fallbackModelFks.includes(model.id)).map((model) => ({ value: model.id, label: `${model.providerName} · ${model.label} (${model.modelId})` })),
               ]} />
@@ -113,7 +114,7 @@ export function KnowledgeModelSettings({ companyId }: { companyId: string }): Re
                 ...models.filter((model) => model.id === id || (model.id !== draft.modelFk && !draft.fallbackModelFks.some((other, i) => i !== index && other === model.id))).map((model) => ({ value: model.id, label: `${model.providerName} · ${model.label} (${model.modelId})` })),
               ]} />
             </Truong>)}
-            {draft.fallbackModelFks.length < 3 ? <div style={{ alignSelf: 'end' }}><Nut bien="phu" nho disabled={models.length === 0} onClick={() => { setDraft({ ...draft, fallbackModelFks: [...draft.fallbackModelFks, ''] }); setNotice(null) }}>{t('settings.knowledgeModel.addFallback')}</Nut></div> : null}
+            {draft.fallbackModelFks.length < 3 ? <div style={{ alignSelf: 'end' }}><Nut bien="phu" nho disabled={models.length === 0} onClick={() => { setDraft({ ...draft, fallbackModelFks: [...draft.fallbackModelFks, ''] }) }}>{t('settings.knowledgeModel.addFallback')}</Nut></div> : null}
           </> : null}
         </div>
         <p className="card__phu" style={{ marginTop: 12 }}>{t('settings.knowledgeModel.costWarning')}</p>

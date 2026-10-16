@@ -28,7 +28,10 @@ import { en_settings } from './en/settings.ts'
 import { en_costs } from './en/costs.ts'
 import { en_diagram } from './en/diagram.ts'
 
+import { en_notifications } from './en/notifications.ts'
+
 export const en = {
+  ...en_notifications,
   /* ------------------------------------------------------------- general */
   'common.showSecret': 'Show',
   'common.hideSecret': 'Hide',

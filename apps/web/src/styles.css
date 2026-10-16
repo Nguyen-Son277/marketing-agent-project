@@ -12,6 +12,23 @@
  * `[data-theme='dark']` bên dưới; màu viết thẳng trong quy tắc sẽ không đổi theo theme và
  * trở thành mảng trắng chói hoặc chữ tối trên nền tối.
  */
+.notification-toast { margin: 0 0 0 auto; top: auto; left: auto; position: fixed; z-index: 100; bottom: 24px; right: 24px; max-width: min(420px, calc(100vw - 48px)); padding: 16px; border: 1px solid var(--mau-vien); border-radius: 8px; background: var(--mau-be-mat); color: var(--mau-chu); box-shadow: 0 4px 20px var(--mau-lop-phu); display: flex; align-items: center; gap: 16px; overflow-wrap: anywhere; }
+.notification-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border: 1px solid var(--mau-vien); border-radius: 8px; background: var(--mau-be-mat); color: var(--mau-chu); cursor: pointer; }
+.notification-badge { position: absolute; top: -4px; right: -5px; min-width: 20px; padding: 1px 4px; border-radius: 12px; font-size: 11px; background: var(--mau-nut-nguy-hiem-nen); color: var(--mau-chu-tren-nguy-hiem); }
+.notification-toolbar, .notification-actions, .notification-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.notification-toolbar { justify-content: space-between; margin-bottom: 16px; }
+.notification-list { list-style: none; padding: 0; margin: 16px 0; }
+.notification-item { padding: 16px; margin-bottom: 8px; border: 1px solid var(--mau-vien); border-radius: 8px; overflow-wrap: anywhere; }
+.notification-item--unread { border-inline-start: 4px solid var(--mau-chinh); background: var(--mau-chinh-nhat); }
+.notification-meta { color: var(--mau-chu-mo); font-size: 12px; }
+.notification-item h3 { font-size: 16px; margin: 8px 0; }
+.notification-item p { margin: 8px 0 12px; white-space: pre-wrap; }
+.notification-preferences { margin: 24px 0 16px; padding: 16px; border: 1px solid var(--mau-vien); border-radius: 8px; }
+.notification-preferences label { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.notification-preferences input { width: 18px; height: 18px; }
+.notification-browser p { color: var(--mau-chu-mo); }
+.notification-bell:focus-visible, .notification-item a:focus-visible { outline: 3px solid var(--mau-chinh); outline-offset: 3px; }
+
 :root {
   --mau-chinh: #1b5e4a;
   --mau-chinh-dam: #0d3a2c;
@@ -1005,11 +1022,22 @@ a {
 
 .chat__nhap {
   display: flex;
-  gap: 10px;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 6px;
   /* Khung nhập không được co lại khi khung tin nhắn dài ra. */
   flex: 0 0 auto;
 }
+
+.chat-composer { position: relative; width: 100%; }
+.chat-composer textarea { display: block; width: 100%; box-sizing: border-box; padding-right: 62px; padding-bottom: 52px; }
+.chat-composer__send { position: absolute; right: 8px; bottom: 8px; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 10px; background: var(--mau-chinh); color: var(--mau-chu-tren-chinh); cursor: pointer; }
+.chat-composer__send:hover:not(:disabled) { background: var(--mau-chinh-dam); }
+.chat-composer__send:disabled { opacity: .5; cursor: not-allowed; }
+.chat-composer__send:focus-visible { outline: 3px solid var(--mau-chinh); outline-offset: 3px; }
+.chat-composer__hint { margin: 0; font-size: 12px; color: var(--mau-chu-mo); }
+.chat-composer__spinner { animation: chat-composer-spin 1s linear infinite; }
+@keyframes chat-composer-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .chat-composer__spinner { animation: none; } }
 
 /* Khung nhập cao tối đa 30% chiều cao màn hình.
    Dùng `dvh` (chiều cao động) để đúng khi thanh địa chỉ trên di động hiện/ẩn; `vh`
@@ -1607,6 +1635,19 @@ a {
 
 .ht--rong .ht__hop {
   width: min(94vw, 52rem);
+}
+
+.chat__ke-hoach {
+  overflow-x: auto;
+}
+
+.chat__ke-hoach td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.chat__ke-hoach th:first-child {
+  min-width: 12rem;
 }
 
 .ht__dau {
