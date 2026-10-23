@@ -9,6 +9,7 @@
 import { readLocale } from './locale-store.ts'
 import type {
   AdminUsersResponse,
+  AgencyResponse,
   ArtifactView,
   ClarificationAnswer,
   CompanySummary,
@@ -20,6 +21,10 @@ import type {
   CreateProviderBody,
   CreateProviderKeyBody,
   DashboardResponse,
+  CampaignLoopResponse,
+  AutomationPolicyView,
+  CampaignView,
+  AudienceView,
   DiagramResponse,
   ErrorEnvelope,
   FetchModelsResponse,
@@ -299,6 +304,50 @@ export const api = {
 
   async dashboard(companyId: string): Promise<DashboardResponse> {
     return request(`/api/companies/${companyId}/dashboard`)
+  },
+
+  async campaignLoop(companyId: string): Promise<CampaignLoopResponse> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/campaign-loop`)
+  },
+
+  async agencies(): Promise<{ agencies: AgencyResponse['agency'][] }> {
+    return request('/api/agencies')
+  },
+
+  async agency(agencyId: string): Promise<AgencyResponse> {
+    return request(`/api/agencies/${encodeURIComponent(agencyId)}`)
+  },
+
+  async createAgency(name: string): Promise<AgencyResponse> {
+    return request('/api/agencies', { method: 'POST', body: { name } })
+  },
+
+  async automationPolicy(companyId: string): Promise<{ policy: AutomationPolicyView }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/automation-policy`)
+  },
+
+  async updateAutomationPolicy(companyId: string, patch: Partial<AutomationPolicyView>): Promise<{ policy: AutomationPolicyView }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/automation-policy`, { method: 'PATCH', body: patch })
+  },
+
+  async createCampaign(companyId: string, input: { name: string; timezone: string; objective?: string | null; items: readonly unknown[] }): Promise<{ campaign: CampaignView }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/campaigns`, { method: 'POST', body: input })
+  },
+
+  async campaignAction(companyId: string, campaignId: string, action: 'activate' | 'pause' | 'resume'): Promise<{ campaign: CampaignView }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/campaigns/${encodeURIComponent(campaignId)}/${action}`, { method: 'POST', body: {} })
+  },
+
+  async jobAttempts(companyId: string, jobId: string): Promise<{ attempts: { id: string; attempt: number; status: string; providerRequestId: string | null; error: string | null; startedAt: string; finishedAt: string | null }[] }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/execution-jobs/${encodeURIComponent(jobId)}/attempts`)
+  },
+
+  async createAudience(companyId: string, name: string): Promise<{ audience: AudienceView }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/audiences`, { method: 'POST', body: { name } })
+  },
+
+  async importAudienceCsv(companyId: string, audienceId: string, input: { csv: string; source: string; consentVersion: string; consentAt: string }): Promise<{ result: { inserted: number; updated: number; skippedUnsubscribed: number } }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/audiences/${encodeURIComponent(audienceId)}/import`, { method: 'POST', body: input })
   },
 
   /* ------------------------------------------------------------------ đội */

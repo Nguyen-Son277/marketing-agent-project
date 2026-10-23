@@ -156,7 +156,7 @@ export class AuthRepo {
     return { user: this.findUserById(userId)!, changed: result.changes > 0 }
   }
 
-  /** Chỉ dùng từ CLI tin cậy; không có API cấp quyền admin cho người dùng. */
+  /** Dùng từ CLI tin cậy hoặc sau đăng nhập đúng mật khẩu với ADMIN_EMAIL của server. */
   grantSystemAdmin(email: string): { user: UserRecord; changed: boolean } {
     const user = this.findUserByEmail(email)
     if (!user) throw notFound('Email chưa được đăng ký. Hãy đăng ký trên website trước.')

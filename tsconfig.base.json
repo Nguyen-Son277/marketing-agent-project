@@ -26,6 +26,8 @@
       "@marketing-agent/kb": ["packages/kb/src/index.ts"],
       "@marketing-agent/tools": ["packages/tools/src/index.ts"],
       "@marketing-agent/orchestrator": ["packages/orchestrator/src/index.ts"],
+      "@marketing-agent/campaign-domain": ["packages/campaign-domain/src/index.ts"],
+      "@marketing-agent/campaign-loop": ["apps/campaign-loop/src/index.ts"],
       "@marketing-agent/seed": ["seed/src/index.ts"]
     }
   },

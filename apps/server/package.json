@@ -6,6 +6,7 @@
   "main": "./src/main.ts",
   "dependencies": {
     "@marketing-agent/agent-runtime": "workspace:*",
+    "@marketing-agent/campaign-domain": "workspace:*",
     "@marketing-agent/db": "workspace:*",
     "@marketing-agent/i18n": "workspace:*",
     "@marketing-agent/kb": "workspace:*",

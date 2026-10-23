@@ -1,5 +1,5 @@
 /** Durable, company-scoped inbox contract. Dates are UTC ISO strings. */
-export type NotificationType = 'agent_success' | 'agent_failure' | 'budget_warning' | 'budget_exceeded' | 'settings_success' | 'settings_warning' | 'settings_error'
+export type NotificationType = 'agent_success' | 'agent_failure' | 'campaign_success' | 'campaign_failure' | 'budget_warning' | 'budget_exceeded' | 'settings_success' | 'settings_warning' | 'settings_error'
 export const SETTINGS_NOTIFICATION_OPERATIONS = [
   'provider.save', 'provider.delete', 'provider.test',
   'key.save', 'key.delete', 'key.test',

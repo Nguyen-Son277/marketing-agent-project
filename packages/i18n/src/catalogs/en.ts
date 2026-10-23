@@ -30,6 +30,7 @@ import { en_diagram } from './en/diagram.ts'
 
 import { en_notifications } from './en/notifications.ts'
 import { en_socialBrowser } from './en/social-browser.ts'
+import { en_campaign } from './en/campaign.ts'
 
 export const en = {
   ...en_socialBrowser,
@@ -218,4 +219,5 @@ export const en = {
   ...en_settings,
   ...en_costs,
   ...en_diagram,
+  ...en_campaign,
 } as const satisfies Catalog

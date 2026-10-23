@@ -25,6 +25,12 @@ import type {
   ProviderKind,
   RunStatus,
   TaskStatus,
+  AgencyRole,
+  CampaignChannel,
+  CampaignItemStatus,
+  CampaignStatus,
+  ConsentStatus,
+  ExecutionJobStatus,
 } from '@marketing-agent/shared'
 
 /* ------------------------------------------------------------------ chung */
@@ -678,6 +684,140 @@ export interface DashboardResponse {
   readonly recentActivity: readonly { readonly at: string; readonly kind: string; readonly summary: string }[]
 }
 
+/* ---------------------------------------------------------- CampaignLoop */
+
+export interface AgencyView {
+  readonly id: string
+  readonly name: string
+  readonly slug: string
+  readonly role: AgencyRole
+  readonly createdAt: string
+}
+
+export interface AgencyClientView {
+  readonly id: string
+  readonly name: string
+  readonly slug: string
+  readonly role: CompanyRole | null
+  readonly campaignCount: number
+  readonly activeCampaigns: number
+  readonly queuedJobs: number
+}
+
+export interface AgencyResponse {
+  readonly agency: AgencyView
+  readonly clients: readonly AgencyClientView[]
+}
+
+export interface AgencyMemberView {
+  readonly userId: string
+  readonly name: string
+  readonly email: string
+  readonly role: AgencyRole
+  readonly createdAt: string
+}
+
+export interface AutomationPolicyView {
+  readonly companyId: string
+  readonly enabled: boolean
+  readonly timezone: string
+  readonly channels: readonly CampaignChannel[]
+  readonly maxPostsPerDay: number
+  readonly maxEmailsPerDay: number
+  readonly allowedHosts: readonly string[]
+  readonly quietStart: string | null
+  readonly quietEnd: string | null
+  readonly killSwitch: boolean
+  readonly version: number
+  readonly updatedAt: string
+}
+
+export interface CampaignItemView {
+  readonly id: string
+  readonly channel: CampaignChannel
+  readonly title: string
+  readonly content: string
+  readonly link: string | null
+  readonly audienceId: string | null
+  readonly scheduledAt: string | null
+  readonly status: CampaignItemStatus
+  readonly providerRef: string | null
+  readonly idempotencyKey: string
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface CampaignView {
+  readonly id: string
+  readonly companyId: string
+  readonly name: string
+  readonly status: CampaignStatus
+  readonly timezone: string
+  readonly objective: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly items: readonly CampaignItemView[]
+}
+
+export interface AudienceView {
+  readonly id: string
+  readonly name: string
+  readonly contactCount: number
+  readonly optedInCount: number
+  readonly unsubscribedCount: number
+  readonly createdAt: string
+}
+
+export interface AudienceContactView {
+  readonly id: string
+  readonly audienceId: string
+  readonly email: string
+  readonly name: string | null
+  readonly consentStatus: ConsentStatus
+  readonly source: string | null
+  readonly consentAt: string | null
+  readonly unsubscribedAt: string | null
+}
+
+export interface ExecutionJobView {
+  readonly id: string
+  readonly campaignItemId: string
+  readonly status: ExecutionJobStatus
+  readonly runAt: string
+  readonly attempts: number
+  readonly providerRequestId: string | null
+  readonly error: string | null
+  readonly updatedAt: string
+}
+
+export interface ExecutionAttemptView {
+  readonly id: string
+  readonly jobId: string
+  readonly attempt: number
+  readonly status: ExecutionJobStatus
+  readonly providerRequestId: string | null
+  readonly error: string | null
+  readonly startedAt: string
+  readonly finishedAt: string | null
+}
+
+export interface MetricSnapshotView {
+  readonly id: string
+  readonly campaignItemId: string
+  readonly channel: CampaignChannel
+  readonly metricDate: string
+  readonly metrics: Record<string, number | string>
+  readonly createdAt: string
+}
+
+export interface CampaignLoopResponse {
+  readonly campaigns: readonly CampaignView[]
+  readonly policy: AutomationPolicyView
+  readonly audiences: readonly AudienceView[]
+  readonly jobs: readonly ExecutionJobView[]
+  readonly metrics: readonly MetricSnapshotView[]
+}
+
 /* --------------------------------------------------------- system status */
 
 export interface SystemStatusResponse {
@@ -753,6 +893,24 @@ export const API_ROUTES = {
   audit: (id: string) => `/api/companies/${id}/audit`,
   diagram: (id: string) => `/api/companies/${id}/diagram`,
   dashboard: (id: string) => `/api/companies/${id}/dashboard`,
+  agencies: '/api/agencies',
+  agency: (id: string) => `/api/agencies/${encodeURIComponent(id)}`,
+  agencyClients: (id: string) => `/api/agencies/${encodeURIComponent(id)}/clients`,
+  campaignLoop: (id: string) => `/api/companies/${encodeURIComponent(id)}/campaign-loop`,
+  automationPolicy: (id: string) => `/api/companies/${encodeURIComponent(id)}/automation-policy`,
+  campaigns: (id: string) => `/api/companies/${encodeURIComponent(id)}/campaigns`,
+  campaign: (companyId: string, campaignId: string) =>
+    `/api/companies/${encodeURIComponent(companyId)}/campaigns/${encodeURIComponent(campaignId)}`,
+  campaignAction: (companyId: string, campaignId: string, action: 'activate' | 'pause' | 'resume') =>
+    `/api/companies/${encodeURIComponent(companyId)}/campaigns/${encodeURIComponent(campaignId)}/${action}`,
+  audiences: (id: string) => `/api/companies/${encodeURIComponent(id)}/audiences`,
+  audienceContacts: (id: string, audienceId: string) =>
+    `/api/companies/${encodeURIComponent(id)}/audiences/${encodeURIComponent(audienceId)}/contacts`,
+  audienceImport: (id: string, audienceId: string) =>
+    `/api/companies/${encodeURIComponent(id)}/audiences/${encodeURIComponent(audienceId)}/import`,
+  jobs: (id: string) => `/api/companies/${encodeURIComponent(id)}/execution-jobs`,
+  jobAttempts: (id: string, jobId: string) => `/api/companies/${encodeURIComponent(id)}/execution-jobs/${encodeURIComponent(jobId)}/attempts`,
+  metrics: (id: string) => `/api/companies/${encodeURIComponent(id)}/campaign-metrics`,
   systemStatus: '/api/system/status',
   health: '/healthz',
   ready: '/readyz',

@@ -31,6 +31,7 @@ import { vi_diagram } from './vi/diagram.ts'
  */
 import { vi_notifications } from './vi/notifications.ts'
 import { vi_socialBrowser } from './vi/social-browser.ts'
+import { vi_campaign } from './vi/campaign.ts'
 
 export const vi = {
   ...vi_socialBrowser,
@@ -220,6 +221,7 @@ export const vi = {
   ...vi_settings,
   ...vi_costs,
   ...vi_diagram,
+  ...vi_campaign,
 } as const
 
 /** Kiểu của catalog; dùng để bắt catalog tiếng Anh phải phủ đủ khoá. */

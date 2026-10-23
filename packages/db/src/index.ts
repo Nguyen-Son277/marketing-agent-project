@@ -18,6 +18,7 @@ import { WorkRepo } from './repos/work.ts'
 import { WorkforceRepo } from './repos/workforce.ts'
 import { DailyReportsRepo } from './repos/daily-reports.ts'
 import { SocialBrowserRepo } from './repos/social-browser.ts'
+import { CampaignRepo } from './repos/campaign.ts'
 
 export interface Repos {
   readonly db: Database
@@ -33,6 +34,7 @@ export interface Repos {
   readonly notifications: NotificationsRepo
   readonly chatAttachments: ChatAttachmentsRepo
   readonly socialBrowser: SocialBrowserRepo
+  readonly campaigns: CampaignRepo
 }
 
 export interface CreateReposOptions extends OpenDatabaseOptions {
@@ -72,6 +74,7 @@ export function createRepos(options: CreateReposOptions): Repos {
     notifications: new NotificationsRepo(db),
     chatAttachments: new ChatAttachmentsRepo(db),
     socialBrowser: new SocialBrowserRepo(db, secrets),
+    campaigns: new CampaignRepo(db, auth, secrets),
   }
 }
 
@@ -90,3 +93,4 @@ export type { ClassificationJobRecord, KbSectionRecord } from '@marketing-agent/
 export * from './repos/llm.ts'
 export * from './repos/team.ts'
 export * from './repos/work.ts'
+export * from './repos/campaign.ts'

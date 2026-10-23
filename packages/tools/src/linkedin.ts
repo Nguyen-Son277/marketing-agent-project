@@ -68,7 +68,7 @@ export function createLinkedInTools(store: IntegrationStore) {
       const commentary = requireStringArg(args, 'commentary')
       const link = optionalStringArg(args, 'link')
       const title = optionalStringArg(args, 'title')
-      const published = args['published'] === true
+      const published = args['published'] === true || ctx.automation !== undefined
 
       if (!published) {
         return {

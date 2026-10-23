@@ -42,6 +42,9 @@ importers:
       '@marketing-agent/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
+      '@marketing-agent/campaign-domain':
+        specifier: workspace:*
+        version: link:../../packages/campaign-domain
       '@marketing-agent/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -91,6 +94,18 @@ importers:
       '@types/pdfkit':
         specifier: ^0.17.6
         version: 0.17.6
+
+  apps/campaign-loop:
+    dependencies:
+      '@marketing-agent/campaign-domain':
+        specifier: workspace:*
+        version: link:../../packages/campaign-domain
+      '@marketing-agent/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@marketing-agent/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
 
   apps/web:
     dependencies:
@@ -153,6 +168,12 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.12
         version: 7.6.13
+
+  packages/campaign-domain:
+    dependencies:
+      '@marketing-agent/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/i18n:
     dependencies:

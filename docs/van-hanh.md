@@ -39,16 +39,32 @@ User đăng ký mới ở trạng thái **chờ duyệt**. Họ đăng nhập đ
 nhưng mọi API nghiệp vụ bị chặn cho tới khi admin duyệt. Tài khoản có trước migration
 `0009_user_approval` giữ quyền sử dụng; dữ liệu công ty và mật khẩu không bị thay đổi.
 
-Để tạo admin đầu tiên:
-1. Đăng ký email admin trên website bằng mật khẩu của chính người quản trị.
-2. Trên server, dùng đúng `DATABASE_PATH` và `APP_SECRET` của ứng dụng rồi chạy:
+Để tạo admin bằng cấu hình môi trường:
+1. Đặt email người quản trị trong `.env` rồi khởi động lại backend:
+
+```dotenv
+ADMIN_EMAIL=thehung020630@gmail.com
+```
+
+2. Đăng ký email đó trên website bằng mật khẩu của chính người quản trị. Nếu tài khoản
+đã tồn tại thì dùng tài khoản hiện có, không đăng ký lại.
+3. Đăng xuất rồi đăng nhập đúng email và mật khẩu. Hệ thống cấp quyền admin và duyệt
+tài khoản ngay trong lần đăng nhập thành công đầu tiên, sau đó mở màn Duyệt tài khoản.
+
+Email được chuẩn hoá bằng cách bỏ khoảng trắng hai đầu và chuyển thành chữ thường.
+Đăng ký không tự cấp quyền admin; sai mật khẩu không cấp quyền. Đăng ký trùng email
+trả lỗi `409`, không thay mật khẩu hay ghi đè tài khoản cũ. Các lần đăng nhập sau giữ
+quyền đã cấp và không ghi audit cấp quyền trùng. Bỏ trống `ADMIN_EMAIL` để tắt tự cấp
+quyền; việc đổi/xoá biến này không thu hồi quyền admin đã lưu trong database.
+
+Vẫn có thể cấp admin từ shell server tin cậy bằng đúng `DATABASE_PATH` và `APP_SECRET`:
 
 ```bash
 pnpm admin:grant --email thehung020630@gmail.com
 ```
 
 Lệnh chỉ nâng tài khoản **đã tồn tại**, đồng thời duyệt tài khoản đó; không tạo mật khẩu
-mặc định, không thay mật khẩu, không có endpoint cấp admin qua website. Nếu email chưa
+mặc định, không thay mật khẩu. Nếu email chưa
 đăng ký, lệnh dừng và báo rõ. Chạy lại không ghi audit trùng.
 
 Admin đăng nhập sẽ thấy giao diện **Duyệt tài khoản**, không cần công ty. Có danh sách
@@ -127,6 +143,7 @@ cơ chế ưu tiên y hệt server, nhưng biến môi trường thật vẫn đ
 | Biến | Bắt buộc | Mặc định | Hệ quả khi đặt / khi thiếu |
 |---|---|---|---|
 | `APP_SECRET` | **Có** | — | Khoá dẫn xuất để mã hoá API key & credential (AES-256-GCM). Thiếu hoặc < 16 ký tự → server **dừng ngay lúc khởi động** với lỗi `needs_configuration`. Đổi khoá về sau = mọi bí mật đã lưu không giải mã được (§9) |
+| `ADMIN_EMAIL` | Không | — | Email được cấp quyền admin sau khi đăng nhập đúng mật khẩu. Bỏ trống để tắt; email không hợp lệ làm backend dừng khi khởi động. Không tự tạo tài khoản hay mật khẩu; không cho đăng ký trùng email. |
 | `PORT` | Không | `3000` | Cổng HTTP. Chỉ nhận số 0–65535; giá trị ngoài khoảng làm server dừng lúc khởi động |
 | `HOST` | Không | `127.0.0.1` | Địa chỉ bind. Mặc định chỉ nghe localhost — **cố ý**, để phải đi qua reverse proxy. Đặt `0.0.0.0` chỉ khi bạn đã có firewall/TLS ở trước |
 | `DATABASE_PATH` | Không | `data/marketing.db` | Đường dẫn file SQLite. Thư mục cha được tạo tự động nếu thiếu. Trên production **phải** trỏ vào volume bền vững |
@@ -1062,7 +1079,7 @@ Sau khi phục hồi bản sao, nhớ đặt lại `chmod 600` (bước 3 ở §
 | **Chưa có billing nhiều tổ chức** | Không có bảng `plans`/`subscriptions`; không giới hạn theo gói | Khi bán cho nhiều khách trả tiền |
 | **`ENV` embedding local không kèm sẵn** | Mặc định rơi về `hash` → tìm kiếm ngữ nghĩa yếu | §11.5 |
 | **Chi phí `deepseek-*` = 0** | Gateway nội bộ không tính tiền theo model, nên màn hình Chi phí hiển thị 0 cho các model này | Chỉ có ý nghĩa khi bạn thêm provider trả phí thật |
-| **Route đang được hoàn thiện** | Một số module API có thể chưa nạp được; log `[routes] module "..." chưa sẵn sàng`, màn hình tương ứng trống | Xem [api.md](./api.md) — ghi rõ module nào chưa có |
+| **CampaignLoop metrics ngoài** | Job worker đã ghi snapshot accepted/published; chưa polling insights Meta/LinkedIn định kỳ | Bổ sung metrics poller khi cần báo cáo reach/engagement theo post |
 
 Tham chiếu đầy đủ ngưỡng nâng cấp: [kien-truc.md](./kien-truc.md) §7.
 

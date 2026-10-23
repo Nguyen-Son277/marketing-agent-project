@@ -6,12 +6,14 @@
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { AppError } from '@marketing-agent/shared'
+import { AppError, emailSchema } from '@marketing-agent/shared'
 
 export interface ServerConfig {
   readonly host: string
   readonly port: number
   readonly appSecret: string
+  /** Existing account promoted after a successful login; unset disables promotion. */
+  readonly adminEmail?: string
   readonly databasePath: string
   /** Absolute directory holding per-company knowledge bases. */
   readonly companiesRoot: string
@@ -81,6 +83,15 @@ function optionalString(key: string): string | undefined {
   return value && value.trim().length > 0 ? value.trim() : undefined
 }
 
+function configuredAdminEmail(value: string | undefined): string | undefined {
+  if (!value?.trim()) return undefined
+  const parsed = emailSchema.safeParse(value)
+  if (!parsed.success) {
+    throw new AppError('needs_configuration', 'ADMIN_EMAIL phải là một địa chỉ email hợp lệ.')
+  }
+  return parsed.data
+}
+
 function numberFromEnv(key: string, fallback: number, range: { min: number; max: number }): number {
   const raw = process.env[key]
   if (raw === undefined || raw.trim() === '') return fallback
@@ -108,6 +119,7 @@ export function loadConfig(overrides: Partial<ServerConfig> = {}): ServerConfig 
     host: overrides.host ?? optionalString('HOST') ?? '127.0.0.1',
     port: overrides.port ?? numberFromEnv('PORT', 3000, { min: 0, max: 65_535 }),
     appSecret: overrides.appSecret ?? requireString('APP_SECRET', 16),
+    adminEmail: configuredAdminEmail(overrides.adminEmail ?? optionalString('ADMIN_EMAIL')),
     databasePath: overrides.databasePath ?? optionalString('DATABASE_PATH') ?? 'data/marketing.db',
     companiesRoot: overrides.companiesRoot ?? resolve(optionalString('COMPANIES_ROOT') ?? 'data/company-files'),
     kbRoot: overrides.kbRoot ?? resolve(optionalString('KB_ROOT') ?? 'data/companies'),

@@ -253,7 +253,7 @@ export function createEmailTools(store: IntegrationStore) {
       const subject = requireStringArg(args, 'subject')
       const body = requireStringArg(args, 'body')
       const replyTo = optionalStringArg(args, 'replyTo')
-      const send = args['send'] === true
+      const send = args['send'] === true || ctx.automation !== undefined
 
       if (!send) {
         return {

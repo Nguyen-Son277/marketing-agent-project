@@ -80,6 +80,13 @@ truy vấn, không phải bằng lời dặn trong prompt.
 - Chi phí ghi vào `runs` và cộng dồn `usage_daily`, xem được theo ngày / agent /
   model.
 
+**CampaignLoop cho agency (v1)**
+- Agency cha có thể liên kết nhiều client workspace mà vẫn giữ phạm vi dữ liệu theo client.
+- Lập lịch nội dung Meta/LinkedIn và email SMTP theo múi giờ IANA của client.
+- Policy tự động có quota, giờ yên lặng, kill switch và audit; email chỉ gửi tới contact có consent opt-in.
+- Job bền vững trong SQLite có lease, retry, idempotency, provider request id và snapshot metrics thực thi.
+- Import CSV consent, unsubscribe token công khai và màn hình CampaignLoop trong giao diện.
+
 ---
 
 ## Kiến trúc tóm tắt
@@ -173,6 +180,7 @@ trong [docs/api.md](docs/api.md):
 |---|---|---|
 | 1 | **Đăng nhập / Đăng ký** | Tạo tài khoản, đăng nhập, chọn công ty |
 | 2 | **Chat Leader** | Trình bày yêu cầu, trả lời câu hỏi làm rõ, duyệt kế hoạch, theo dõi tiến độ trực tiếp qua SSE, nhận báo cáo |
+| 2b | **CampaignLoop** | Tạo lịch nội dung/email, bật policy, import consent, theo dõi job và dừng khẩn cấp |
 | 3 | **Công việc** | Xem DAG và trạng thái từng task, đọc kết quả, phê duyệt hoặc yêu cầu sửa |
 | 4 | **Đội agent** | Bật/tắt agent, đổi model/tier, cấp skill và tool, chỉnh danh mục tri thức được đọc/ghi |
 | 5 | **Kho kiến thức** | Duyệt tài liệu theo 6 danh mục, thêm/sửa/xoá, xem chỉ mục và lỗi index, reindex |
@@ -180,10 +188,10 @@ trong [docs/api.md](docs/api.md):
 | 7 | **Chi phí** | Token/chi phí theo ngày, theo agent, theo model; lịch sử run; nhật ký kiểm toán |
 | 8 | **Sơ đồ** | Sơ đồ đội agent đọc dữ liệu sống từ `/api/companies/:id/diagram` |
 
-> **Trạng thái:** tại thời điểm viết, `apps/web` mới có client API và quản lý phiên;
-> các màn hình trên **chưa được dựng**, và một số module route còn đang hoàn thiện.
-> Phần đã xong (kiến trúc, schema, seed, llm, kb, agent-runtime, orchestrator, lõi
-> server) đã commit và có test.
+> **Trạng thái:** các màn hình chính và module route đã có trong mã hiện tại. CampaignLoop
+> là lớp mới, đang được hoàn thiện thêm connector metrics ngoài snapshot thực thi.
+> Phần lõi (schema, seed, llm, kb, agent-runtime, orchestrator, server và web) có test
+> theo package; tài liệu API là nguồn tham khảo và mã nguồn là nguồn thực thi.
 
 ---
 
@@ -216,6 +224,8 @@ trong [docs/api.md](docs/api.md):
   khoá vẫn đầy đủ, tìm kiếm ngữ nghĩa yếu). Cách bật: [docs/van-hanh.md](docs/van-hanh.md) §11.5.
 - **Chưa có Dockerfile / docker-compose trong repo.** Thiết kế triển khai đã chốt ở
   [docs/van-hanh.md](docs/van-hanh.md) §6 và ghi rõ file chưa tồn tại.
+- **Metrics bên ngoài chưa polling tự động.** CampaignLoop ghi snapshot accepted/published
+  sau execution; đồng bộ insights Meta/LinkedIn định kỳ sẽ là bước tiếp theo.
 
 ---
 

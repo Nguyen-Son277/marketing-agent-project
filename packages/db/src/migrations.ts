@@ -750,4 +750,185 @@ CREATE TABLE browser_job_events (
 ALTER TABLE daily_report_revisions ADD COLUMN is_day_off INTEGER NOT NULL DEFAULT 0 CHECK(is_day_off IN (0,1));
 `,
   },
+  {
+    id: '0018_campaign_loop',
+    sql: `
+CREATE TABLE agencies (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE agency_memberships (
+  agency_id TEXT NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('owner','admin','operator','analyst')),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (agency_id, user_id)
+);
+CREATE INDEX idx_agency_memberships_user ON agency_memberships(user_id);
+
+CREATE TABLE agency_clients (
+  agency_id TEXT NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (agency_id, company_id)
+);
+CREATE INDEX idx_agency_clients_company ON agency_clients(company_id);
+
+CREATE TABLE automation_policies (
+  company_id TEXT PRIMARY KEY REFERENCES companies(id) ON DELETE CASCADE,
+  enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0,1)),
+  timezone TEXT NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+  channels_json TEXT NOT NULL DEFAULT '["meta","linkedin","email"]',
+  max_posts_per_day INTEGER NOT NULL DEFAULT 0 CHECK (max_posts_per_day >= 0),
+  max_emails_per_day INTEGER NOT NULL DEFAULT 0 CHECK (max_emails_per_day >= 0),
+  quiet_start TEXT,
+  quiet_end TEXT,
+  kill_switch INTEGER NOT NULL DEFAULT 0 CHECK (kill_switch IN (0,1)),
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+  updated_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE campaigns (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','scheduled','running','paused','completed','failed')),
+  timezone TEXT NOT NULL,
+  objective TEXT,
+  created_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_campaigns_company_status ON campaigns(company_id,status,updated_at DESC);
+
+CREATE TABLE audiences (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(company_id,name)
+);
+
+CREATE TABLE audience_contacts (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  audience_id TEXT NOT NULL REFERENCES audiences(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  name TEXT,
+  consent_status TEXT NOT NULL DEFAULT 'unknown' CHECK (consent_status IN ('opted_in','unsubscribed','unknown')),
+  source TEXT,
+  consent_at TEXT,
+  consent_version TEXT,
+  unsubscribed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(audience_id,email)
+);
+CREATE INDEX idx_audience_contacts_company_email ON audience_contacts(company_id,email);
+CREATE INDEX idx_audience_contacts_opted_in ON audience_contacts(audience_id,consent_status);
+
+CREATE TABLE consent_events (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  contact_id TEXT NOT NULL REFERENCES audience_contacts(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('opt_in','unsubscribe','resubscribe','imported')),
+  source TEXT NOT NULL,
+  occurred_at TEXT NOT NULL,
+  metadata_json TEXT
+);
+CREATE INDEX idx_consent_events_contact ON consent_events(contact_id,occurred_at DESC);
+
+CREATE TABLE campaign_items (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL CHECK (channel IN ('meta','linkedin','email')),
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  link TEXT,
+  audience_id TEXT REFERENCES audiences(id) ON DELETE SET NULL,
+  scheduled_at TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','scheduled','running','accepted','failed','suppressed','cancelled')),
+  artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+  provider_ref TEXT,
+  idempotency_key TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(company_id,idempotency_key)
+);
+CREATE INDEX idx_campaign_items_schedule ON campaign_items(company_id,status,scheduled_at);
+CREATE INDEX idx_campaign_items_campaign ON campaign_items(campaign_id,created_at);
+
+CREATE TABLE execution_jobs (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  campaign_item_id TEXT NOT NULL REFERENCES campaign_items(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','leased','accepted','failed','suppressed','cancelled')),
+  run_at TEXT NOT NULL,
+  lease_until TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  idempotency_key TEXT NOT NULL,
+  provider_request_id TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(company_id,idempotency_key)
+);
+CREATE INDEX idx_execution_jobs_due ON execution_jobs(status,run_at,lease_until);
+CREATE INDEX idx_execution_jobs_company ON execution_jobs(company_id,updated_at DESC);
+
+CREATE TABLE execution_attempts (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  job_id TEXT NOT NULL REFERENCES execution_jobs(id) ON DELETE CASCADE,
+  attempt INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued','leased','accepted','failed','suppressed','cancelled')),
+  provider_request_id TEXT,
+  error TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  UNIQUE(job_id,attempt)
+);
+CREATE INDEX idx_execution_attempts_job ON execution_attempts(job_id,attempt);
+
+CREATE TABLE metric_snapshots (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  campaign_item_id TEXT NOT NULL REFERENCES campaign_items(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL CHECK (channel IN ('meta','linkedin','email')),
+  metric_date TEXT NOT NULL,
+  metrics_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(campaign_item_id,metric_date)
+);
+CREATE INDEX idx_metric_snapshots_company ON metric_snapshots(company_id,metric_date DESC);
+`,
+  },
+  {
+    id: '0019_campaign_job_contact',
+    sql: `
+ALTER TABLE execution_jobs ADD COLUMN contact_id TEXT REFERENCES audience_contacts(id) ON DELETE SET NULL;
+CREATE INDEX idx_execution_jobs_contact ON execution_jobs(contact_id);
+`,
+  },
+  {
+    id: '0020_campaign_agency_clients_compat',
+    sql: `
+CREATE TABLE IF NOT EXISTS agency_clients (
+  agency_id TEXT NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (agency_id, company_id)
+);
+CREATE INDEX IF NOT EXISTS idx_agency_clients_company ON agency_clients(company_id);
+`,
+  },
+  {
+    id: '0021_campaign_policy_hosts',
+    sql: `ALTER TABLE automation_policies ADD COLUMN allowed_hosts_json TEXT NOT NULL DEFAULT '[]';`,
+  },
 ]

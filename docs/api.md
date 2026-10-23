@@ -4,18 +4,13 @@ Nguồn chân lý của tài liệu này là **`packages/shared/src/api.ts`** (h
 giữa server và giao diện) cùng các module trong `apps/server/src/routes/`. Khi tài
 liệu và mã lệch nhau, **mã nguồn thắng** — và chỗ lệch được ghi rõ bên dưới.
 
-> **Trạng thái triển khai (đọc trước).** Tại thời điểm viết, chỉ
-> `apps/server/src/routes/auth-routes.ts` tồn tại. Các module còn lại
-> (team, knowledge, chat, tasks, settings, costs, diagram, dashboard) **đang được
-> hoàn thiện** — chúng đã có trong hợp đồng `API_ROUTES` và kiểu phản hồi trong
-> `api.ts`, nhưng file route chưa có. Trong bảng bên dưới, cột **Trạng thái** đánh
-> dấu:
+> **Trạng thái triển khai (đọc trước).** Các module chính đã có route thực thi,
+> bao gồm CampaignLoop. Một vài dòng trạng thái lịch sử bên dưới được giữ để chỉ
+> ra hợp đồng cũ; khi có lệch, mã nguồn và test là nguồn sự thật.
 >
-> - ✅ **đã có** — đọc trực tiếp từ `auth-routes.ts` / `app.ts`
-> - ⏳ **đang hoàn thiện** — đường dẫn và hình dạng phản hồi lấy từ hợp đồng
->   `api.ts`; chi tiết request body lấy từ `packages/shared/src/schemas.ts`; quyền
->   yêu cầu theo quy ước bắt buộc của kiến trúc. Khi module được thêm, đối chiếu lại
->   file route tương ứng.
+> - ✅ **đã có** — route và hợp đồng đã có trong mã hiện tại
+> - ⏳ **đang hoàn thiện** — hợp đồng có trước implementation đầy đủ hoặc còn phần
+>   connector ngoài chưa hoàn thiện
 
 ---
 
@@ -235,7 +230,36 @@ Công khai: `GET/POST /api/public/daily-reports/:token` phục vụ biểu mẫu
 
 Query: `costQuerySchema` `{ from?, to? }`; `paginationSchema` `{ limit, offset }`.
 
-### 2.10 Sơ đồ và tổng quan
+### 2.10 CampaignLoop
+
+| Method | Path | Quyền | Mô tả | Phản hồi | Trạng thái |
+|---|---|---|---|---|---|
+| `GET` | `/api/agencies` | auth | Agency mà user thuộc | `{ agencies: AgencyView[] }` | ✅ |
+| `POST` | `/api/agencies` | auth | Tạo agency và membership owner | `AgencyResponse` | ✅ |
+| `GET` | `/api/agencies/:agencyId` | agency membership | Portfolio client của agency | `AgencyResponse` | ✅ |
+| `POST` | `/api/agencies/:agencyId/clients` | agency owner/admin | Tạo và liên kết client workspace | `{ company, role }` | ✅ |
+| `GET` | `/api/companies/:companyId/campaign-loop` | campaign access | Campaign, policy, audience, jobs và metrics | `CampaignLoopResponse` | ✅ |
+| `GET` | `/api/companies/:companyId/automation-policy` | campaign access | Đọc policy | `{ policy: AutomationPolicyView }` | ✅ |
+| `PATCH` | `/api/companies/:companyId/automation-policy` | owner/admin | Đổi quota, timezone, quiet hours, kill switch | `{ policy: AutomationPolicyView }` | ✅ |
+| `GET/POST` | `/api/companies/:companyId/campaigns` | read/write campaign access | Liệt kê hoặc tạo campaign và item | `CampaignView` | ✅ |
+| `POST` | `/api/companies/:companyId/campaigns/:id/{activate,pause,resume}` | write campaign access | Điều khiển lifecycle và queue durable jobs | `{ campaign: CampaignView }` | ✅ |
+| `GET/POST` | `/api/companies/:companyId/audiences` | read/write campaign access | Liệt kê hoặc tạo audience | `AudienceView` | ✅ |
+| `GET` | `/api/companies/:companyId/audiences/:id/contacts` | campaign access | Danh sách contact đã redacted | `{ contacts: AudienceContactView[] }` | ✅ |
+| `POST` | `/api/companies/:companyId/audiences/:id/import` | write campaign access | Import CSV hoặc contact JSON có consent | `{ result }` | ✅ |
+| `GET` | `/api/companies/:companyId/execution-jobs` | campaign access | Trạng thái lease/retry/provider ref | `{ jobs: ExecutionJobView[] }` | ✅ |
+| `GET` | `/api/companies/:companyId/execution-jobs/:id/attempts` | campaign access | Lịch sử từng lần thử, lỗi đã làm sạch và provider request id | `{ attempts: ExecutionAttemptView[] }` | ✅ |
+| `GET` | `/api/companies/:companyId/campaign-metrics` | campaign access | Snapshot accepted/published hiện có | `{ metrics: MetricSnapshotView[] }` | ✅ |
+| `GET/POST` | `/api/public/campaign-loop/unsubscribe/:token` | công khai | Huỷ đăng ký bằng token ký mã hoá | text | ✅ |
+
+Policy mặc định tắt. Quota bằng `0` nghĩa là không giới hạn sau khi policy được bật.
+`allowedHosts` là allowlist hostname áp cho link đối ngoại. Email autonomous chỉ lấy contact `opted_in`; contact đã
+`unsubscribed` không bị import lại ghi đè. Job worker dùng lease 60 giây, retry tối
+đa 3 lần và idempotency key theo item/contact. Snapshot metrics hiện ghi nhận trạng
+thái execution; AutomationGate chặn script, ký tự điều khiển và nội dung social quá dài;
+polling insights Meta/LinkedIn sẽ bổ sung sau. Email autonomous bị
+suppress nếu deployment chưa đặt `PUBLIC_BASE_URL`, vì email phải có liên kết huỷ đăng ký.
+
+### 2.11 Sơ đồ và tổng quan
 
 | Method | Path | Quyền | Mô tả | Phản hồi | Trạng thái |
 |---|---|---|---|---|---|

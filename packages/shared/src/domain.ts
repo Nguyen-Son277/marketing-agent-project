@@ -169,3 +169,37 @@ export const INTEGRATION_KINDS = [
   'email-smtp',
 ] as const
 export type IntegrationKind = (typeof INTEGRATION_KINDS)[number]
+
+/** Agency-level roles used by CampaignLoop. */
+export const AGENCY_ROLES = ['owner', 'admin', 'operator', 'analyst'] as const
+export type AgencyRole = (typeof AGENCY_ROLES)[number]
+
+/** Channels that can be autonomously scheduled in CampaignLoop v1. */
+export const CAMPAIGN_CHANNELS = ['meta', 'linkedin', 'email'] as const
+export type CampaignChannel = (typeof CAMPAIGN_CHANNELS)[number]
+
+export const CAMPAIGN_STATUSES = ['draft', 'scheduled', 'running', 'paused', 'completed', 'failed'] as const
+export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number]
+
+export const CAMPAIGN_ITEM_STATUSES = [
+  'draft',
+  'scheduled',
+  'running',
+  'accepted',
+  'failed',
+  'suppressed',
+  'cancelled',
+] as const
+export type CampaignItemStatus = (typeof CAMPAIGN_ITEM_STATUSES)[number]
+
+export const EXECUTION_JOB_STATUSES = ['queued', 'leased', 'accepted', 'failed', 'suppressed', 'cancelled'] as const
+export type ExecutionJobStatus = (typeof EXECUTION_JOB_STATUSES)[number]
+
+export const CONSENT_STATUSES = ['opted_in', 'unsubscribed', 'unknown'] as const
+export type ConsentStatus = (typeof CONSENT_STATUSES)[number]
+
+export const CONSENT_EVENT_KINDS = ['opt_in', 'unsubscribe', 'resubscribe', 'imported'] as const
+export type ConsentEventKind = (typeof CONSENT_EVENT_KINDS)[number]
+
+export const POLICY_DECISIONS = ['allow', 'suppress', 'pause', 'quarantine'] as const
+export type PolicyDecision = (typeof POLICY_DECISIONS)[number]

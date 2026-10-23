@@ -11,7 +11,8 @@ import {
 } from '@marketing-agent/shared'
 import { request } from '../lib/api.ts'
 import { useI18n } from '../lib/i18n.tsx'
-import { Card, Nut, Trang, TieuDeTrang } from '../components/ui.tsx'
+import { Card, DangTai, Nut, ThongBao, Trang, TieuDeTrang } from '../components/ui.tsx'
+import '../components/social-browser/social-browser.css'
 
 const TABS = ['desktops', 'channels', 'contents', 'jobs'] as const
 const URLS: Record<string, { url: string; hosts: string }> = {
@@ -178,14 +179,26 @@ export function TrinhDuyetXaHoi({ companyId }: { companyId: string }): ReactNode
   }
   return (
     <Trang rong>
-      <TieuDeTrang moTa={t('browser.subtitle')}>{t('browser.title')}</TieuDeTrang>
-      {error ? (
-        <div className="thong-bao thong-bao--loi" role="alert">
-          {error}
-        </div>
-      ) : null}
-      {notice ? <p role="status">{notice}</p> : null}
-      {data && !data.canManage ? <p>{t('browser.readOnly')}</p> : null}
+      <div className="social-browser">
+      <header className="browser-heading">
+        <div><TieuDeTrang moTa={t('browser.subtitle')}>{t('browser.title')}</TieuDeTrang></div>
+        <Nut
+          bien="phu"
+          disabled={busy}
+          dangTai={busy}
+          onClick={() => {
+            void perform(async () => {})
+          }}
+        >
+          {t('common.refresh')}
+        </Nut>
+      </header>
+      <div aria-live="polite">
+        {error ? <div role="alert"><ThongBao loai="loi">{error}</ThongBao></div> : null}
+        {notice ? <ThongBao loai="thanh-cong">{notice}</ThongBao> : null}
+      </div>
+      {data && !data.canManage ? <ThongBao>{t('browser.readOnly')}</ThongBao> : null}
+      <div className="browser-toolbar">
       <div className="browser-tabs" role="tablist" aria-label={t('browser.title')}>
         {TABS.map((item, index) => (
           <button
@@ -215,22 +228,15 @@ export function TrinhDuyetXaHoi({ companyId }: { companyId: string }): ReactNode
             }}
           >
             {t(`browser.${item}`)}
+            {data ? <span className="browser-status">{data[item].length}</span> : null}
           </button>
         ))}
-        <Nut
-          bien="phu"
-          disabled={busy}
-          onClick={() => {
-            void perform(reload)
-          }}
-        >
-          {t('common.refresh')}
-        </Nut>
+      </div>
       </div>
       {!data ? (
-        <p>{t('common.loading')}</p>
+        !error ? <DangTai /> : null
       ) : (
-        <section role="tabpanel" id={`browser-panel-${tab}`} aria-labelledby={`browser-tab-${tab}`}>
+        <section className="browser-tab-panel" role="tabpanel" id={`browser-panel-${tab}`} aria-labelledby={`browser-tab-${tab}`}>
           {tab === 'desktops' ? (
             <Desktops
               data={data}
@@ -254,6 +260,7 @@ export function TrinhDuyetXaHoi({ companyId }: { companyId: string }): ReactNode
           onClose={() => setRemote(null)}
         />
       ) : null}
+      </div>
     </Trang>
   )
 }
@@ -280,11 +287,12 @@ function Desktops({
     [region, setRegion] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
   return (
-    <>
-      <p>{t('browser.desktopHelp')}</p>
-      <div className="browser-grid">
+    <div className="browser-section">
+      <p className="browser-card-meta">{t('browser.desktopHelp')}</p>
+      {!data.desktops.length ? <div className="browser-empty">{t('browser.empty')}</div> : null}
+      <div className="browser-grid browser-collection">
         {data.desktops.map((d) => (
-          <Card key={d.id} tieuDe={d.name} phu={`${d.region} · ${t(`browser.${d.mode}`)}`}>
+          <Card key={d.id} tieuDe={d.name} phu={d.region} hanhDong={<span className={`browser-status browser-status--${d.mode}`}>{t(`browser.${d.mode}`)}</span>}>
             <p className="browser-url">{d.endpoint}</p>
             {data.canManage ? (
               <div className="hang browser-actions">
@@ -361,7 +369,7 @@ function Desktops({
         ))}
       </div>
       {data.canManage ? (
-        <Card tieuDe={t(editing ? 'browser.editDesktop' : 'browser.addDesktop')}>
+        <div className="browser-form-panel"><Card tieuDe={t(editing ? 'browser.editDesktop' : 'browser.addDesktop')}>
           <form
             onSubmit={(e) => {
               e.preventDefault()
@@ -377,7 +385,7 @@ function Desktops({
               })
             }}
           >
-            <div className="browser-grid">
+            <div className="browser-form-grid">
               <Input label={t('browser.name')} value={name} onChange={setName} required />
               <Input label={t('browser.region')} value={region} onChange={setRegion} required />
             </div>
@@ -415,9 +423,9 @@ function Desktops({
               ) : null}
             </div>
           </form>
-        </Card>
+        </Card></div>
       ) : null}
-    </>
+    </div>
   )
 }
 
@@ -452,8 +460,9 @@ function Channels({
     setCanPost(c.canPost)
   }
   return (
-    <>
-      <div className="browser-grid">
+    <div className="browser-section">
+      {!data.channels.length ? <div className="browser-empty">{t('browser.empty')}</div> : null}
+      <div className="browser-grid browser-collection">
         {data.channels.map((c) => (
           <Card
             key={c.id}
@@ -474,7 +483,7 @@ function Channels({
         ))}
       </div>
       {data.canManage ? (
-        <Card tieuDe={t(editing ? 'browser.editChannel' : 'browser.addChannel')}>
+        <div className="browser-form-panel"><Card tieuDe={t(editing ? 'browser.editChannel' : 'browser.addChannel')}>
           <form
             onSubmit={(e) => {
               e.preventDefault()
@@ -501,7 +510,7 @@ function Channels({
             }}
           >
             <Input label={t('browser.name')} value={name} onChange={setName} required />
-            <div className="browser-grid">
+            <div className="browser-form-grid">
               <Field label={t('browser.desktop')}>
                 <select
                   aria-label={t('browser.desktop')}
@@ -566,9 +575,9 @@ function Channels({
               ) : null}
             </div>
           </form>
-        </Card>
+        </Card></div>
       ) : null}
-    </>
+    </div>
   )
 }
 
@@ -601,6 +610,7 @@ function Contents({
   return (
     <div className="browser-grid browser-grid--content">
       <div className="browser-list">
+        {!data.contents.length ? <div className="browser-empty">{t('browser.empty')}</div> : null}
         {data.contents.map((c) => (
           <Card key={c.id} tieuDe={c.title} phu={`${c.assets.length} ${t('browser.media').toLowerCase()}`}>
             <p className="browser-pre browser-excerpt">{c.body}</p>
@@ -624,8 +634,10 @@ function Contents({
             })
           }}
         >
+          <fieldset className="browser-content-fields" disabled={!data.canManage || locked || busy}>
           <Input label={t('browser.contentTitle')} value={title} onChange={setTitle} required />
           <TextArea label={t('browser.body')} value={body} onChange={setBody} />
+          </fieldset>
           {data.canManage ? (
             <div className="hang">
               <Nut type="submit" disabled={busy || locked}>
@@ -737,16 +749,16 @@ function Jobs({
     if (run) await request(`${base}/jobs/${result.job.id}/run`, { method: 'POST' })
   }
   return (
-    <>
+    <div className="browser-section">
       {data.canManage ? (
-        <Card tieuDe={t('browser.createJob')} phu={t('browser.jobHelp')}>
+        <div className="browser-form-panel"><Card tieuDe={t('browser.createJob')} phu={t('browser.jobHelp')}>
           <form
             onSubmit={(e) => {
               e.preventDefault()
               void perform(() => create(false))
             }}
           >
-            <div className="browser-grid">
+            <div className="browser-form-grid">
               <Field label={t('browser.channels')}>
                 <select
                   aria-label={t('browser.channels')}
@@ -809,16 +821,18 @@ function Jobs({
               </Nut>
             </div>
           </form>
-        </Card>
+        </Card></div>
       ) : null}
       {!data.channels.length ? <p>{t('browser.setupFirst')}</p> : null}
       <p className="chu-mo">{t('browser.notRetried')}</p>
-      <div className="browser-grid">
+      {!data.jobs.length ? <div className="browser-empty">{t('browser.empty')}</div> : null}
+      <div className="browser-grid browser-collection">
         {data.jobs.map((j) => (
           <Card
             key={j.id}
             tieuDe={data.channels.find((c) => c.id === j.channelId)?.name ?? j.channelId}
-            phu={`${t(`browser.${j.kind}`)} · ${t(`browser.${j.status}`)}`}
+            phu={t(`browser.${j.kind}`)}
+            hanhDong={<span className={`browser-status browser-status--${j.status}`}>{t(`browser.${j.status}`)}</span>}
           >
             {j.contentId ? <p>{data.contents.find((c) => c.id === j.contentId)?.title}</p> : null}
             <p className="browser-pre">{j.instructions}</p>
@@ -891,7 +905,7 @@ function Jobs({
           )}
         </Card>
       ) : null}
-    </>
+    </div>
   )
 }
 
@@ -918,19 +932,29 @@ function RemoteDesktop({
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     const node = dialog.current
-    node?.showModal()
-    return () => node?.close()
+    if (node && !node.open) node.showModal()
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      node?.close()
+      document.body.style.overflow = previousOverflow
+    }
   }, [])
   useEffect(() => {
     alive.current = true
+    const controller = new AbortController()
     let current = '',
       timer: number | undefined
     async function load() {
       try {
-        const response = await fetch(`${root}/screen`, { credentials: 'same-origin', cache: 'no-store' })
+        const response = await fetch(`${root}/screen`, {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          signal: controller.signal,
+        })
         if (!response.ok) throw new Error(t('browser.screenError'))
         const next = URL.createObjectURL(await response.blob())
-        if (!alive.current) {
+        if (controller.signal.aborted) {
           URL.revokeObjectURL(next)
           return
         }
@@ -939,9 +963,9 @@ function RemoteDesktop({
         setScreen(next)
         if (previous) URL.revokeObjectURL(previous)
       } catch (e) {
-        if (alive.current) setError(e instanceof Error ? e.message : t('browser.screenError'))
+        if (!controller.signal.aborted) setError(e instanceof Error ? e.message : t('browser.screenError'))
       } finally {
-        if (alive.current)
+        if (!controller.signal.aborted)
           timer = window.setTimeout(() => {
             void load()
           }, 1500)
@@ -950,6 +974,7 @@ function RemoteDesktop({
     void load()
     return () => {
       alive.current = false
+      controller.abort()
       if (timer) window.clearTimeout(timer)
       if (current) URL.revokeObjectURL(current)
     }
@@ -1027,6 +1052,8 @@ function RemoteDesktop({
               const img = image.current
               if (!img) return
               const rect = img.getBoundingClientRect()
+              if (!rect.width || !rect.height || !img.naturalWidth || !img.naturalHeight) return
+              if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return
               void input({
                 operation: 'click',
                 x: Math.max(0, Math.round(((e.clientX - rect.left) * img.naturalWidth) / rect.width)),

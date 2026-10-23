@@ -80,7 +80,8 @@ export const accountAccessMiddleware: Middleware = (ctx, next) => {
   if (!path.startsWith('/api/') || publicPaths.has(path)
     || (/^\/api\/public\/daily-reports\/[A-Za-z0-9_-]{43}$/.test(path) && (ctx.method === 'GET' || ctx.method === 'POST'))
     || (/^\/api\/public\/daily-reports\/[A-Za-z0-9_-]{43}\/members\/[A-Za-z0-9_-]+$/.test(path) && ctx.method === 'GET')
-    || (/^\/api\/public\/daily-report-views\/[A-Za-z0-9_-]{43}$/.test(path) && ctx.method === 'GET')) return next()
+    || (/^\/api\/public\/daily-report-views\/[A-Za-z0-9_-]{43}$/.test(path) && ctx.method === 'GET')
+    || (/^\/api\/public\/campaign-loop\/unsubscribe\/[A-Za-z0-9_-]+$/.test(path) && (ctx.method === 'GET' || ctx.method === 'POST'))) return next()
   const auth = readAuth(ctx)
   if (!auth) throw unauthorized()
   if (auth.user.approvalStatus !== 'approved') {
@@ -166,3 +167,36 @@ export const requireManage = requireRole('owner', 'admin')
 
 /** Everyone except viewers: starting work, sending messages, approving output. */
 export const requireWork = requireRole('owner', 'admin', 'member')
+
+/**
+ * CampaignLoop access: a direct client membership or an agency membership that
+ * owns the client workspace. Agency operators can work across linked clients;
+ * analysts remain read-only.
+ */
+export function requireCampaignAccess(repos: Repos, write = false): Middleware {
+  return (ctx, next) => {
+    const auth = requireAuthState(ctx)
+    const companyId = ctx.params.companyId
+    if (!companyId) throw new AppError('internal', 'Route thiếu tham số :companyId')
+    const access = repos.campaigns.companyAccess(auth.user.id, companyId)
+    if (!access.companyRole && !access.agencyRole) throw new AppError('not_found', 'Không tìm thấy client workspace')
+    if (write) {
+      const directWrite = access.companyRole ? ['owner', 'admin', 'member'].includes(access.companyRole) : false
+      const agencyWrite = access.agencyRole ? ['owner', 'admin', 'operator'].includes(access.agencyRole) : false
+      if (!directWrite && !agencyWrite) throw forbidden('Chỉ agency operator hoặc thành viên có quyền làm việc mới được thao tác')
+    }
+    ctx.state.campaignAccess = access
+    return next()
+  }
+}
+
+export function requireAgencyAccess(repos: Repos, write = false): Middleware {
+  return (ctx, next) => {
+    const auth = requireAuthState(ctx)
+    const agencyId = ctx.params.agencyId
+    if (!agencyId) throw new AppError('internal', 'Route thiếu tham số :agencyId')
+    const membership = repos.campaigns.requireAgencyMembership(agencyId, auth.user.id, write)
+    ctx.state.agencyMembership = membership
+    return next()
+  }
+}

@@ -14,3 +14,5 @@ data-acceptance/
 .DS_Store
 coverage/
 *.tsbuildinfo
+
+.claude/

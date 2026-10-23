@@ -206,7 +206,7 @@ export function createMetaTools(store: IntegrationStore) {
       const config = store.require(ctx.companyId, 'meta', 'Meta (Facebook / Instagram)')
       const message = requireStringArg(args, 'message')
       const link = optionalStringArg(args, 'link')
-      const published = args['published'] === true
+      const published = args['published'] === true || ctx.automation !== undefined
       const scheduledAt = optionalStringArg(args, 'scheduledAt')
 
       if (!published) {

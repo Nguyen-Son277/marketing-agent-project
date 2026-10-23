@@ -27,6 +27,7 @@ import { CongTyCuaToi } from './screens/CongTyCuaToi.tsx'
 import { ChiPhi } from './screens/ChiPhi.tsx'
 import { SoDoDoiAgent } from './screens/SoDoDoiAgent.tsx'
 import { TrinhDuyetXaHoi } from './screens/TrinhDuyetXaHoi.tsx'
+import { CampaignLoop } from './screens/CampaignLoop.tsx'
 
 /**
  * Bảng định tuyến.
@@ -38,6 +39,7 @@ import { TrinhDuyetXaHoi } from './screens/TrinhDuyetXaHoi.tsx'
 export const ROUTES = [
   { id: 'bang-dieu-khien', nhan: 'nav.dashboard', nhom: 'nav.group.work', bieuTuong: '📊' },
   { id: 'trao-doi', nhan: 'nav.chat', nhom: 'nav.group.work', bieuTuong: '💬' },
+  { id: 'campaign-loop', nhan: 'campaign.nav', nhom: 'nav.group.work', bieuTuong: '🚀' },
   { id: 'cong-viec', nhan: 'nav.tasks', nhom: 'nav.group.work', bieuTuong: '🗂️' },
   { id: 'giao-viec', nhan: 'nav.workforce', nhom: 'nav.group.work', bieuTuong: '🎨' },
   { id: 'bao-cao-hang-ngay', nhan: 'nav.dailyReports', nhom: 'nav.group.work', bieuTuong: '📝' },
@@ -129,6 +131,8 @@ export function Shell(): ReactNode {
         return <BangDieuKhien companyId={companyId} onNavigate={navigate} />
       case 'trao-doi':
         return <TraoDoi companyId={companyId} />
+      case 'campaign-loop':
+        return <CampaignLoop companyId={companyId} />
       case 'cong-viec':
         return <CongViec companyId={companyId} />
       case 'giao-viec':

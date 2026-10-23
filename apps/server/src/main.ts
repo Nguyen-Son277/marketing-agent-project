@@ -19,6 +19,7 @@ import { embeddingFor } from './services/agent-services.ts'
 import { startDailyReportWorker } from './services/daily-report-worker.ts'
 import { preflight } from './services/company-service.ts'
 import { recoverBrowserJobs, stopBrowserJobs } from './services/browser-job-runner.ts'
+import { startCampaignWorker } from './services/campaign-worker.ts'
 
 export interface StartedServer {
   readonly server: Server
@@ -93,6 +94,7 @@ export async function startServer(overrides: Partial<ServerConfig> = {}): Promis
   sweeper.unref()
   const dailyWorker = startDailyReportWorker(repos)
   const knowledgeWorker = startKnowledgeClassificationWorker(repos,{embeddingFor:async()=>embeddingFor(context),intervalMs:2000})
+  const campaignWorker = startCampaignWorker(context)
 
   return {
     server,
@@ -103,6 +105,7 @@ export async function startServer(overrides: Partial<ServerConfig> = {}): Promis
       await stopBrowserJobs(context)
       await knowledgeWorker.close()
       await dailyWorker.close()
+      await campaignWorker.close()
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
       repos.db.close()
     },

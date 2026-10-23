@@ -9,6 +9,11 @@ import {
   KB_CATEGORY_CODES,
   MODEL_TIERS,
   PROVIDER_KINDS,
+  AGENCY_ROLES,
+  CAMPAIGN_CHANNELS,
+  CAMPAIGN_STATUSES,
+  CAMPAIGN_ITEM_STATUSES,
+  CONSENT_STATUSES,
 } from './domain.ts'
 
 export const emailSchema = z.string().trim().toLowerCase().email('Email không hợp lệ')
@@ -278,6 +283,80 @@ export const paginationSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 })
 export type PaginationInput = z.infer<typeof paginationSchema>
+
+/* ---------------------------------------------------------- CampaignLoop */
+
+export const agencyRoleSchema = z.enum(AGENCY_ROLES)
+export const campaignChannelSchema = z.enum(CAMPAIGN_CHANNELS)
+export const campaignStatusSchema = z.enum(CAMPAIGN_STATUSES)
+export const campaignItemStatusSchema = z.enum(CAMPAIGN_ITEM_STATUSES)
+export const consentStatusSchema = z.enum(CONSENT_STATUSES)
+
+export const createAgencySchema = z.object({
+  name: z.string().trim().min(1, 'Cần tên agency').max(160),
+})
+export type CreateAgencyInput = z.infer<typeof createAgencySchema>
+
+export const addAgencyMemberSchema = z.object({
+  email: emailSchema,
+  role: agencyRoleSchema.default('operator'),
+})
+export type AddAgencyMemberInput = z.infer<typeof addAgencyMemberSchema>
+
+export const createCampaignSchema = z.object({
+  name: z.string().trim().min(1, 'Cần tên chiến dịch').max(200),
+  timezone: z.string().trim().min(1).max(80).default('Asia/Ho_Chi_Minh'),
+  objective: z.string().trim().max(2_000).nullable().optional(),
+  items: z.array(z.object({
+    channel: campaignChannelSchema,
+    title: z.string().trim().min(1).max(240),
+    content: z.string().trim().min(1).max(50_000),
+    link: z.string().url().nullable().optional(),
+    audienceId: z.string().trim().min(1).nullable().optional(),
+    scheduledAt: z.string().datetime().nullable().optional(),
+  })).min(1, 'Cần ít nhất một nội dung').max(500),
+})
+export type CreateCampaignInput = z.infer<typeof createCampaignSchema>
+
+export const updateAutomationPolicySchema = z.object({
+  enabled: z.boolean().optional(),
+  timezone: z.string().trim().min(1).max(80).optional(),
+  channels: z.array(campaignChannelSchema).max(3).optional(),
+  maxPostsPerDay: z.number().int().min(0).max(10_000).optional(),
+  maxEmailsPerDay: z.number().int().min(0).max(1_000_000).optional(),
+  allowedHosts: z.array(z.string().trim().min(1).max(255)).max(50).optional(),
+  quietStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  quietEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  killSwitch: z.boolean().optional(),
+})
+export type UpdateAutomationPolicyInput = z.infer<typeof updateAutomationPolicySchema>
+
+export const createAudienceSchema = z.object({
+  name: z.string().trim().min(1, 'Cần tên danh sách').max(160),
+})
+export type CreateAudienceInput = z.infer<typeof createAudienceSchema>
+
+export const importAudienceContactSchema = z.object({
+  email: emailSchema,
+  name: z.string().trim().max(160).nullable().optional(),
+  source: z.string().trim().min(1).max(200),
+  consentAt: z.string().datetime(),
+  consentVersion: z.string().trim().min(1).max(120),
+})
+export const importAudienceSchema = z.object({
+  contacts: z.array(importAudienceContactSchema).min(1).max(100_000),
+})
+export type ImportAudienceInput = z.infer<typeof importAudienceSchema>
+
+export const addCampaignItemSchema = z.object({
+  channel: campaignChannelSchema,
+  title: z.string().trim().min(1).max(240),
+  content: z.string().trim().min(1).max(50_000),
+  link: z.string().url().nullable().optional(),
+  audienceId: z.string().trim().min(1).nullable().optional(),
+  scheduledAt: z.string().datetime().nullable().optional(),
+})
+export type AddCampaignItemInput = z.infer<typeof addCampaignItemSchema>
 
 /** Parse a payload or throw a 400-shaped validation AppError. */
 export function parseOrThrow<S extends z.ZodTypeAny>(schema: S, payload: unknown, label = 'dữ liệu'): z.output<S> {

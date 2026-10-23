@@ -16,6 +16,14 @@ import type {
   ProviderKind,
   RunStatus,
   TaskStatus,
+  AgencyRole,
+  CampaignChannel,
+  CampaignItemStatus,
+  CampaignStatus,
+  ConsentEventKind,
+  ConsentStatus,
+  ExecutionJobStatus,
+  PolicyDecision,
 } from './domain.ts'
 
 /* ------------------------------------------------------------------ tenancy */
@@ -458,6 +466,11 @@ export interface ToolContext {
   readonly agentDefId: string
   readonly taskId: string | null
   readonly conversationId: string | null
+  /** Present only for a policy-approved CampaignLoop execution job. */
+  readonly automation?: {
+    readonly jobId: string
+    readonly policyVersion: number
+  }
   readonly signal?: AbortSignal
   readonly log: (message: string, data?: unknown) => void
 }
@@ -496,4 +509,144 @@ export interface IntegrationRecord {
   readonly status: string
   readonly lastCheckAt: string | null
   readonly createdAt: string
+}
+
+/* ----------------------------------------------------------- CampaignLoop */
+
+export interface AgencyRecord {
+  readonly id: string
+  readonly name: string
+  readonly slug: string
+  readonly createdAt: string
+}
+
+export interface AgencyMembershipRecord {
+  readonly agencyId: string
+  readonly userId: string
+  readonly role: AgencyRole
+  readonly createdAt: string
+}
+
+export interface AutomationPolicyRecord {
+  readonly companyId: string
+  readonly enabled: boolean
+  readonly timezone: string
+  readonly channels: readonly CampaignChannel[]
+  readonly maxPostsPerDay: number
+  readonly maxEmailsPerDay: number
+  readonly allowedHosts: readonly string[]
+  readonly quietStart: string | null
+  readonly quietEnd: string | null
+  readonly killSwitch: boolean
+  readonly version: number
+  readonly updatedBy: string | null
+  readonly updatedAt: string
+}
+
+export interface CampaignRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly name: string
+  readonly status: CampaignStatus
+  readonly timezone: string
+  readonly objective: string | null
+  readonly createdBy: string
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface CampaignItemRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly campaignId: string
+  readonly channel: CampaignChannel
+  readonly title: string
+  readonly content: string
+  readonly link: string | null
+  readonly audienceId: string | null
+  readonly scheduledAt: string | null
+  readonly status: CampaignItemStatus
+  readonly artifactId: string | null
+  readonly providerRef: string | null
+  readonly idempotencyKey: string
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface AudienceRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly name: string
+  readonly createdAt: string
+}
+
+export interface AudienceContactRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly audienceId: string
+  readonly email: string
+  readonly name: string | null
+  readonly consentStatus: ConsentStatus
+  readonly source: string | null
+  readonly consentAt: string | null
+  readonly consentVersion: string | null
+  readonly unsubscribedAt: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface ConsentEventRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly contactId: string
+  readonly kind: ConsentEventKind
+  readonly source: string
+  readonly occurredAt: string
+  readonly metadataJson: string | null
+}
+
+export interface ExecutionJobRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly campaignItemId: string
+  readonly contactId: string | null
+  readonly status: ExecutionJobStatus
+  readonly runAt: string
+  readonly leaseUntil: string | null
+  readonly attempts: number
+  readonly idempotencyKey: string
+  readonly providerRequestId: string | null
+  readonly error: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface ExecutionAttemptRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly jobId: string
+  readonly attempt: number
+  readonly status: ExecutionJobStatus
+  readonly providerRequestId: string | null
+  readonly error: string | null
+  readonly startedAt: string
+  readonly finishedAt: string | null
+}
+
+export interface MetricSnapshotRecord {
+  readonly id: string
+  readonly companyId: string
+  readonly campaignItemId: string
+  readonly channel: CampaignChannel
+  readonly metricDate: string
+  readonly metricsJson: string
+  readonly createdAt: string
+}
+
+/** A redacted decision persisted for audit and UI explanations. */
+export interface AutomationDecision {
+  readonly decision: PolicyDecision
+  readonly reason: string
+  readonly policyVersion: number
+  readonly checkedAt: string
 }

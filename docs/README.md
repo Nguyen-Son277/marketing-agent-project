@@ -109,11 +109,12 @@ Nói thẳng để người mới không mất thời gian đi tìm thứ chưa 
 - Pha 2: `orchestrator` (Leader, Planner, DAG, ReviewGate, Reporter).
 
 **Đang hoàn thiện**
-- `apps/server/src/routes/*` — mới có `auth-routes.ts`. Các module
-  team/knowledge/chat/tasks/settings/costs/diagram/dashboard đang được viết.
-  Trong lúc đó, log boot in `[routes] module "..." chưa sẵn sàng` và các màn hình
-  tương ứng chưa có dữ liệu.
-- `apps/web` — mới có client API và session; các màn hình chưa dựng.
+- CampaignLoop (`packages/campaign-domain`, `packages/db/src/repos/campaign.ts`,
+  `apps/server/src/routes/campaign-loop-routes.ts`) đã có agency/client access,
+  consent, policy, durable jobs và giao diện. Connector metrics ngoài snapshot
+  thực thi vẫn là bước tiếp theo.
+- `apps/server/src/routes/*` và `apps/web/src/screens/*` đã có các module chính;
+  khi tài liệu cũ lệch với mã, mã nguồn và test là nguồn sự thật.
 
 **Chưa có trong repo**
 - `Dockerfile` / `docker-compose.yml` — tài liệu [van-hanh.md](./van-hanh.md) §6 mô

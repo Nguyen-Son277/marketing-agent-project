@@ -20,6 +20,7 @@ import { registerDailyReportRoutes } from './routes/daily-report-routes.ts'
 import { registerSocialBrowserRoutes } from './routes/social-browser-routes.ts'
 import { registerAdminRoutes } from './routes/admin-routes.ts'
 import { registerWorkforceRoutes } from './routes/workforce-routes.ts'
+import { campaignLoopRoutes } from './routes/campaign-loop-routes.ts'
 import { registerAuthRoutes, registerMemberRoutes } from './routes/auth-routes.ts'
 
 /** Optional route modules, resolved lazily so a partially built package cannot block boot. */
@@ -45,13 +46,15 @@ export function buildApp(options: BuildAppOptions): App {
   const repos: Repos = context.repos
   const router = new Router()
 
-  registerAuthRoutes(router, repos, context.config.sessionTtlDays)
+  registerAuthRoutes(router, repos, context.config.sessionTtlDays, context.config.adminEmail)
   registerMemberRoutes(router, repos)
   registerAdminRoutes(router, repos)
   registerWorkforceRoutes(router, repos)
   registerDailyReportRoutes(router, context)
   registerSocialBrowserRoutes(router, context)
   registerNotificationRoutes(router, repos)
+  const campaignModule = campaignLoopRoutes()
+  campaignModule.register(router, context)
 
   for (const module of options.optionalModules ?? []) {
     try {

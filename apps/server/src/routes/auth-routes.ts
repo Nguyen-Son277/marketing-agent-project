@@ -22,7 +22,7 @@ import { SESSION_COOKIE, requireAuthState, requireManage, requireMembership } fr
 import type { RequestContext, Router } from '../http/router.ts'
 import { createCompanyForUser, deleteCompany, preflight } from '../services/company-service.ts'
 
-export function registerAuthRoutes(router: Router, repos: Repos, sessionTtlDays: number): void {
+export function registerAuthRoutes(router: Router, repos: Repos, sessionTtlDays: number, adminEmail?: string): void {
   const auth = repos.auth
 
   router.post('/api/auth/register', async (ctx) => {
@@ -39,15 +39,26 @@ export function registerAuthRoutes(router: Router, repos: Repos, sessionTtlDays:
 
   router.post('/api/auth/login', async (ctx) => {
     const input = parseOrThrow(loginSchema, await ctx.body(), 'thông tin đăng nhập')
-    const user = auth.authenticate(input.email, input.password)
-    if (!user) {
+    const authenticated = auth.authenticate(input.email, input.password)
+    if (!authenticated) {
       // Same message for unknown email and wrong password: no account enumeration.
       repos.accounting.audit({ action: 'auth.login_failed', target: input.email })
       throw new AppError('unauthorized', 'Email hoặc mật khẩu không đúng', { messageKey: 'errors.auth.invalidCredentials' })
     }
-    const session = auth.createSession(user.id, sessionTtlDays)
+    const { user, session } = repos.db.tx(() => {
+      let user = authenticated
+      if (adminEmail && user.email === adminEmail) {
+        const promotion = auth.grantSystemAdmin(user.email)
+        user = promotion.user
+        if (promotion.changed) {
+          repos.accounting.audit({ userId: user.id, action: 'user.grant_admin', target: user.id, payload: { source: 'ADMIN_EMAIL' } })
+        }
+      }
+      const session = auth.createSession(user.id, sessionTtlDays)
+      repos.accounting.audit({ userId: user.id, action: 'auth.login' })
+      return { user, session }
+    })
     setSessionCookie(ctx, session.token, session.expiresAt)
-    repos.accounting.audit({ userId: user.id, action: 'auth.login' })
     ctx.json(200, {
       user: toPublicUser(user),
       companies: user.approvalStatus === 'approved' && !user.isAdmin && user.accountType === 'user' && !user.mustChangePassword ? auth.listCompaniesForUser(user.id) : [],

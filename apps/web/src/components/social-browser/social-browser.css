@@ -1,0 +1,518 @@
+/* Social browser layout. Keep every override inside this screen. */
+.social-browser {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.social-browser *,
+.social-browser *::before,
+.social-browser *::after {
+  box-sizing: border-box;
+}
+
+.social-browser .browser-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 18px;
+}
+
+.social-browser .browser-heading .the__tieu-de {
+  margin-bottom: 6px;
+  font-size: clamp(22px, 2.3vw, 30px);
+  line-height: 1.25;
+}
+
+.social-browser .browser-heading .the__mo-ta {
+  max-width: 72ch;
+  margin-bottom: 0;
+  line-height: 1.55;
+}
+
+.social-browser .browser-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 18px 0 24px;
+}
+
+.social-browser .browser-tabs {
+  display: flex;
+  flex: 1 1 480px;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+
+.social-browser .browser-tabs [role='tab'] {
+  min-height: 40px;
+  padding: 10px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.social-browser .browser-tabs [role='tab'][aria-selected='true'] {
+  box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
+}
+
+.social-browser .browser-tabs [role='tab']:focus-visible,
+.social-browser .browser-actions .btn:focus-visible,
+.social-browser .browser-screen:focus-visible {
+  outline: 3px solid var(--mau-chinh);
+  outline-offset: 2px;
+}
+
+.social-browser .browser-tab-panel,
+.social-browser .browser-section,
+.social-browser .browser-collection,
+.social-browser .browser-form-panel {
+  min-width: 0;
+}
+
+.social-browser .browser-section + .browser-section {
+  margin-top: 28px;
+}
+
+.social-browser .browser-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin: 0 0 14px;
+}
+
+.social-browser .browser-section-heading h2,
+.social-browser .browser-section-heading h3 {
+  margin: 0;
+  font-size: clamp(17px, 1.6vw, 20px);
+}
+
+.social-browser .browser-section-heading p {
+  margin: 0;
+  color: var(--mau-chu-mo);
+}
+
+.social-browser .browser-grid,
+.social-browser .browser-collection {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  align-items: stretch;
+  gap: 16px;
+  min-width: 0;
+  margin: 0 0 22px;
+}
+
+.social-browser .browser-grid--content {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+  align-items: start;
+}
+
+.social-browser .browser-collection:empty {
+  display: none;
+}
+
+.social-browser .browser-grid > *,
+.social-browser .browser-collection > *,
+.social-browser .browser-grid--content > * {
+  min-width: 0;
+}
+
+.social-browser .browser-grid > .card + .card,
+.social-browser .browser-collection > .card + .card {
+  margin-top: 0;
+}
+
+.social-browser .browser-list {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.social-browser .browser-list > .card + .card {
+  margin-top: 0;
+}
+
+.social-browser .card {
+  min-width: 0;
+}
+
+.social-browser .card > header {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.social-browser .card > header > div {
+  flex: 1 1 150px;
+}
+
+.social-browser .card > header,
+.social-browser .card > header > div,
+.social-browser .card__tieu-de,
+.social-browser .card__phu {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.social-browser .card__tieu-de {
+  line-height: 1.4;
+}
+
+.social-browser .card__phu {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.social-browser .browser-card-meta {
+  color: var(--mau-chu-mo);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.social-browser .browser-card-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mau-vien);
+}
+
+.social-browser .browser-card-footer .browser-actions {
+  margin: 0;
+}
+
+.social-browser .browser-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.social-browser .card > .browser-actions {
+  margin-top: 14px;
+}
+
+.social-browser .browser-actions .btn,
+.social-browser form > .hang .btn {
+  max-width: 100%;
+  min-height: 38px;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.social-browser .browser-url,
+.social-browser .browser-pre,
+.social-browser .browser-asset a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.social-browser .browser-pre {
+  white-space: pre-wrap;
+}
+
+.social-browser .browser-excerpt {
+  max-height: 180px;
+  overflow: auto;
+}
+
+.social-browser .browser-empty {
+  padding: 14px 16px;
+  border: 1px solid var(--mau-vien);
+  border-radius: var(--ban-kinh-nho);
+  background: var(--mau-nen-phu);
+  line-height: 1.55;
+  color: var(--mau-chu-mo);
+}
+
+.social-browser .browser-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid var(--mau-vien);
+  border-radius: 999px;
+  background: var(--mau-nen-phu);
+  color: var(--mau-chu-mo);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.social-browser .browser-tabs .browser-status {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-color: currentColor;
+  background: transparent;
+  color: inherit;
+}
+
+.social-browser .browser-status--human,
+.social-browser .browser-status--waiting_human {
+  border-color: var(--mau-vien-canh-bao);
+  background: var(--mau-canh-bao-nen);
+  color: var(--mau-chu-canh-bao);
+}
+
+.social-browser .browser-status--agent,
+.social-browser .browser-status--running,
+.social-browser .browser-status--succeeded {
+  border-color: var(--mau-vien-thanh-cong);
+  background: var(--mau-thanh-cong-nen);
+  color: var(--mau-chu-thanh-cong);
+}
+
+.social-browser .browser-status--paused {
+  border-color: var(--mau-vien);
+  background: var(--mau-nen-phu);
+  color: var(--mau-chu-mo);
+}
+
+.social-browser .browser-status--failed {
+  border-color: var(--mau-vien-loi);
+  background: var(--mau-loi-nen);
+  color: var(--mau-chu-loi);
+}
+
+.social-browser .browser-form-panel form {
+  min-width: 0;
+}
+
+.social-browser .browser-content-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.social-browser [aria-live]:empty {
+  display: none;
+}
+
+.social-browser .chu-mo,
+.social-browser .truong small {
+  color: var(--mau-chu-mo);
+  font-size: 12px;
+}
+
+.social-browser .browser-form-grid,
+.social-browser form > .browser-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 14px 18px;
+  min-width: 0;
+  margin: 0;
+}
+
+.social-browser .browser-form-grid > *,
+.social-browser .browser-form-grid > .truong,
+.social-browser form > .browser-grid > *,
+.social-browser form > .browser-grid > .truong {
+  min-width: 0;
+  margin: 0;
+}
+
+.social-browser .browser-field-wide {
+  grid-column: 1 / -1;
+}
+
+.social-browser form:not(.browser-actions) > * + * {
+  margin-top: 14px;
+}
+
+.social-browser .truong,
+.social-browser .browser-url-input {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.social-browser .truong > .nhan,
+.social-browser .browser-url-input {
+  line-height: 1.45;
+}
+
+.social-browser .truong .o-nhap,
+.social-browser .truong .o-chon,
+.social-browser .truong .o-van-ban,
+.social-browser .truong textarea,
+.social-browser .browser-url-input .o-nhap {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.social-browser .truong textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.social-browser .truong small {
+  display: block;
+  margin-top: 5px;
+  line-height: 1.45;
+}
+
+.social-browser .browser-check {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  max-width: 100%;
+  margin-bottom: 0;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.social-browser .browser-check input {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: var(--mau-chinh);
+}
+
+.social-browser .browser-media {
+  min-width: 0;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--mau-vien);
+}
+
+.social-browser .browser-media h3 {
+  margin: 0 0 8px;
+}
+
+.social-browser .browser-asset {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--mau-vien);
+}
+
+.social-browser .browser-asset a {
+  flex: 1 1 180px;
+}
+
+.social-browser .browser-asset small {
+  color: var(--mau-chu-mo);
+}
+
+.social-browser input[type='file'] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-top: 6px;
+  color: var(--mau-chu);
+}
+
+.social-browser .browser-remote {
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: clamp(6px, 2vw, 20px);
+  overflow: auto;
+}
+
+.social-browser .browser-remote__body {
+  width: 100%;
+  max-width: 1480px;
+  min-width: 0;
+  padding: clamp(12px, 2vw, 24px);
+  border: 1px solid var(--mau-vien);
+  box-shadow: var(--bong-lon);
+}
+
+.social-browser .browser-remote__body h2 {
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(18px, 2vw, 24px);
+  overflow-wrap: anywhere;
+}
+
+.social-browser .browser-remote__body > p {
+  line-height: 1.55;
+}
+
+.social-browser .browser-remote__body > form.browser-actions {
+  align-items: end;
+}
+
+.social-browser .browser-url-input {
+  flex: 1 1 280px;
+  min-width: min(100%, 180px);
+}
+
+.social-browser .browser-url-input .o-nhap {
+  margin-top: 5px;
+}
+
+.social-browser .browser-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  margin: 16px 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.social-browser .browser-screen img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 65dvh;
+  height: auto;
+}
+
+@media (max-width: 760px) {
+  .social-browser .browser-grid--content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .social-browser .browser-form-grid,
+  .social-browser form > .browser-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .social-browser .browser-toolbar {
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 480px) {
+  .social-browser .browser-tabs {
+    flex-basis: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .social-browser .browser-tabs [role='tab'] {
+    min-width: 0;
+  }
+
+  .social-browser .browser-remote__body > form.browser-actions > .btn {
+    width: 100%;
+  }
+}
