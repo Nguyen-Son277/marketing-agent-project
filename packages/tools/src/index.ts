@@ -23,6 +23,7 @@ import { createEmailTools } from './email.ts'
 import { createPaidAdsTools } from './paid-ads.ts'
 import { IntegrationStore } from './integrations.ts'
 import { createWorkforceTools } from './workforce.ts'
+import { createSocialBrowserTools } from './social-browser.ts'
 
 export interface BuildToolRegistryOptions {
   /** Required by the core tools; omit to build a registry without file tools. */
@@ -53,6 +54,7 @@ export function buildToolRegistry(options: BuildToolRegistryOptions = {}): Built
   tools.push(http.httpFetch)
 
   if (options.repos && options.coreOptions) {
+    tools.push(...createSocialBrowserTools(options.repos, options.coreOptions.companiesRoot))
     const core = createCoreTools(options.repos, options.coreOptions)
     tools.push(core.filesRead, core.filesWrite, core.filesList, core.artifactPublish)
   }
@@ -126,3 +128,4 @@ export {
 export { fetchWithTimeout, parseJsonResponse, readBounded, extractErrorMessage } from './http-client.ts'
 export { sendMail, buildMimeMessage, extractAddress, buildMessageId } from './email.ts'
 export type { SendMailInput } from './email.ts'
+export { SocialBrowserService, createSocialBrowserTools, browserAssetPath, assertBrowserWorkerEndpoint } from './social-browser.ts'

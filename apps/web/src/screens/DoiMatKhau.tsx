@@ -6,11 +6,13 @@ import { workforceApi } from '../lib/workforce-api.ts'
 import { Nut, ONhap, Truong, ThongBao } from '../components/ui.tsx'
 import { LocaleSwitcher } from '../components/LocaleSwitcher.tsx'
 import { ThemeSwitcher } from '../components/ThemeSwitcher.tsx'
+import { Logo } from '../components/Logo.tsx'
 export function DoiMatKhau() {
  const { signIn, signOut }=useSession(),{t,translateError}=useI18n()
  const [current,setCurrent]=useState(''),[next,setNext]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null)
  async function save(){setBusy(true);setError(null);try{const me=await workforceApi.changePassword(current,next);setCurrent('');setNext('');signIn(me.user,me.companies)}catch(e){setError(translateError(e))}finally{setBusy(false)}}
  return <div className="dang-nhap"><div className="dang-nhap__cong-cu"><LocaleSwitcher/><ThemeSwitcher/></div><div className="dang-nhap__hop">
+  <div className="dang-nhap__logo"><Logo size={56}/></div>
   <h1>{t('wf.changePassword')}</h1><p>{t('wf.passwordNote')}</p>
   <Truong nhan={t('wf.currentPassword')}><ONhap type="password" value={current} onChange={setCurrent} disabled={busy}/></Truong>
   <Truong nhan={t('wf.newPassword')}><ONhap type="password" value={next} onChange={setNext} disabled={busy}/></Truong>

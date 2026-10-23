@@ -671,4 +671,83 @@ CREATE TABLE notification_preferences (
 );
 `,
   },
+  {
+    id: '0018_chat_attachments',
+    sql: `
+CREATE TABLE chat_attachments (
+ id TEXT PRIMARY KEY,
+ company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
+ filename TEXT NOT NULL,
+ mime_type TEXT NOT NULL,
+ size_bytes INTEGER NOT NULL CHECK(size_bytes > 0 AND size_bytes <= 10485760),
+ bytes BLOB NOT NULL,
+ extracted_text TEXT,
+ created_at TEXT NOT NULL
+);
+CREATE INDEX idx_chat_attachments_scope ON chat_attachments(company_id, conversation_id, message_id);
+`,
+  },
+  {
+    id: '0019_daily_report_view_links',
+    sql: `
+CREATE TABLE daily_report_view_links (
+ round_id TEXT PRIMARY KEY REFERENCES daily_report_rounds(id) ON DELETE CASCADE,
+ token_hash TEXT NOT NULL UNIQUE, token_enc TEXT NOT NULL, token_iv TEXT NOT NULL,
+ created_at TEXT NOT NULL
+);
+`,
+  },
+  {
+    id: '0020_social_browser',
+    sql: `
+CREATE TABLE browser_desktops (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ name TEXT NOT NULL, endpoint TEXT NOT NULL UNIQUE, token_enc TEXT NOT NULL, token_iv TEXT NOT NULL,
+ region TEXT NOT NULL, mode TEXT NOT NULL DEFAULT 'human' CHECK(mode IN ('human','agent','paused')),
+ active_job_id TEXT, created_at TEXT NOT NULL, UNIQUE(company_id,id)
+);
+CREATE TABLE browser_channels (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ desktop_id TEXT NOT NULL, name TEXT NOT NULL, platform TEXT NOT NULL, entry_url TEXT NOT NULL,
+ allowed_hosts_json TEXT NOT NULL, instructions TEXT NOT NULL, can_post INTEGER NOT NULL DEFAULT 1,
+ created_at TEXT NOT NULL, UNIQUE(company_id,id),
+ FOREIGN KEY(company_id,desktop_id) REFERENCES browser_desktops(company_id,id)
+);
+CREATE TABLE browser_contents (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ title TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ UNIQUE(company_id,id)
+);
+CREATE TABLE browser_assets (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL, content_id TEXT NOT NULL,
+ filename TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL CHECK(size_bytes > 0 AND size_bytes <= 268435456),
+ created_at TEXT NOT NULL,
+ FOREIGN KEY(company_id,content_id) REFERENCES browser_contents(company_id,id) ON DELETE CASCADE
+);
+CREATE TABLE browser_jobs (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL, channel_id TEXT NOT NULL, content_id TEXT,
+ kind TEXT NOT NULL CHECK(kind IN ('publish','read')),
+ status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','running','waiting_human','succeeded','failed','cancelled')),
+ instructions TEXT NOT NULL, result_url TEXT, result TEXT, idempotency_key TEXT NOT NULL,
+ created_by TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ UNIQUE(company_id,idempotency_key),
+ FOREIGN KEY(company_id,channel_id) REFERENCES browser_channels(company_id,id),
+ FOREIGN KEY(company_id,content_id) REFERENCES browser_contents(company_id,id)
+);
+CREATE INDEX idx_browser_jobs_company ON browser_jobs(company_id,created_at DESC);
+CREATE TABLE browser_job_events (
+ id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES browser_jobs(id) ON DELETE CASCADE,
+ operation TEXT NOT NULL, outcome TEXT NOT NULL, created_at TEXT NOT NULL
+);
+`,
+  },
+  {
+    id: '0021_daily_report_day_off',
+    sql: `
+ALTER TABLE daily_report_revisions ADD COLUMN is_day_off INTEGER NOT NULL DEFAULT 0 CHECK(is_day_off IN (0,1));
+`,
+  },
 ]

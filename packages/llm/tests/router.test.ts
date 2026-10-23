@@ -72,6 +72,17 @@ afterEach(() => {
 })
 
 describe('ModelRouter.chooseForAgent', () => {
+  it('uses only configured vision-capable fallbacks and preserves vision on escalation', () => {
+    repos.team.updatePreset('c1', agent.agentDef.id, { modelFk: noToolsId })
+    repos.llm.updateModel(withToolsId, { supportsVision: true })
+    repos.llm.updateModel(deepId, { supportsVision: true })
+    const updated = repos.team.resolveAgent('c1', 'content-writer')
+    // A vision model existing at the same provider is not permission to select it.
+    expect(() => router.chooseForAgent(updated, { needsVision: true })).toThrow(/vision/)
+    repos.llm.setModelFallbacks('c1', agent.agentDef.id, [withToolsId, noToolsId, deepId])
+    expect(router.chooseForAgent(updated, { needsVision: true }).model.id).toBe(withToolsId)
+    expect(router.escalate(updated, withToolsId, { needsVision: true }).model.id).toBe(deepId)
+  })
   it('báo lỗi cấu hình thay vì tự chọn một model cho agent', () => {
     expect(() => router.chooseForAgent(agent)).toThrow(AppError)
     expect(() => router.chooseForAgent(agent)).toThrow(/chưa được chọn model/i)

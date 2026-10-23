@@ -14,7 +14,7 @@
  *  - `/api/conversations/:id` không chứa `companyId`, nên quyền được kiểm bằng
  *    middleware tra ngược `resource-access.ts` (fail closed: 404).
  */
-import { conflict, forbidden, parseOrThrow, createConversationSchema, sendMessageSchema } from '@marketing-agent/shared'
+import { conflict, forbidden, notFound, validation, chatAttachmentView, CHAT_ATTACHMENT_MAX_FILES, CHAT_ATTACHMENT_TOTAL_BYTES, parseOrThrow, createConversationSchema, sendMessageSchema } from '@marketing-agent/shared'
 import type {
   ConversationDetailResponse,
   ConversationPhase,
@@ -28,6 +28,7 @@ import { orchestratorFor } from '../services/agent-services.ts'
 import { readRunState, saveRunState } from '../services/company-settings.ts'
 import { conversationMembership } from '../services/resource-access.ts'
 import { workflowSnapshot } from '../services/workflow-snapshot.ts'
+import { readChatUpload } from '../services/chat-attachments.ts'
 import {
   buildTaskViews,
   conversationCost,
@@ -40,6 +41,45 @@ export function chatRoutes() {
     name: 'chat',
     register(router: Router, ctx: AppContext): void {
       const repos = ctx.repos
+
+      router.post('/api/conversations/:id/attachments', async (request) => {
+        const { companyId, conversationId } = conversationScope(request)
+        const userId = readAuth(request)!.user.id
+        const file = await readChatUpload(request.req)
+        // Recheck access after async document extraction before persisting bytes.
+        if (!repos.auth.membership(companyId, userId)) throw notFound('Không tìm thấy cuộc trao đổi')
+        repos.chatAttachments.purgePending(companyId)
+        const attachment = repos.db.tx(() => {
+          const pending = repos.db.get<{ count: number; size: number }>(`SELECT COUNT(*) AS count, COALESCE(SUM(size_bytes), 0) AS size
+            FROM chat_attachments WHERE company_id = ? AND conversation_id = ? AND user_id = ? AND message_id IS NULL`, [companyId, conversationId, userId])!
+          if (pending.count >= CHAT_ATTACHMENT_MAX_FILES || pending.size + file.bytes.length > CHAT_ATTACHMENT_TOTAL_BYTES) throw validation('Mỗi tin nhắn tối đa 5 tệp, tổng dung lượng 20 MiB. Hãy xoá bớt tệp trước khi thêm.')
+          return repos.chatAttachments.create({ companyId, conversationId, userId, ...file })
+        })
+        request.json(201, { attachment: chatAttachmentView(attachment) })
+      }, [conversationMembership(repos), requireWork])
+
+      router.get('/api/conversations/:id/attachments/:attachmentId', (request) => {
+        const { companyId, conversationId } = conversationScope(request)
+        const file = repos.chatAttachments.find(request.params.attachmentId!, companyId, conversationId)
+        if (!file || (!file.messageId && file.userId !== readAuth(request)!.user.id)) throw notFound('Không tìm thấy tệp đính kèm')
+        const bytes = repos.chatAttachments.readBytes(file.id, companyId, conversationId)
+        const inline = file.mimeType.startsWith('image/')
+        request.res.writeHead(200, {
+          'Content-Type': inline ? file.mimeType : 'application/octet-stream',
+          'Content-Length': bytes.length,
+          'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="attachment"; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+          'Content-Security-Policy': "default-src 'none'; sandbox",
+        })
+        request.res.end(bytes)
+      }, [conversationMembership(repos)])
+
+      router.delete('/api/conversations/:id/attachments/:attachmentId', (request) => {
+        const { companyId, conversationId } = conversationScope(request)
+        repos.chatAttachments.removePending(request.params.attachmentId!, companyId, conversationId, readAuth(request)!.user.id)
+        request.res.writeHead(204); request.res.end()
+      }, [conversationMembership(repos), requireWork])
 
       router.get(
         '/api/companies/:companyId/conversations',
@@ -121,6 +161,7 @@ export function chatRoutes() {
             conversationId,
             userId,
             content: input.content,
+            attachmentIds: input.attachmentIds,
             mode: input.mode,
             autoPlan: input.autoPlan,
             // Câu trả lời thẻ chọn đi thẳng xuống orchestrator: nơi đó áp vào brief một

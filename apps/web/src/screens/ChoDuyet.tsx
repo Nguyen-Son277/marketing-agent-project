@@ -5,6 +5,7 @@ import { useSession } from '../lib/session.tsx'
 import { useI18n } from '../lib/i18n.tsx'
 import { LocaleSwitcher } from '../components/LocaleSwitcher.tsx'
 import { ThemeSwitcher } from '../components/ThemeSwitcher.tsx'
+import { Logo } from '../components/Logo.tsx'
 import { Nut, ThongBao } from '../components/ui.tsx'
 
 export function ChoDuyet() {
@@ -28,6 +29,7 @@ export function ChoDuyet() {
     <div className="dang-nhap">
       <div className="dang-nhap__cong-cu"><LocaleSwitcher /><ThemeSwitcher /></div>
       <div className="dang-nhap__hop">
+        <div className="dang-nhap__logo"><Logo size={56} /></div>
         <h1 className="dang-nhap__tieude">{t('approval.title')}</h1>
         <p>{t('approval.subtitle', { email: user?.email ?? '' })}</p>
         {error ? <ThongBao loai="loi">{error}</ThongBao> : null}

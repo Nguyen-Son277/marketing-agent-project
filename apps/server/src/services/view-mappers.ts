@@ -38,7 +38,7 @@ import type {
   TaskView,
   TeamMemberView,
 } from '@marketing-agent/shared'
-import { TASK_STATUSES } from '@marketing-agent/shared'
+import { TASK_STATUSES, chatAttachmentView, type ChatAttachmentView } from '@marketing-agent/shared'
 
 /** Sáu trường brief, khớp `Brief` của orchestrator; dùng để suy ra trạng thái brief. */
 const BRIEF_FIELDS = ['objective', 'kpi', 'scope', 'deadline', 'budget', 'constraints'] as const
@@ -90,6 +90,7 @@ export function toModelOptionView(
     enabled: model.enabled,
     contextWindow: model.contextWindow,
     supportsTools: model.supportsTools,
+    supportsVision: model.supportsVision,
     costInPerMtok: model.costInPerMtok,
     costOutPerMtok: model.costOutPerMtok,
     usedByAgentCount: options.usedByAgentCount ?? 0,
@@ -270,12 +271,20 @@ export function toMessageView(message: MessageRecord): MessageView {
   const clarify = readClarification(meta)
   const rawDrafts=meta&&typeof meta==='object'?(meta as Record<string,unknown>).workforceDraftIds:null
   const workforceDraftIds=Array.isArray(rawDrafts)?rawDrafts.filter((id):id is string=>typeof id==='string'&&id.length<100):[]
+  const rawAttachments = meta && typeof meta === 'object' ? (meta as Record<string, unknown>).attachments : null
+  const attachments: ChatAttachmentView[] = Array.isArray(rawAttachments) ? rawAttachments.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return []
+    const file = raw as Record<string, unknown>
+    if (typeof file.id !== 'string' || typeof file.filename !== 'string' || typeof file.mimeType !== 'string' || typeof file.sizeBytes !== 'number') return []
+    return [chatAttachmentView({ id: file.id, filename: file.filename, mimeType: file.mimeType, sizeBytes: file.sizeBytes, conversationId: message.conversationId })]
+  }) : []
   return {
     id: message.id,
     role: message.role,
     authorKind: message.authorKind,
     authorAgent: message.authorAgent,
     contentMd: message.contentMd,
+    ...(attachments.length ? { attachments } : {}),
     meta,
     ...(clarify ? { clarify } : {}),
     ...(workforceDraftIds.length?{workforceDraftIds}:{}),

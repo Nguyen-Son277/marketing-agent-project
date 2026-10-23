@@ -36,6 +36,7 @@ import { api, ApiError, openConversationStream, type StreamEvent } from '../lib/
 import { useI18n } from '../lib/i18n.tsx'
 import { ChatComposer } from '../components/ChatComposer.tsx'
 import { acquireChatSend } from '../lib/chat-composer.ts'
+import { useChatAttachments } from '../lib/useChatAttachments.ts'
 import { Markdown } from '../components/Markdown.tsx'
 import { HopThoai } from '../components/HopThoai.tsx'
 import { TheChonPhuongAn } from '../components/TheChonPhuongAn.tsx'
@@ -123,6 +124,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   const { t, formatDateTime, formatCurrencyUsd } = useI18n()
   const [danhSach, setDanhSach] = useState<ConversationView[]>([])
   const [dangChon, setDangChon] = useState<string | null>(null)
+  const tepDinhKem = useChatAttachments(companyId, dangChon)
   /**
    * Danh sách cuộc trao đổi mở ra theo yêu cầu, không chiếm chỗ thường trực.
    *
@@ -338,8 +340,8 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   }
 
   /** Gửi một lượt tin; trả về `true` khi server nhận. `answers` chỉ có khi gửi từ thẻ chọn. */
-  async function guiNoiDung(content: string, answers?: ClarificationAnswer[]): Promise<boolean> {
-    if (!dangChon || content.trim().length === 0 || !acquireChatSend(sendLock)) return false
+  async function guiNoiDung(content: string, answers?: ClarificationAnswer[], attachmentIds: string[] = []): Promise<boolean> {
+    if (!dangChon || (!content.trim() && attachmentIds.length === 0) || !acquireChatSend(sendLock)) return false
     const scope = chatScope.current
     const currentScope = () => chatScope.current.companyId === scope.companyId && chatScope.current.conversationId === scope.conversationId
     setLoi(null)
@@ -347,11 +349,11 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
     setDangGui(true)
     let accepted = false
     try {
-      const ketQua = await api.sendMessage(dangChon, answers ? { content, answers, mode:cheDoGiaoViec } : { content, mode:cheDoGiaoViec })
+      const ketQua = await api.sendMessage(dangChon, { content, ...(answers ? { answers } : {}), mode:cheDoGiaoViec, ...(attachmentIds.length ? { attachmentIds } : {}) })
       accepted = true
       if (!currentScope()) return false
       setBaoKetQua(
-        ketQua.briefComplete
+        attachmentIds.length ? t('chat.attachmentsAnalyzed') : ketQua.briefComplete
           ? t('chat.briefCompleteHint')
           : t('chat.leaderNeedsMore', {
               fields: ketQua.missingFields.map((field) => nhanTruongBrief(field, t)).join(', '),
@@ -371,11 +373,13 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
 
   async function gui(): Promise<void> {
     const original = noiDung
-    if (!original.trim() || sendLock.current) return
+    const files = tepDinhKem.files
+    if ((!original.trim() && !files.length) || files.some((file) => file.status !== 'ready') || sendLock.current) return
     const scope = chatScope.current
     // Keep the original multiline draft verbatim for recovery, including whitespace.
     setNoiDung('')
-    const thanhCong = await guiNoiDung(original)
+    const thanhCong = await guiNoiDung(original, undefined, files.flatMap((file) => file.attachment ? [file.attachment.id] : []))
+    if (thanhCong) tepDinhKem.clearSent()
     if (!thanhCong && chatScope.current.companyId === scope.companyId && chatScope.current.conversationId === scope.conversationId) setNoiDung(original)
   }
 
@@ -478,7 +482,7 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
         `.the--cao-day > .card` — nếu khớp, nó cũng giãn hết chiều cao và đẩy khung nhập ra
         ngoài màn hình, đúng lỗi đang sửa.
       */}
-      <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="chat__overview" style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {loi ? <ThongBao loai="loi">{loi}</ThongBao> : null}
         {baoKetQua ? <ThongBao loai="thong-tin">{baoKetQua}</ThongBao> : null}
 
@@ -719,7 +723,8 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
               ) : null}
             </div>
 
-            <ChatComposer value={noiDung} onChange={setNoiDung} busy={dangGui} onSend={() => void gui()} inputRef={composerRef} />
+            <ChatComposer value={noiDung} onChange={setNoiDung} busy={dangGui} onSend={() => void gui()} inputRef={composerRef}
+              attachments={tepDinhKem.files} attachmentError={tepDinhKem.error} onFiles={tepDinhKem.add} onRemove={tepDinhKem.remove} onRetry={tepDinhKem.retry} />
           </div>
         ) : (
           <div className="trong" style={{ flex: 1 }}>
@@ -760,6 +765,15 @@ function TinNhan({ message }: { message: MessageView }): ReactNode {
         ) : (
           <Markdown>{message.contentMd}</Markdown>
         )}
+        {message.attachments?.length ? <ul className="chat-message-attachments" aria-label={t('chat.attachments')}>
+          {message.attachments.map((file) => <li key={file.id}>
+            <a href={file.url} target="_blank" rel="noreferrer" className="chat-message-attachment">
+              {file.mimeType.startsWith('image/') ? <img src={file.url} alt={file.filename} loading="lazy" /> : null}
+              <span>{file.filename}</span>
+              <small>{t('chat.openAttachment')}</small>
+            </a>
+          </li>)}
+        </ul> : null}
         {message.workforceDraftIds?.map(id=><div key={id} className="card" style={{marginTop:10}}><p>{t('wf.draftNotice')}</p><a href={`#/giao-viec?taskId=${encodeURIComponent(id)}`}>{t('wf.openDraft')}</a></div>)}
       </div>
     </div>

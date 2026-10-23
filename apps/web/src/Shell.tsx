@@ -14,6 +14,7 @@ import { Nhan, Nut } from './components/ui.tsx'
 import { LocaleSwitcher } from './components/LocaleSwitcher.tsx'
 import { ThemeSwitcher } from './components/ThemeSwitcher.tsx'
 import { NotificationBell } from './components/NotificationBell.tsx'
+import { Logo } from './components/Logo.tsx'
 import { BangDieuKhien } from './screens/BangDieuKhien.tsx'
 import { TraoDoi } from './screens/TraoDoi.tsx'
 import { CongViec } from './screens/CongViec.tsx'
@@ -25,6 +26,7 @@ import { CaiDat } from './screens/CaiDat.tsx'
 import { CongTyCuaToi } from './screens/CongTyCuaToi.tsx'
 import { ChiPhi } from './screens/ChiPhi.tsx'
 import { SoDoDoiAgent } from './screens/SoDoDoiAgent.tsx'
+import { TrinhDuyetXaHoi } from './screens/TrinhDuyetXaHoi.tsx'
 
 /**
  * Bảng định tuyến.
@@ -39,6 +41,7 @@ export const ROUTES = [
   { id: 'cong-viec', nhan: 'nav.tasks', nhom: 'nav.group.work', bieuTuong: '🗂️' },
   { id: 'giao-viec', nhan: 'nav.workforce', nhom: 'nav.group.work', bieuTuong: '🎨' },
   { id: 'bao-cao-hang-ngay', nhan: 'nav.dailyReports', nhom: 'nav.group.work', bieuTuong: '📝' },
+  { id: 'trinh-duyet-xa-hoi', nhan: 'nav.socialBrowser', nhom: 'nav.group.work', bieuTuong: '🌐' },
   { id: 'doi-agent', nhan: 'nav.team', nhom: 'nav.group.config', bieuTuong: '🎯' },
   { id: 'kho-kien-thuc', nhan: 'nav.knowledge', nhom: 'nav.group.config', bieuTuong: '📚' },
   { id: 'cong-ty', nhan: 'nav.companies', nhom: 'nav.group.config', bieuTuong: '🏢' },
@@ -132,6 +135,8 @@ export function Shell(): ReactNode {
         return <GiaoViecNhanVien />
       case 'bao-cao-hang-ngay':
         return <BaoCaoHangNgay companyId={companyId} />
+      case 'trinh-duyet-xa-hoi':
+        return <TrinhDuyetXaHoi key={`${user?.id}:${companyId}`} companyId={companyId} />
       case 'doi-agent':
         return <DoiAgent companyId={companyId} />
       case 'kho-kien-thuc':
@@ -150,7 +155,7 @@ export function Shell(): ReactNode {
   return (
     <div className={navCollapsed ? 'app app--nav-thu-gon' : 'app'}>
       <header className="app__header">
-        <span className="app__brand">{t('nav.brand')}</span>
+        <span className="app__brand"><Logo />{t('nav.brand')}</span>
 
         {companies.length > 0 ? (
           <select

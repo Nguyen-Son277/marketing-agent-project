@@ -402,6 +402,7 @@ export interface LlmToolCall {
 export interface LlmMessage {
   readonly role: LlmRole
   readonly content: string
+  readonly images?: readonly import('./chat-attachments.ts').LlmImage[]
   readonly toolCalls?: readonly LlmToolCall[]
   readonly toolCallId?: string
   readonly name?: string
@@ -478,6 +479,8 @@ export interface ToolDefinition {
   readonly roles?: readonly AgentRole[]
   /** True when the tool performs an outward-facing side effect needing approval. */
   readonly requiresApproval?: boolean
+  /** Trusted implementation limit for long media transfers; never supplied by the model. */
+  readonly timeoutMs?: number
   readonly handler: (args: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult>
 }
 

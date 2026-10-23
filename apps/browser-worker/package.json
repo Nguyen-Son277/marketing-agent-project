@@ -1,0 +1,8 @@
+{
+  "name": "@marketing-agent/browser-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "tsx src/main.ts" },
+  "dependencies": { "@marketing-agent/shared": "workspace:*", "playwright-core": "^1.56.1", "tsx": "^4.20.3" }
+}

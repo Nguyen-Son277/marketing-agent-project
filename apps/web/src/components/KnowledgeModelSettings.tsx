@@ -4,11 +4,14 @@ import { ApiError, api, type ClassificationModelSettings } from '../lib/api.ts'
 import { useI18n } from '../lib/i18n.tsx'
 import { useSettingsNotifications } from '../lib/settings-notifications.ts'
 import { Card, DangTai, Nut, OChon, ThongBao, Truong } from './ui.tsx'
+import { useSettingsTabActive } from './SettingsTabs.tsx'
 
 const EMPTY_SETTINGS: ClassificationModelSettings = { mode: 'leader', modelFk: null, fallbackModelFks: [] }
 
 /** Model selection for automatic company knowledge classification. */
 export function KnowledgeModelSettings({ companyId }: { companyId: string }): ReactNode {
+  const tabActive = useSettingsTabActive()
+  const wasActive = useRef(tabActive)
   const { t } = useI18n()
   const { begin } = useSettingsNotifications(companyId)
   const activeCompany=useRef(companyId)
@@ -22,6 +25,23 @@ export function KnowledgeModelSettings({ companyId }: { companyId: string }): Re
   const [error, setError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [issues, setIssues] = useState<string[]>([])
+  const changed = draft.mode !== saved.mode || draft.modelFk !== saved.modelFk ||
+    draft.fallbackModelFks.length !== saved.fallbackModelFks.length ||
+    draft.fallbackModelFks.some((id, index) => id !== saved.fallbackModelFks[index])
+  const dirtyDraft = useRef(changed), settingsCompany = useRef(companyId)
+  dirtyDraft.current = changed
+
+  // Refresh choices on return without replacing saved/draft settings being edited.
+  useEffect(() => {
+    const returned = tabActive && !wasActive.current
+    wasActive.current = tabActive
+    if (!returned) return
+    let cancelled = false
+    void api.providers(companyId).then(response => {
+      if (!cancelled) setProviders(response.providers)
+    }).catch(() => { if (!cancelled) setError(t('settings.knowledgeModel.loadFailed')) })
+    return () => { cancelled = true }
+  }, [tabActive, companyId, t])
 
   useEffect(() => {
     let cancelled = false
@@ -33,7 +53,10 @@ export function KnowledgeModelSettings({ companyId }: { companyId: string }): Re
         if (cancelled) return
         setProviders(providerResponse.providers)
         setSaved(response.settings)
-        setDraft({ ...response.settings, fallbackModelFks: [...response.settings.fallbackModelFks] })
+        if (!dirtyDraft.current || settingsCompany.current !== companyId) {
+          setDraft({ ...response.settings, fallbackModelFks: [...response.settings.fallbackModelFks] })
+        }
+        settingsCompany.current = companyId
         setIssues(response.issues)
       })
       .catch((cause: unknown) => {
@@ -49,10 +72,6 @@ export function KnowledgeModelSettings({ companyId }: { companyId: string }): Re
     () => providers.filter((provider) => provider.enabled).flatMap((provider) => provider.models.filter((model) => model.enabled)),
     [providers],
   )
-  const changed = draft.mode !== saved.mode || draft.modelFk !== saved.modelFk ||
-    draft.fallbackModelFks.length !== saved.fallbackModelFks.length ||
-    draft.fallbackModelFks.some((id, index) => id !== saved.fallbackModelFks[index])
-
   function updateFallback(index: number, modelFk: string): void {
     const next = [...draft.fallbackModelFks]
     if (modelFk) next[index] = modelFk

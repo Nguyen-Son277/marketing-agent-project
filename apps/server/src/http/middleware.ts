@@ -77,7 +77,10 @@ export function sessionMiddleware(repos: Repos): Middleware {
 export const accountAccessMiddleware: Middleware = (ctx, next) => {
   const path = ctx.url.pathname
   const publicPaths = new Set(['/healthz', '/readyz', '/api/system/status', '/api/auth/register', '/api/auth/login', '/api/auth/logout', '/api/auth/me'])
-  if (!path.startsWith('/api/') || publicPaths.has(path) || (/^\/api\/public\/daily-reports\/[A-Za-z0-9_-]{43}$/.test(path) && (ctx.method === 'GET' || ctx.method === 'POST'))) return next()
+  if (!path.startsWith('/api/') || publicPaths.has(path)
+    || (/^\/api\/public\/daily-reports\/[A-Za-z0-9_-]{43}$/.test(path) && (ctx.method === 'GET' || ctx.method === 'POST'))
+    || (/^\/api\/public\/daily-reports\/[A-Za-z0-9_-]{43}\/members\/[A-Za-z0-9_-]+$/.test(path) && ctx.method === 'GET')
+    || (/^\/api\/public\/daily-report-views\/[A-Za-z0-9_-]{43}$/.test(path) && ctx.method === 'GET')) return next()
   const auth = readAuth(ctx)
   if (!auth) throw unauthorized()
   if (auth.user.approvalStatus !== 'approved') {

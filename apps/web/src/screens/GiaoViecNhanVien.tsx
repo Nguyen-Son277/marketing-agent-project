@@ -7,6 +7,7 @@ import { useI18n } from '../lib/i18n.tsx'
 import { useSession } from '../lib/session.tsx'
 import { LocaleSwitcher } from '../components/LocaleSwitcher.tsx'
 import { ThemeSwitcher } from '../components/ThemeSwitcher.tsx'
+import { Logo } from '../components/Logo.tsx'
 import { HopThoai, HopThoaiXacNhan } from '../components/HopThoai.tsx'
 import { Markdown } from '../components/Markdown.tsx'
 import { Card, Nut, ONhap, OChon, OVanBan, Truong, ThongBao, DangTai, Trang } from '../components/ui.tsx'
@@ -56,7 +57,7 @@ export function GiaoViecNhanVien({employee=false}:{employee?:boolean}) {
  const days=Array.from({length:7},(_,i)=>addWorkDays(week,i))
  const dayLabel=(d:string)=>new Intl.DateTimeFormat(locale==='en'?'en-GB':'vi-VN',{timeZone:'Asia/Ho_Chi_Minh',weekday:'short',day:'2-digit',month:'2-digit'}).format(new Date(`${d}T12:00:00+07:00`))
  return <div className={employee?'wf-employee':''}>
-  {employee?<header className="admin-app__header"><strong>{t('wf.mine')}</strong><LocaleSwitcher compact/><ThemeSwitcher compact/><Nut bien="phu" onClick={()=>void signOut()}>{t('nav.signOut')}</Nut></header>:null}
+  {employee?<header className="admin-app__header"><strong className="app__brand"><Logo />{t('wf.mine')}</strong><LocaleSwitcher compact/><ThemeSwitcher compact/><Nut bien="phu" onClick={()=>void signOut()}>{t('nav.signOut')}</Nut></header>:null}
   <Trang rong><div className="wf"><header className="hang"><div style={{flex:1}}><h1 className="the__tieu-de">{t(employee?'wf.mine':'wf.title')}</h1><p>{t('wf.subtitle')}</p></div><Nut bien="phu" onClick={reload}>{t('common.refresh')}</Nut>{!employee?<Nut onClick={()=>{setError(null);editTask()}}>{t('wf.create')}</Nut>:null}</header>
    {!employee?<div className="hang"><Nut bien={tab==='tasks'?'chinh':'phu'} onClick={()=>setTab('tasks')}>{t('wf.tasks')}</Nut><Nut bien={tab==='employees'?'chinh':'phu'} onClick={()=>setTab('employees')}>{t('wf.employees')}</Nut></div>:null}
    {error&&!taskForm&&!employeeForm?<ThongBao loai="loi">{error}</ThongBao>:null}{notice?<ThongBao loai="thanh-cong">{notice}</ThongBao>:null}

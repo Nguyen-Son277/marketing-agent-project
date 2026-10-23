@@ -29,8 +29,10 @@ import { en_costs } from './en/costs.ts'
 import { en_diagram } from './en/diagram.ts'
 
 import { en_notifications } from './en/notifications.ts'
+import { en_socialBrowser } from './en/social-browser.ts'
 
 export const en = {
+  ...en_socialBrowser,
   ...en_notifications,
   /* ------------------------------------------------------------- general */
   'common.showSecret': 'Show',

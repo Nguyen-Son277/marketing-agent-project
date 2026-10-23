@@ -5,6 +5,7 @@ import { useSession } from '../lib/session.tsx'
 import { useI18n } from '../lib/i18n.tsx'
 import { LocaleSwitcher } from '../components/LocaleSwitcher.tsx'
 import { ThemeSwitcher } from '../components/ThemeSwitcher.tsx'
+import { Logo } from '../components/Logo.tsx'
 import { Nut, ONhap, ThongBao, Truong } from '../components/ui.tsx'
 
 export function DangNhapScreen(): ReactNode {
@@ -56,6 +57,7 @@ export function DangNhapScreen(): ReactNode {
         <ThemeSwitcher />
       </div>
       <div className="dang-nhap__hop">
+        <div className="dang-nhap__logo"><Logo size={56} /></div>
         <h1 className="dang-nhap__tieude">{t('auth.title')}</h1>
         <p className="dang-nhap__phu">{t('auth.subtitle')}</p>
         {cheDo === 'dang-ky' ? <ThongBao loai="thong-tin">{t('approval.registerNote')}</ThongBao> : null}

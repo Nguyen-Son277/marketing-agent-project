@@ -79,11 +79,12 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
   const toolTimeoutMs = input.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS
   const granted = new Map(input.tools.map((tool) => [tool.name, tool]))
   const needsTools = input.tools.length > 0
+  const needsVision = input.messages?.some((message) => (message.images?.length ?? 0) > 0) ?? false
   const startedAt = Date.now()
 
   // Chọn model trước khi mở run: nếu cấu hình thiếu model, ta ném lỗi mà không để lại
   // một bản ghi run treo ở trạng thái `running`.
-  let choice = deps.router.chooseForAgent(agent, { needsTools })
+  let choice = deps.router.chooseForAgent(agent, { needsTools, ...(needsVision ? { needsVision } : {}) })
   let modelId: string | null = choice.model.id
   // Một model có thể có nhiều API key. Thử lần lượt từng khoá trước khi bỏ model, vì
   // đổi model là thay đổi lớn hơn nhiều so với đổi khoá của cùng một nhà cung cấp.
@@ -283,7 +284,7 @@ export async function runAgent(input: AgentRunInput, deps: AgentRuntimeDeps): Pr
           modelAttempts += 1
           try {
             const previous = choice.model
-            const next = deps.router.escalate(agent, previous.id)
+            const next = deps.router.escalate(agent, previous.id, { needsTools, ...(needsVision ? { needsVision } : {}) })
             if (triedModels.has(next.model.id)) {
               stopReason = 'model_error'
               errorMessage = `Nhà cung cấp LLM thất bại: ${describeError(thrown)}`
@@ -472,7 +473,7 @@ function normalizeUsage(usage: LlmUsage, messages: readonly LlmMessage[], text: 
   if (usage.promptTokens > 0 || usage.completionTokens > 0) return usage
   const promptText = messages.map((message) => messageContentForEstimate(message)).join('\n')
   return {
-    promptTokens: estimateTokens(promptText),
+    promptTokens: estimateTokens(promptText) + messages.reduce((sum, message) => sum + (message.images?.length ?? 0) * 1_536, 0),
     completionTokens: estimateTokens(text),
     cachedTokens: usage.cachedTokens,
   }
@@ -537,10 +538,11 @@ async function executeToolCalls(
       // Start means a validated, granted handler is about to execute, not a proposal.
       observe({ type: 'tool.started', toolInvocationId, toolName })
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      const callTimeoutMs = Math.min(tool.timeoutMs ?? timeoutMs, 6 * 60 * 1000)
+      const timer = setTimeout(() => controller.abort(), callTimeoutMs)
       try {
         const toolSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
-        const result = await withTimeout(tool.handler(args, { ...context, toolCallId: call.id, signal: toolSignal }), timeoutMs)
+        const result = await withTimeout(tool.handler(args, { ...context, toolCallId: call.id, signal: toolSignal }), callTimeoutMs)
         const durationMs = Date.now() - startedAt
         finish(signal?.aborted ? 'cancelled' : result.isError ? 'failed' : 'succeeded', undefined, signal?.aborted ? 'cancelled' : result.isError ? 'tool_error' : undefined)
         logs.push({
@@ -553,7 +555,7 @@ async function executeToolCalls(
         return { callId: call.id, name: call.name, content: formatToolResult(call.name, result) }
       } catch (thrown) {
         const durationMs = Date.now() - startedAt
-        const message = controller.signal.aborted ? `quá thời gian ${timeoutMs}ms` : describeError(thrown)
+        const message = controller.signal.aborted ? `quá thời gian ${callTimeoutMs}ms` : describeError(thrown)
         // A timed-out handler may still complete side effects; this is not rollback.
         const outcome = signal?.aborted ? 'cancelled' : controller.signal.aborted ? 'timed_out' : isAbortError(thrown) ? 'cancelled' : 'failed'
         finish(outcome, thrown, outcome === 'timed_out' ? 'tool_timeout' : outcome === 'cancelled' ? 'cancelled' : undefined)

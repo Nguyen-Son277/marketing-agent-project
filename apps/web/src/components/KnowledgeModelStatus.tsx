@@ -22,6 +22,6 @@ export function KnowledgeModelStatus({companyId}:{companyId:string}) {
    {!data.valid ? <ThongBao loai="canh-bao">{data.issues.join('; ') || t('knowledge.modelMissing')}</ThongBao>:null}
    {data.lastUsed ? <span>{t('knowledge.modelLastUsed')}: {data.lastUsed.label} · {data.lastUsed.providerName}</span>:null}
   </div>:null}
-  <a href="#/cai-dat">{t('knowledge.configureModel')}</a>
+  <a href="#/cai-dat?tab=knowledge">{t('knowledge.configureModel')}</a>
  </Card>
 }

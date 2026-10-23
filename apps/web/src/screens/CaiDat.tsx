@@ -3,7 +3,7 @@
  *
  * Vì sao màn hình này tồn tại: agent chỉ chạy được khi biết gọi model nào qua nhà
  * cung cấp nào, tốn bao nhiêu tiền, và được phép chạm vào kênh ngoài nào. Màn
- * hình này gom năm nhóm cấu hình đó lại, mỗi nhóm tự tải dữ liệu riêng để một
+ * hình này chia sáu nhóm cấu hình thành các tab, mỗi nhóm tự tải dữ liệu để một
  * phần hỏng không kéo sập cả trang. Nguyên tắc bảo mật được nói thẳng trên giao
  * diện: API key là chỉ-ghi, gửi lên rồi thì không bao giờ hiển thị lại.
  */
@@ -29,6 +29,7 @@ import { HopThoai, HopThoaiXacNhan } from '../components/HopThoai.tsx'
 import { HopThoaiChonModel } from '../components/HopThoaiChonModel.tsx'
 import { KnowledgeModelSettings } from '../components/KnowledgeModelSettings.tsx'
 import { ModelPricingDialog } from '../components/ModelPricingDialog.tsx'
+import { SettingsTabs, useSettingsTabActive } from '../components/SettingsTabs.tsx'
 import {
   Card,
   DangTai,
@@ -130,6 +131,7 @@ function TrangThai({ dangTai, loi, taiLai }: { dangTai: boolean; loi: ApiError |
 /* ------------------------------------------------------------ nhà cung cấp */
 
 function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
+  const tabActive = useSettingsTabActive()
   const { t, formatNumber } = useI18n()
   const { begin } = useSettingsNotifications(companyId)
   const [danhSach, setDanhSach] = useState<readonly ProviderView[] | null>(null)
@@ -165,6 +167,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
   const [dangTest, setDangTest] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!tabActive) return
     let cancelled = false
     setDangTai(true)
     setLoi(null)
@@ -183,7 +186,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
     return () => {
       cancelled = true
     }
-  }, [companyId, lanThu])
+  }, [companyId, lanThu, tabActive])
 
   const taiLai = useCallback(() => setLanThu((lan) => lan + 1), [])
 
@@ -330,6 +333,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
       {danhSach && danhSach.length === 0 ? <Trong>{t('settings.providers.empty')}</Trong> : null}
 
       {danhSach && danhSach.length > 0 ? (
+        <div className="settings-table" role="region" aria-label={t('settings.providers.title')} tabIndex={0}>
         <table className="bang">
           <thead>
             <tr>
@@ -408,7 +412,7 @@ function PhanNhaCungCap({ companyId }: { companyId: string }): ReactNode {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       ) : null}
 
       {(danhSach ?? []).map((provider) =>
@@ -660,6 +664,7 @@ function PhanKhoaProvider({
       {provider.keys.length === 0 ? <Trong>{t('settings.providers.keys.empty')}</Trong> : null}
 
       {provider.keys.length > 0 ? (
+        <div className="settings-table" role="region" aria-label={t('settings.providers.keys.title', { count: provider.keys.length })} tabIndex={0}>
         <table className="bang">
           <thead>
             <tr>
@@ -702,7 +707,7 @@ function PhanKhoaProvider({
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       ) : null}
 
       {keyForm ? (
@@ -800,6 +805,7 @@ function PhanKhoaProvider({
 /* ------------------------------------------------------------------ model */
 
 function PhanModel({ companyId }: { companyId: string }): ReactNode {
+  const tabActive = useSettingsTabActive()
   const { t, formatNumber, formatCurrencyUsd } = useI18n()
   const { begin } = useSettingsNotifications(companyId)
   const [providers, setProviders] = useState<readonly ProviderView[] | null>(null)
@@ -814,6 +820,8 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
   const [costIn, setCostIn] = useState('0')
   const [costOut, setCostOut] = useState('0')
   const [hoTroTool, setHoTroTool] = useState(true)
+  const [hoTroAnh, setHoTroAnh] = useState(false)
+  const [dangDoiVision, setDangDoiVision] = useState<string | null>(null)
 
   const [dangLuu, setDangLuu] = useState(false)
   /** Lỗi của biểu mẫu thêm model — hiện BÊN TRONG hộp thoại, xem chú thích ở chỗ render. */
@@ -842,6 +850,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
   const [choPurge, setChoPurge] = useState<ProviderView | null>(null)
 
   useEffect(() => {
+    if (!tabActive) return
     let cancelled = false
     setDangTai(true)
     setLoi(null)
@@ -862,7 +871,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     return () => {
       cancelled = true
     }
-  }, [companyId, lanThu])
+  }, [companyId, lanThu, tabActive])
 
   const taiLai = useCallback(() => setLanThu((lan) => lan + 1), [])
 
@@ -880,6 +889,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     setCostIn('0')
     setCostOut('0')
     setHoTroTool(true)
+    setHoTroAnh(false)
     setLoiLuu(null)
   }
 
@@ -918,6 +928,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
         label: label.trim(),
         contextWindow: Math.round(soTuChuoi(contextWindow)),
         supportsTools: hoTroTool,
+        supportsVision: hoTroAnh,
         costInPerMtok: soTuChuoi(costIn),
         costOutPerMtok: soTuChuoi(costOut),
       })
@@ -953,6 +964,19 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
     } finally {
       setDangXoaModel(false)
     }
+  }
+
+  async function doiVision(model: ModelOptionView): Promise<void> {
+    setDangDoiVision(model.id)
+    const finish = begin('model.save')
+    try {
+      await api.updateModelVision(companyId, model.id, !model.supportsVision)
+      finish('success')
+      taiLai()
+    } catch (error) {
+      finish('error')
+      setLoi(error instanceof ApiError ? error : new ApiError(0, 'network', t('common.cannotConnectServer')))
+    } finally { setDangDoiVision(null) }
   }
 
   async function xoaModelKhongDung(): Promise<void> {
@@ -1021,6 +1045,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
       ) : null}
 
       {tatCaModel.length > 0 ? (
+        <div className="settings-table" role="region" aria-label={t('settings.models.title')} tabIndex={0}>
         <table className="bang">
           <thead>
             <tr>
@@ -1029,6 +1054,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
               <th>{t('settings.models.table.provider')}</th>
               <th>{t('settings.models.table.context')}</th>
               <th>{t('settings.models.table.tools')}</th>
+              <th>{t('settings.models.vision')}</th>
               <th>{t('settings.models.table.usage')}</th>
               <th>{t('settings.models.table.costIn')}</th>
               <th>{t('settings.models.table.costOut')}</th>
@@ -1050,6 +1076,11 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
                   ) : (
                     <Nhan loai="canh-bao">{t('common.no')}</Nhan>
                   )}
+                </td>
+                <td>
+                  <input type="checkbox" checked={model.supportsVision ?? false}
+                    disabled={dangDoiVision !== null} aria-label={t('settings.models.visionLabel', { model: model.label })}
+                    title={t('settings.models.visionNote')} onChange={() => void doiVision(model)} />
                 </td>
                 <td className="so">
                   {model.usedByAgentCount > 0
@@ -1075,7 +1106,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       ) : null}
 
       {suaGia?.companyId === companyId ? (
@@ -1124,6 +1155,11 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
             <input type="checkbox" checked={hoTroTool} onChange={(event) => setHoTroTool(event.target.checked)} />
             {t('settings.models.form.supportsTools')}
           </label>
+          <label className="hang" style={{ gap: 6, fontSize: 14 }}>
+            <input type="checkbox" checked={hoTroAnh} onChange={(event) => setHoTroAnh(event.target.checked)} />
+            {t('settings.models.vision')}
+          </label>
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--mau-chu-mo)' }}>{t('settings.models.visionNote')}</p>
           <p style={{ margin: 0, fontSize: 12, color: 'var(--mau-chu-mo)' }}>
             {t('settings.models.form.toolsNote')}
           </p>
@@ -1173,6 +1209,7 @@ function PhanModel({ companyId }: { companyId: string }): ReactNode {
 /* ------------------------------------------------------- route theo tier */
 
 function PhanRoute({ companyId }: { companyId: string }): ReactNode {
+  const tabActive = useSettingsTabActive()
   const { t, formatNumber } = useI18n()
   const { begin } = useSettingsNotifications(companyId)
   const [routes, setRoutes] = useState<readonly ModelRouteView[] | null>(null)
@@ -1190,6 +1227,7 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
   const [loiLuu, setLoiLuu] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!tabActive) return
     let cancelled = false
     setDangTai(true)
     setLoi(null)
@@ -1213,7 +1251,7 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
     return () => {
       cancelled = true
     }
-  }, [companyId, lanThu])
+  }, [companyId, lanThu, tabActive])
 
   const taiLai = useCallback(() => setLanThu((lan) => lan + 1), [])
 
@@ -1256,6 +1294,7 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
       {routes && routes.length === 0 ? <Trong>{t('settings.routes.empty')}</Trong> : null}
 
       {routes && routes.length > 0 ? (
+        <div className="settings-table" role="region" aria-label={t('settings.routes.title')} tabIndex={0}>
         <table className="bang">
           <thead>
             <tr>
@@ -1279,7 +1318,7 @@ function PhanRoute({ companyId }: { companyId: string }): ReactNode {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       ) : null}
 
       <h3 className="card__tieu-de" style={{ marginTop: 18 }}>
@@ -1495,6 +1534,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
       {danhSach && danhSach.length === 0 ? <Trong>{t('settings.integrations.empty')}</Trong> : null}
 
       {danhSach && danhSach.length > 0 ? (
+        <div className="settings-table" role="region" aria-label={t('settings.integrations.title')} tabIndex={0}>
         <table className="bang">
           <thead>
             <tr>
@@ -1534,7 +1574,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       ) : null}
 
       {/* Form chỉ mở từ nút Thêm kết nối, không chiếm chỗ thường trực dưới bảng. */}
@@ -1763,12 +1803,14 @@ export function CaiDat({ companyId }: { companyId: string }): ReactNode {
     <Trang rong>
       <TieuDeTrang moTa={t('settings.subtitle')}>{t('settings.title')}</TieuDeTrang>
 
-      <PhanNhaCungCap companyId={companyId} />
-      <PhanModel companyId={companyId} />
-      <KnowledgeModelSettings companyId={companyId} />
-      <PhanRoute companyId={companyId} />
-      <PhanKetNoi companyId={companyId} />
-      <PhanGioiHan companyId={companyId} />
+      <SettingsTabs panels={{
+        providers: <PhanNhaCungCap companyId={companyId} />,
+        models: <PhanModel companyId={companyId} />,
+        routes: <PhanRoute companyId={companyId} />,
+        knowledge: <KnowledgeModelSettings companyId={companyId} />,
+        integrations: <PhanKetNoi companyId={companyId} />,
+        limits: <PhanGioiHan companyId={companyId} />,
+      }} />
     </Trang>
   )
 }

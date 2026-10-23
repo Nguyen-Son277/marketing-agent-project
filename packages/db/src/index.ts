@@ -9,6 +9,7 @@ import { SecretBox, assertAppSecret } from './crypto.ts'
 import { openDatabase, type Database, type OpenDatabaseOptions } from './database.ts'
 import { AccountingRepo } from './repos/accounting.ts'
 import { NotificationsRepo } from './repos/notifications.ts'
+import { ChatAttachmentsRepo } from './repos/chat-attachments.ts'
 import { AuthRepo } from './repos/auth.ts'
 import { KnowledgeRepo } from './repos/knowledge.ts'
 import { LlmRepo } from './repos/llm.ts'
@@ -16,6 +17,7 @@ import { TeamRepo } from './repos/team.ts'
 import { WorkRepo } from './repos/work.ts'
 import { WorkforceRepo } from './repos/workforce.ts'
 import { DailyReportsRepo } from './repos/daily-reports.ts'
+import { SocialBrowserRepo } from './repos/social-browser.ts'
 
 export interface Repos {
   readonly db: Database
@@ -29,6 +31,8 @@ export interface Repos {
   readonly workforce: WorkforceRepo
   readonly dailyReports: DailyReportsRepo
   readonly notifications: NotificationsRepo
+  readonly chatAttachments: ChatAttachmentsRepo
+  readonly socialBrowser: SocialBrowserRepo
 }
 
 export interface CreateReposOptions extends OpenDatabaseOptions {
@@ -66,6 +70,8 @@ export function createRepos(options: CreateReposOptions): Repos {
     work: new WorkRepo(db),
     accounting: new AccountingRepo(db, secrets),
     notifications: new NotificationsRepo(db),
+    chatAttachments: new ChatAttachmentsRepo(db),
+    socialBrowser: new SocialBrowserRepo(db, secrets),
   }
 }
 
@@ -76,6 +82,8 @@ export * from './password.ts'
 export * from './vector.ts'
 export * from './repos/accounting.ts'
 export * from './repos/notifications.ts'
+export * from './repos/chat-attachments.ts'
+export * from './repos/social-browser.ts'
 export * from './repos/auth.ts'
 export * from './repos/knowledge.ts'
 export type { ClassificationJobRecord, KbSectionRecord } from '@marketing-agent/shared'

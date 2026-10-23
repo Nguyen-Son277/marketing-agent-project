@@ -10,8 +10,8 @@ const vi = doc('../../../packages/i18n/src/catalogs/vi/settings.ts')
 const en = doc('../../../packages/i18n/src/catalogs/en/settings.ts')
 
 describe('knowledge classification model settings', () => {
-  it('renders directly after PhanModel on the settings screen', () => {
-    expect(screen).toMatch(/<PhanModel companyId=\{companyId\} \/>\s*<KnowledgeModelSettings companyId=\{companyId\} \/>/)
+  it('has a dedicated knowledge tab on the settings screen', () => {
+    expect(screen).toContain('knowledge: <KnowledgeModelSettings companyId={companyId} />')
     expect(component).toContain('api.providers(companyId)')
     expect(component).toContain("provider.enabled")
   })

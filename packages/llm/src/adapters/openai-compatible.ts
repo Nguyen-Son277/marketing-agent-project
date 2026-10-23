@@ -147,6 +147,18 @@ export function toOpenAiMessages(messages: readonly LlmMessage[]): Record<string
         })),
       }
     }
+    if (message.role === 'user' && message.images?.length) {
+      return {
+        role: 'user',
+        content: [
+          { type: 'text', text: message.content },
+          ...message.images.map((image) => ({
+            type: 'image_url',
+            image_url: { url: `data:${image.mimeType};base64,${image.data}` },
+          })),
+        ],
+      }
+    }
     return { role: message.role, content: message.content }
   })
 }

@@ -90,8 +90,8 @@ export interface ModelChoice {
 
 /** Giao diện router mà vòng lặp cần; `ModelRouter` của gói llm thoả mãn nó. */
 export interface ModelChooser {
-  chooseForAgent(agent: ResolvedAgent, options?: { readonly needsTools?: boolean }): ModelChoice
-  escalate(agent: ResolvedAgent, currentModelId: string): ModelChoice
+  chooseForAgent(agent: ResolvedAgent, options?: { readonly needsTools?: boolean; readonly needsVision?: boolean }): ModelChoice
+  escalate(agent: ResolvedAgent, currentModelId: string, options?: { readonly needsTools?: boolean; readonly needsVision?: boolean }): ModelChoice
 }
 
 /** Bề mặt tối thiểu của một adapter chat. */

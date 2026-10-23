@@ -4,6 +4,7 @@ import { useSession } from '../lib/session.tsx'
 import { useI18n } from '../lib/i18n.tsx'
 import { LocaleSwitcher } from '../components/LocaleSwitcher.tsx'
 import { ThemeSwitcher } from '../components/ThemeSwitcher.tsx'
+import { Logo } from '../components/Logo.tsx'
 import { FormTaoCongTy } from '../components/FormTaoCongTy.tsx'
 import { Card, Nut, ThongBao, Trang } from '../components/ui.tsx'
 
@@ -20,6 +21,7 @@ export function ChonCongTyScreen(): ReactNode {
       </div>
       <div style={{ width: '100%', maxWidth: 560 }}>
         <Trang>
+          <div className="app__brand dang-nhap__logo"><Logo />{t('nav.brand')}</div>
           {/* `the__tieu-de` chứ không phải `the__tieude`: CSS chỉ định nghĩa tên có gạch
               nối, nên bản cũ không hề được style. */}
           <h1 className="the__tieu-de">{t('company.chooseTitle')}</h1>

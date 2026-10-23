@@ -1085,3 +1085,4 @@ Tham chiếu đầy đủ ngưỡng nâng cấp: [kien-truc.md](./kien-truc.md) 
 - [ ] Ghi lại phiên bản/tag hiện tại để có thể `git checkout` quay lui.
 - [ ] Sau nâng cấp: `/api/system/status` xem `appliedMigrations`, `/readyz` = 200,
       gửi một tin nhắn thử, xem một artifact.
+Đăng qua website bằng phiên Chrome do người dùng quản lý: xem [cấu hình browser worker/VPS](trinh-duyet-xa-hoi.md). Sao lưu cả thư mục `.browser-assets` trong `COMPANIES_ROOT` và volume profile của worker khi sử dụng tính năng này.

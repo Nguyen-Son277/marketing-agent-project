@@ -13,6 +13,12 @@
 export const en_settings = {
   /* ----------------------------------------------------------- page */
   'settings.title': 'Settings',
+  'settings.tabs.providers': 'Providers & API keys',
+  'settings.tabs.models': 'Models',
+  'settings.tabs.routes': 'Model assignments',
+  'settings.tabs.knowledge': 'Knowledge classification',
+  'settings.tabs.integrations': 'Integrations',
+  'settings.tabs.limits': 'Spending limits',
   'settings.subtitle':
     'Declare providers (URL plus multiple API keys), fetch models, choose a primary and fallback model per agent, plus external integrations and cost limits.',
   'settings.needsConfigurationHint': 'Check the provider and the API key on this screen.',
@@ -137,6 +143,9 @@ export const en_settings = {
   'settings.models.form.costInPlaceholder': 'Input price per million tokens (USD)',
   'settings.models.form.costOutPlaceholder': 'Output price per million tokens (USD)',
   'settings.models.form.supportsTools': 'Model supports tool calls',
+  'settings.models.vision': 'Supports images',
+  'settings.models.visionLabel': '{{model}} supports images',
+  'settings.models.visionNote': 'Enable only when the model and provider support image input (vision). Choose this model or add it as a Leader fallback to analyze images in chat.',
   'settings.models.form.toolsNote':
     'A model without tool support is routed to another model of the same tier, so mark this accurately.',
   'settings.models.form.submit': 'Add model',

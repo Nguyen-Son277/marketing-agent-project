@@ -38,6 +38,7 @@ export interface RunAgentForTaskInput {
   readonly taskId: string | null
   readonly conversationId: string | null
   readonly taskBrief: string
+  readonly images?: readonly import('@marketing-agent/shared').LlmImage[]
   readonly actorUserId?: string
   readonly requestId?: string
   /** Chế độ việc nhân viên thu hẹp tool để không chạy kế hoạch marketing ngoài ý muốn. */
@@ -155,7 +156,7 @@ export async function runAgentForTask(input: RunAgentForTaskInput): Promise<RunA
     {
       agent: resolved,
       context: toolContext,
-      messages: [{ role: 'user', content: taskPrompt }],
+      messages: [{ role: 'user', content: taskPrompt, ...(input.images?.length ? { images: input.images } : {}) }],
       tools: granted,
       observe,
       ...(input.maxSteps !== undefined ? { maxSteps: input.maxSteps } : {}),

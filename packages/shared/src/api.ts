@@ -144,6 +144,7 @@ export interface ModelOptionView {
   readonly enabled: boolean
   readonly contextWindow: number
   readonly supportsTools: boolean
+  readonly supportsVision?: boolean
   readonly costInPerMtok: number
   readonly costOutPerMtok: number
   /** Số route/preset/fallback đang tham chiếu model; > 0 thì không xoá được. */
@@ -360,6 +361,7 @@ export interface MessageView {
   readonly authorKind: MessageAuthorKind
   readonly authorAgent: string | null
   readonly contentMd: string
+  readonly attachments?: readonly import('./chat-attachments.ts').ChatAttachmentView[]
   readonly meta: unknown
   /**
    * Thẻ chọn phương án, nếu tin nhắn này là một câu hỏi làm rõ.

@@ -6,9 +6,11 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { NhapBaoCaoHangNgay } from './screens/NhapBaoCaoHangNgay.tsx'
+import { XemBaoCaoHangNgay } from './screens/XemBaoCaoHangNgay.tsx'
 import { useSession } from './lib/session.tsx'
 import { useI18n } from './lib/i18n.tsx'
 import { DangTai } from './components/ui.tsx'
+import { Logo } from './components/Logo.tsx'
 import { DangNhapScreen } from './screens/DangNhap.tsx'
 import { ChonCongTyScreen } from './screens/ChonCongTy.tsx'
 import { Shell } from './Shell.tsx'
@@ -24,11 +26,14 @@ export function App(): ReactNode {
   useEffect(() => { const update = () => setHash(window.location.hash); window.addEventListener('hashchange', update); return () => window.removeEventListener('hashchange', update) }, [])
   const publicReport = /^#\/daily-report\/([A-Za-z0-9_-]{43})$/.exec(hash)
   if (publicReport) return <NhapBaoCaoHangNgay token={publicReport[1]!} />
+  const publicReportView = /^#\/daily-report-view\/([A-Za-z0-9_-]{43})$/.exec(hash)
+  if (publicReportView) return <XemBaoCaoHangNgay token={publicReportView[1]!} />
 
   if (!ready || (loading && !user)) {
     return (
       <div className="dang-nhap">
         <div className="dang-nhap__hop">
+          <div className="dang-nhap__logo"><Logo size={56} /></div>
           <h1 className="dang-nhap__tieude">{t('auth.title')}</h1>
           <DangTai nhan={t('common.sessionChecking')} />
         </div>

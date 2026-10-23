@@ -29,7 +29,7 @@ export interface CompactionResult {
 export function estimateMessageTokens(message: LlmMessage): number {
   const toolCallTokens =
     message.toolCalls?.reduce((sum, call) => sum + estimateTokens(call.name) + estimateTokens(call.argumentsJson), 0) ?? 0
-  return estimateTokens(message.content) + toolCallTokens + 4
+  return estimateTokens(message.content) + toolCallTokens + (message.images?.length ?? 0) * 1_536 + 4
 }
 
 export function estimateMessagesTokens(messages: readonly LlmMessage[]): number {
@@ -77,7 +77,7 @@ function toSafeHistory(messages: readonly LlmMessage[]): LlmMessage[] {
       out.push({ role: 'user', content: `[Kết quả công cụ${label}]\n${message.content}` })
       continue
     }
-    out.push({ role: message.role, content: message.content })
+    out.push({ role: message.role, content: message.content, ...(message.images ? { images: message.images } : {}) })
   }
   return out
 }

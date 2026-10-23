@@ -10,6 +10,7 @@ data-acceptance/
 *.log
 .env
 .env.local
+.env.browser
 .DS_Store
 coverage/
 *.tsbuildinfo

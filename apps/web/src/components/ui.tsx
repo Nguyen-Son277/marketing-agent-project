@@ -210,15 +210,18 @@ export function OChon({
   onChange,
   options,
   disabled,
+  ariaLabel,
 }: {
   value: string
   onChange: (value: string) => void
   options: readonly { readonly value: string; readonly label: string }[]
   disabled?: boolean
+  ariaLabel?: string
 }): ReactNode {
   return (
     <select
       className="o-chon"
+      aria-label={ariaLabel}
       value={value}
       disabled={disabled}
       onChange={(event: ChangeEvent<HTMLSelectElement>) => onChange(event.target.value)}

@@ -31,6 +31,7 @@ export interface ModelChoice {
 export interface ChooseOptions {
   /** Khi true, model không hỗ trợ tool sẽ bị thay bằng model cùng provider có tool. */
   readonly needsTools?: boolean
+  readonly needsVision?: boolean
 }
 
 interface Candidate {
@@ -70,6 +71,11 @@ export class ModelRouter {
         },
       )
     }
+    if (options.needsVision) {
+      const candidate = this.candidateChain(agent).find(({ model }) => model.supportsVision && (!needsTools || model.supportsTools))
+      if (!candidate) throw needsConfiguration('Model của Leader và các model dự phòng chưa hỗ trợ đọc ảnh. Vào Cài đặt → Đội agent để chọn model hỗ trợ hình ảnh (vision).')
+      return this.makeChoice(candidate.model, agent.preset.tier, candidate.source, candidate.reason)
+    }
     return this.guardTools(agent, first.model, agent.preset.tier, first.source, first.reason, needsTools)
   }
 
@@ -77,8 +83,8 @@ export class ModelRouter {
    * Model kế tiếp sau `currentModelId` trong chuỗi đã cấu hình. Hết chuỗi thì ném lỗi
    * cấu hình để vòng lặp dừng với thông báo rõ ràng thay vì thử lại vô ích.
    */
-  escalate(agent: ResolvedAgent, currentModelId: string): ModelChoice {
-    const chain = this.candidateChain(agent)
+  escalate(agent: ResolvedAgent, currentModelId: string, options: ChooseOptions = {}): ModelChoice {
+    const chain = this.candidateChain(agent).filter(({ model }) => !options.needsVision || (model.supportsVision && (!options.needsTools || model.supportsTools)))
     const index = chain.findIndex((candidate) => candidate.model.id === currentModelId)
     // Bình thường `current` nằm trong chuỗi nên lấy phần tử kế tiếp. Trường hợp model
     // hiện tại do capability guard thay vào (không có trong chuỗi), lấy ứng viên đầu
@@ -92,6 +98,7 @@ export class ModelRouter {
       )
     }
     const reason = `Nhà cung cấp lỗi; chuyển sang ${next.model.label}`
+    if (options.needsVision) return this.makeChoice(next.model, agent.preset.tier, 'escalation', reason)
     return this.guardTools(agent, next.model, agent.preset.tier, 'escalation', reason, true)
   }
 

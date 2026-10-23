@@ -9,6 +9,7 @@ import { useI18n } from '../lib/i18n.tsx'
 import { useSession } from '../lib/session.tsx'
 import { LocaleSwitcher } from '../components/LocaleSwitcher.tsx'
 import { ThemeSwitcher } from '../components/ThemeSwitcher.tsx'
+import { Logo } from '../components/Logo.tsx'
 import { HopThoaiXacNhan } from '../components/HopThoai.tsx'
 import { Card, DangTai, Nut, OChon, ONhap, ThongBao, Trong } from '../components/ui.tsx'
 
@@ -60,7 +61,7 @@ export function AdminDuyetTaiKhoan() {
   return (
     <div className="admin-app">
       <header className="admin-app__header">
-        <strong>{t('admin.title')}</strong>
+        <strong className="app__brand"><Logo />{t('admin.title')}</strong>
         <span className="app__user" title={user?.email}>{user?.email}</span>
         <LocaleSwitcher compact />
         <ThemeSwitcher compact />

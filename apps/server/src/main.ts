@@ -18,6 +18,7 @@ import { startKnowledgeClassificationWorker } from './services/knowledge-classif
 import { embeddingFor } from './services/agent-services.ts'
 import { startDailyReportWorker } from './services/daily-report-worker.ts'
 import { preflight } from './services/company-service.ts'
+import { recoverBrowserJobs, stopBrowserJobs } from './services/browser-job-runner.ts'
 
 export interface StartedServer {
   readonly server: Server
@@ -45,6 +46,7 @@ export async function startServer(overrides: Partial<ServerConfig> = {}): Promis
     events,
     listToolNames: () => modules.toolNames,
   }
+  recoverBrowserJobs(context)
 
   const app = buildApp({ context, optionalModules: modules.routeModules })
 
@@ -98,6 +100,7 @@ export async function startServer(overrides: Partial<ServerConfig> = {}): Promis
     repos,
     async close() {
       clearInterval(sweeper)
+      await stopBrowserJobs(context)
       await knowledgeWorker.close()
       await dailyWorker.close()
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()))

@@ -55,6 +55,7 @@ import type {
   UpsertIntegrationBody,
   UpsertRouteBody,
   WorkflowSnapshotResponse,
+  ChatAttachmentView,
 } from '@marketing-agent/shared'
 
 export class ApiError extends Error {
@@ -429,9 +430,19 @@ export const api = {
 
   async sendMessage(
     conversationId: string,
-    input: { content: string; mode?: 'campaign' | 'workforce'; autoPlan?: boolean; answers?: ClarificationAnswer[] },
+    input: { content: string; mode?: 'campaign' | 'workforce'; autoPlan?: boolean; answers?: ClarificationAnswer[]; attachmentIds?: string[] },
   ): Promise<SendMessageResponse> {
     return request(`/api/conversations/${conversationId}/messages`, { method: 'POST', body: input })
+  },
+
+  async uploadChatAttachment(conversationId: string, file: File, signal?: AbortSignal): Promise<{ attachment: ChatAttachmentView }> {
+    const form = new FormData()
+    form.append('file', file)
+    return request(`/api/conversations/${encodeURIComponent(conversationId)}/attachments`, { method: 'POST', body: form, signal })
+  },
+
+  async removeChatAttachment(conversationId: string, attachmentId: string): Promise<void> {
+    return request(`/api/conversations/${encodeURIComponent(conversationId)}/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' })
   },
 
   async planConversation(conversationId: string): Promise<{ tasks: { title: string; assigneeRole: string }[] }> {
@@ -590,6 +601,10 @@ export const api = {
 
   async updateModelPricing(companyId: string, modelId: string, input: { costInPerMtok: number; costOutPerMtok: number }): Promise<{ model: ModelOptionView }> {
     return request(`/api/companies/${companyId}/models/${modelId}`, { method: 'PATCH', body: input })
+  },
+
+  async updateModelVision(companyId: string, modelId: string, supportsVision: boolean): Promise<{ model: ModelOptionView }> {
+    return request(`/api/companies/${companyId}/models/${modelId}`, { method: 'PATCH', body: { supportsVision } })
   },
 
   async deleteModel(companyId: string, modelId: string): Promise<void> {

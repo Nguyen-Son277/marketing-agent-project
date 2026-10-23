@@ -17,6 +17,7 @@ import { createRequestContext, Router, runChain, type Handler, type HttpMethod, 
 import { accountAccessMiddleware, sessionMiddleware } from './http/middleware.ts'
 import { registerNotificationRoutes } from './routes/notification-routes.ts'
 import { registerDailyReportRoutes } from './routes/daily-report-routes.ts'
+import { registerSocialBrowserRoutes } from './routes/social-browser-routes.ts'
 import { registerAdminRoutes } from './routes/admin-routes.ts'
 import { registerWorkforceRoutes } from './routes/workforce-routes.ts'
 import { registerAuthRoutes, registerMemberRoutes } from './routes/auth-routes.ts'
@@ -49,6 +50,7 @@ export function buildApp(options: BuildAppOptions): App {
   registerAdminRoutes(router, repos)
   registerWorkforceRoutes(router, repos)
   registerDailyReportRoutes(router, context)
+  registerSocialBrowserRoutes(router, context)
   registerNotificationRoutes(router, repos)
 
   for (const module of options.optionalModules ?? []) {
@@ -182,7 +184,7 @@ export function sendError(
   }
   const appError = toAppError(error)
   if (appError.status >= 500) {
-    const safePath = path.startsWith('/api/public/daily-reports/') ? '/api/public/daily-reports/[redacted]' : path
+    const safePath = path.replace(/^(\/api\/public\/daily-(?:reports|report-views))\/[^/?]+/, '$1/[redacted]')
     console.error(`[error] ${safePath}:`, error)
   }
   const exposeDetails = !isProduction && appError.status < 500

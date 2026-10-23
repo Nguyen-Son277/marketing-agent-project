@@ -90,7 +90,13 @@ export function toAnthropicMessages(messages: readonly LlmMessage[]): {
       push('assistant', blocks)
       continue
     }
-    push('user', [{ type: 'text', text: message.content }])
+    push('user', [
+      ...(message.content ? [{ type: 'text', text: message.content }] : []),
+      ...(message.images ?? []).map((image) => ({
+        type: 'image',
+        source: { type: 'base64', media_type: image.mimeType, data: image.data },
+      })),
+    ])
   }
 
   return { system: systemParts.join('\n\n'), messages: out }

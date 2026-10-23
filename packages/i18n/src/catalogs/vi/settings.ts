@@ -13,6 +13,12 @@
 export const vi_settings = {
   /* ---------------------------------------------------------- trang */
   'settings.title': 'Cài đặt',
+  'settings.tabs.providers': 'Nhà cung cấp & API key',
+  'settings.tabs.models': 'Model',
+  'settings.tabs.routes': 'Phân công model',
+  'settings.tabs.knowledge': 'Phân loại tri thức',
+  'settings.tabs.integrations': 'Kết nối ngoài',
+  'settings.tabs.limits': 'Giới hạn chi phí',
   'settings.subtitle':
     'Khai báo nhà cung cấp (URL + nhiều API key), lấy danh sách model, chọn model và model dự phòng cho từng agent, cùng kết nối ngoài và giới hạn chi phí.',
   'settings.needsConfigurationHint': 'Kiểm tra lại nhà cung cấp và API key ngay tại màn hình này.',
@@ -139,6 +145,9 @@ export const vi_settings = {
   'settings.models.form.costInPlaceholder': 'Giá vào mỗi triệu token (USD)',
   'settings.models.form.costOutPlaceholder': 'Giá ra mỗi triệu token (USD)',
   'settings.models.form.supportsTools': 'Model hỗ trợ gọi tool',
+  'settings.models.vision': 'Hỗ trợ đọc ảnh',
+  'settings.models.visionLabel': '{{model}} hỗ trợ đọc ảnh',
+  'settings.models.visionNote': 'Chỉ bật khi model và nhà cung cấp thực sự hỗ trợ nhận ảnh (vision). Chọn model này hoặc thêm làm model dự phòng cho Leader để phân tích ảnh trong chat.',
   'settings.models.form.toolsNote':
     'Model không hỗ trợ tool sẽ bị router đổi sang model khác cùng mức năng lực, nên hãy đánh dấu chính xác.',
   'settings.models.form.submit': 'Thêm model',

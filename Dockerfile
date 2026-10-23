@@ -37,6 +37,7 @@ COPY packages/kb/package.json           packages/kb/
 COPY packages/tools/package.json        packages/tools/
 COPY packages/orchestrator/package.json packages/orchestrator/
 COPY apps/server/package.json           apps/server/
+COPY apps/browser-worker/package.json   apps/browser-worker/
 COPY apps/web/package.json              apps/web/
 COPY seed/package.json                  seed/
 

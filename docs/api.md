@@ -146,8 +146,11 @@ Body: `upsertKnowledgeSchema` `{ path, title, category, tags[], content }`;
 | `GET` | `/api/companies/:companyId/conversations` | membership | Danh sách hội thoại | `{ conversations: ConversationView[] }` | ⏳ |
 | `POST` | `/api/companies/:companyId/conversations` | `requireWork` | Tạo hội thoại | `201 ConversationView` | ⏳ |
 | `GET` | `/api/conversations/:id` | membership (suy ra từ hội thoại) | Chi tiết: hội thoại + tin nhắn + task + chi phí + usage | `ConversationDetailResponse` | ⏳ |
+| `POST` | `/api/conversations/:id/attachments` | `requireWork` | Multipart một `file`; trích văn bản hoặc kiểm tra ảnh, lưu tệp chờ gửi | `201 { attachment: ChatAttachmentView }` | ✅ |
+| `GET` | `/api/conversations/:id/attachments/:attachmentId` | membership; tệp chờ gửi chỉ người tải lên | Xem ảnh hoặc tải bản gốc; kiểm cả company và conversation | binary, `no-store` | ✅ |
+| `DELETE` | `/api/conversations/:id/attachments/:attachmentId` | `requireWork`; người tải lên | Xoá tệp chưa gửi của chính mình | `204` | ✅ |
 | `GET` | `/api/conversations/:id/messages` | membership | Lịch sử tin nhắn | `{ messages: MessageView[] }` | ⏳ |
-| `POST` | `/api/conversations/:id/messages` | `requireWork` | Gửi tin cho Leader. Leader chạy BriefGate và trả lời; `autoPlan: true` thì lập kế hoạch và giao việc luôn | `SendMessageResponse` | ⏳ |
+| `POST` | `/api/conversations/:id/messages` | `requireWork` | Gửi `{ content?, attachmentIds?, mode?, answers? }`; phải có chữ hoặc tệp. Có tệp thì Leader đọc/phân tích trực tiếp, không tự chạy công việc. Tin thường tiếp tục qua BriefGate. | `SendMessageResponse`; lịch sử `MessageView.attachments?` giữ link bản gốc | ✅ |
 | `POST` | `/api/conversations/:id/plan` | `requireWork` | Sinh DAG từ brief đã chốt (validate chu trình + role) | `{ tasks: TaskView[] }` hoặc lỗi `validation` | ⏳ |
 | `POST` | `/api/conversations/:id/run` | `requireWork` | Thực thi kế hoạch theo thứ tự topo (task cùng mức chạy song song) | `{ tasks: TaskView[], status }` | ⏳ |
 | `POST` | `/api/conversations/:id/report` | `requireWork` | Tổng hợp báo cáo **7 mục** thành artifact | `{ artifact: ArtifactView }` | ⏳ |
@@ -209,6 +212,18 @@ Body: `createProviderSchema` `{ name, kind, baseUrl, apiKey?, extraJson?, enable
 **Bảo mật bí mật:** `apiKey` và `config` chỉ nhận khi ghi, được mã hoá AES-256-GCM
 trước khi lưu. Mọi phản hồi chỉ trả `apiKeyConfigured` + `apiKeyHint` (4 ký tự đầu
 và cuối). Trường `apiKeyEnc` **không bao giờ** xuất hiện trong API.
+
+### Báo cáo hằng ngày và link chia sẻ
+
+Owner/admin đúng công ty dùng `/api/companies/:companyId/daily-report-groups/:groupId/rounds`:
+
+- `GET`: danh sách 120 đợt gần nhất; `?date=YYYY-MM-DD` lấy đúng ngày, kể cả lịch sử cũ hơn.
+- `POST {date}`: tạo đợt hôm nay/tương lai cho nhóm đang bật, thứ Hai–thứ Bảy, hoặc lấy lại đợt đã có. Trả `DailyRoundCreateResponse` `{round,share:{url,viewUrl,warning}}`, HTTP 201 khi tạo mới, 200 khi đã tồn tại. Lặp lại không đổi token hay danh sách thành viên.
+- `GET /:roundId`: trả `DailyRoundDetailResponse`, gồm dữ liệu gốc/phiên bản và cùng cấu trúc `share`. `url` là link nộp, `viewUrl` là link xem độc lập, có thể null khi chưa tạo.
+
+Công khai: `GET/POST /api/public/daily-reports/:token` phục vụ biểu mẫu nộp/sửa bất cứ lúc nào. `GET /api/public/daily-reports/:token/members/:memberId` trả `{submission:null}` hoặc báo cáo mới nhất kèm `version` để tải khi chọn tên. `POST` nhận `{memberId,work?,blockers?,nextSteps?,isDayOff?,version?}`; chỉnh sửa cần version mới nhất, không cần mã chỉnh sửa. `isDayOff:true` cho phép bỏ trống công việc và ghi nhận ngày nghỉ theo từng revision. Người có link nộp có thể đọc/sửa theo tên trong đợt; chỉ chia sẻ trong nhóm tin cậy.
+
+`GET /api/public/daily-report-views/:token` chỉ trả bản tổng hợp tiếng Anh `ready` mới nhất qua `DailyPublicReport`, hoặc trạng thái `pending` khi chưa có. Mỗi thành viên có `isDayOff` và nội dung `Day off` nếu nghỉ. Token xem không dùng để nộp hay tải bài gốc; phản hồi xem không gồm bài gốc, mã chỉnh sửa, ID nội bộ hoặc cấu hình model. Cả hai link dùng `PUBLIC_BASE_URL`; trang xem là `/#/daily-report-view/:token`. Chi tiết: [Báo cáo hằng ngày](bao-cao-hang-ngay.md).
 
 ### 2.9 Chi phí, lịch sử chạy, kiểm toán
 
@@ -349,3 +364,4 @@ Các interface dưới đây **không** được chép lại đầy đủ ở đ
 Giao diện **không** ghép chuỗi đường dẫn thủ công: dùng hằng số `API_ROUTES` trong
 `packages/shared/src/api.ts` (ví dụ `API_ROUTES.team(companyId)`), để đổi đường dẫn
 chỉ phải sửa một chỗ.
+API môi trường Chrome, kho nội dung và tác vụ đăng bài: [Trình duyệt xã hội](trinh-duyet-xa-hoi.md#api).

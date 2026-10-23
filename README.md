@@ -18,11 +18,21 @@ truy vấn, không phải bằng lời dặn trong prompt.
 
 ## Tính năng chính
 
+**Đính kèm trong trao đổi với Leader**
+- Nút **Đính kèm**, kéo thả file hoặc dán ảnh bằng **Ctrl+V**; xem trước, xoá và thử tải lại trước khi gửi. Có thể gửi chỉ file/ảnh mà không nhập chữ.
+- Đọc PDF có văn bản, DOCX, TXT, Markdown, CSV, JSON và ảnh PNG/JPG/WebP. Tối đa 5 tệp/lượt, 10 MiB/tệp (ảnh 5 MiB), tổng 20 MiB; tài liệu tối đa 40.000 ký tự/tệp và 60.000 ký tự/lượt. PDF scan cần OCR trước hoặc gửi dưới dạng ảnh.
+- Ảnh được truyền thật tới model vision. Trong **Cài đặt → Model**, bật **Hỗ trợ đọc ảnh** cho model có khả năng này, rồi chọn model đó hoặc thêm vào dự phòng cho Leader. Chưa có model phù hợp sẽ báo lỗi và giữ nguyên tệp để thử lại.
+- Lượt phân tích dùng model/ngân sách của công ty; không đòi đủ brief để đọc tài liệu. Bản gốc lưu riêng theo hội thoại trong SQLite, tải lại qua API có kiểm quyền; không tự thêm vào kho kiến thức. Tệp chưa gửi được dọn sau 24 giờ khi công ty tải tệp mới.
+
 **Báo cáo công việc hằng ngày cho lãnh đạo**
-- Nhóm có danh sách thành viên, link nhập không đăng nhập, lịch thứ Hai–thứ Bảy 16:20–16:50 giờ Việt Nam.
+- Nhóm có danh sách thành viên, link nhập không đăng nhập, cho nộp/sửa bất cứ lúc nào bằng cách chọn tên và đánh dấu ngày nghỉ. Lịch tổng hợp thứ Hai–thứ Bảy chốt lúc 16:50 giờ Việt Nam.
+- Lịch chọn ngày hỗ trợ lịch sử và tạo trước ngày tương lai. **Tạo link chia sẻ** cấp hai link riêng để nộp và xem; link xem tự hiển thị bản tổng hợp hoàn tất mới nhất, không cần đăng nhập.
 - Bản chốt bất biến, đánh dấu người chưa nộp đúng hạn, giữ riêng bản nộp muộn và bản cập nhật.
 - Tổng hợp tiếng Anh bằng model công ty, xuất Word DOCX/PDF. Bạn tự gửi link và tài liệu.
 - Thiết lập và giới hạn: [Hướng dẫn báo cáo hằng ngày](docs/bao-cao-hang-ngay.md).
+
+**Cài đặt theo chức năng**
+- Sáu tab: Nhà cung cấp & API key, Model, Phân công model, Phân loại tri thức, Kết nối ngoài, Giới hạn chi phí. Giữ nháp khi đổi tab; URL như `#/cai-dat?tab=models` mở đúng phần cần cấu hình.
 
 **Điều phối có kiểm soát**
 - **BriefGate** — chặn ở đầu vào: chưa đủ 6 trường (mục tiêu, KPI, phạm vi, thời
@@ -218,3 +228,4 @@ pnpm test         # vitest run
 
 Test chạy với provider LLM **giả** (không cần mạng) và embedding `hash` (tất định,
 offline). Smoke test gọi gateway thật chỉ chạy khi đặt `LLM_LIVE=1`.
+Luồng đăng bài bằng trình duyệt và cấu hình worker trên VPS: [Trình duyệt xã hội](docs/trinh-duyet-xa-hoi.md).

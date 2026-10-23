@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json && tsc -p apps/browser-worker/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:seed": "tsx seed/cli/seed.ts",

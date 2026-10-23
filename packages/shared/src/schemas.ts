@@ -191,7 +191,8 @@ export type CreateConversationInput = z.infer<typeof createConversationSchema>
 
 export const sendMessageSchema = z.object({
   mode: z.enum(['campaign','workforce']).default('campaign'),
-  content: z.string().trim().min(1, 'Cần nội dung').max(20_000),
+  content: z.string().trim().max(20_000).default(''),
+  attachmentIds: z.array(z.string().uuid()).max(5).default([]),
   /** When true the leader plans and dispatches immediately instead of asking first. */
   autoPlan: z.boolean().default(false),
   /**
@@ -211,6 +212,10 @@ export const sendMessageSchema = z.object({
     )
     .max(6)
     .default([]),
+}).refine((input) => input.content.length > 0 || input.attachmentIds.length > 0, {
+  message: 'Cần nội dung hoặc tệp đính kèm', path: ['content'],
+}).refine((input) => new Set(input.attachmentIds).size === input.attachmentIds.length, {
+  message: 'Tệp đính kèm bị trùng', path: ['attachmentIds'],
 })
 export type SendMessageInput = z.infer<typeof sendMessageSchema>
 
