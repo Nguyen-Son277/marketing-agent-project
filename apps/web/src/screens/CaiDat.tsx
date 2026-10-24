@@ -1714,6 +1714,9 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   const [selectedOptions, setSelectedOptions] = useState<
     Record<string, string>
   >({});
+  const [optionsIntegrationId, setOptionsIntegrationId] = useState<string | null>(null);
+  const [optionsKind, setOptionsKind] = useState<IntegrationKind | null>(null);
+  const [savingOptions, setSavingOptions] = useState(false);
 
   const taiLai = useCallback(() => setLanThu((n) => n + 1), []);
   const oauthKind = kind !== "firecrawl" && kind !== "email-smtp";
@@ -1889,9 +1892,19 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
     try {
       const result = await api.integrationOptions(companyId, integration.kind);
       setOptions(result.options);
+      setOptionsIntegrationId(integration.id);
+      setOptionsKind(integration.kind);
     } catch {
       setOptions([]);
     }
+  }
+
+  async function saveOption(): Promise<void> {
+    if (!optionsIntegrationId || !optionsKind || !selectedOptions[optionsKind]) return;
+    const key = optionsKind === "meta" ? "pageId" : optionsKind === "linkedin" ? "organizationUrn" : optionsKind === "google-search-console" ? "siteUrl" : optionsKind === "google-ads" ? "customerId" : "propertyId";
+    setSavingOptions(true);
+    try { await api.updateIntegrationDefaults(companyId, optionsIntegrationId, { [key]: selectedOptions[optionsKind] }); taiLai(); }
+    finally { setSavingOptions(false); }
   }
 
   return (
@@ -1987,19 +2000,20 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
           </table>
         </div>
       ) : null}
-      {options.length > 0 ? (
+      {options.length > 0 && optionsKind ? (
         <div className="cot" style={{ marginTop: 10 }}>
           <strong>{t("settings.integrations.resources")}</strong>
           <OChon
-            value={selectedOptions[kind] ?? ""}
+            value={selectedOptions[optionsKind] ?? ""}
             onChange={(value) =>
-              setSelectedOptions((current) => ({ ...current, [kind]: value }))
+              setSelectedOptions((current) => ({ ...current, [optionsKind]: value }))
             }
             options={options.map((option) => ({
               value: option.id,
               label: option.name,
             }))}
           />
+          <Nut nho onClick={() => void saveOption()} dangTai={savingOptions} disabled={!selectedOptions[optionsKind]}>{t("common.save")}</Nut>
         </div>
       ) : null}
       <HopThoai
