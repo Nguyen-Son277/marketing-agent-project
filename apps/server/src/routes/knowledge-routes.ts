@@ -149,7 +149,7 @@ export function knowledgeRoutes() {
             if (isImage) {
               const document = repos.db.tx(() => {
                 const doc = repos.knowledge.upsertDocumentAndChunks({companyId,...checked,source:'product-image',userId:readAuth(request)?.user.id ?? null}, [])
-                repos.knowledge.setUploadMetadata(companyId,doc.id,{originalName:input.filename,mimeType:extracted.mimeType,sizeBytes:input.bytes.length,storageKey:key,originalChecksum:checksum,imageProduct:input.imageProduct ?? title,imageAnalysisStatus:'pending'})
+                repos.knowledge.setUploadMetadata(companyId,doc.id,{originalName:input.filename,mimeType:extracted.mimeType,sizeBytes:input.bytes.length,storageKey:key,originalChecksum:checksum,imageProduct:input.imageProduct ?? title, ...(input.imageBrand ? { imageBrand: input.imageBrand } : {}), imageAnalysisStatus:'pending'})
                 return doc
               })
               createdDocumentId = document.id
@@ -159,7 +159,9 @@ export function knowledgeRoutes() {
               // durably stored. The image remains usable with metadata if no vision
               // model is configured or the provider is temporarily unavailable.
               void analyzeProductImage(repos, ctx.config.kbRoot, companyId, document.id).catch((error) => {
-                repos.db.run("UPDATE kb_documents SET image_analysis_status = 'failed', image_analysis_error = ?, updated_at = ? WHERE company_id = ? AND id = ?", [error instanceof Error ? error.message : 'Phân tích ảnh thất bại', new Date().toISOString(), companyId, document.id])
+                const message = error instanceof Error ? error.message : 'Phân tích ảnh thất bại'
+                const unavailable = /model.*vision|vision.*model/i.test(message)
+                repos.db.run(`UPDATE kb_documents SET image_analysis_status = ?, image_analysis_error = ?, updated_at = ? WHERE company_id = ? AND id = ?`, [unavailable ? 'none' : 'failed', unavailable ? null : message, new Date().toISOString(), companyId, document.id])
               })
               request.json(202,{document:knowledgeDocumentView(repos,repos.knowledge.findDocumentById(document.id,companyId)!),analysis:{status:'pending'}})
               return
@@ -380,11 +382,12 @@ export function knowledgeRoutes() {
         if (!doc || !doc.mimeType?.startsWith('image/')) throw notFound('Không tìm thấy ảnh sản phẩm')
         const body = await request.body<Record<string, unknown>>()
         const product = typeof body.product === 'string' ? body.product.trim().slice(0, 200) : undefined
+        const brand = typeof body.brand === 'string' ? body.brand.trim().slice(0, 200) : undefined
         const description = typeof body.description === 'string' ? body.description.trim().slice(0, 4000) : undefined
         const tags = Array.isArray(body.tags) ? body.tags.filter((tag): tag is string => typeof tag === 'string').map((tag) => tag.trim()).filter(Boolean).slice(0, 30) : undefined
-        if (product === undefined && description === undefined && tags === undefined) throw validation('Cần product, description hoặc tags')
+        if (product === undefined && brand === undefined && description === undefined && tags === undefined) throw validation('Cần product, brand, description hoặc tags')
         if (tags) repos.db.run('UPDATE kb_documents SET tags_json = ?, updated_at = ? WHERE company_id = ? AND id = ?', [JSON.stringify(tags), new Date().toISOString(), companyId, doc.id])
-        repos.knowledge.setUploadMetadata(companyId, doc.id, {originalName: doc.originalName ?? null, mimeType: doc.mimeType, sizeBytes: doc.sizeBytes ?? null, storageKey: doc.storageKey ?? null, originalChecksum: doc.originalChecksum ?? null, ...(product !== undefined ? {imageProduct: product} : {}), ...(description !== undefined ? {imageDescription: description, imageAnalysisStatus: 'ready'} : {})})
+        repos.knowledge.setUploadMetadata(companyId, doc.id, {originalName: doc.originalName ?? null, mimeType: doc.mimeType, sizeBytes: doc.sizeBytes ?? null, storageKey: doc.storageKey ?? null, originalChecksum: doc.originalChecksum ?? null, ...(product !== undefined ? {imageProduct: product} : {}), ...(brand !== undefined ? {imageBrand: brand} : {}), ...(description !== undefined ? {imageDescription: description, imageAnalysisStatus: 'ready'} : {})})
         request.json(200, {document: knowledgeDocumentView(repos, repos.knowledge.findDocumentById(doc.id, companyId)!)})
       }, [requireMembership(repos), requireWork])
       router.post('/api/companies/:companyId/knowledge/:docId/image-analysis', async (request) => {

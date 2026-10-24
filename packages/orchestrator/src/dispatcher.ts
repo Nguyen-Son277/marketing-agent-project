@@ -25,6 +25,7 @@ export interface DispatchPlanInput {
   readonly tools: ToolRegistry
   readonly embedding?: EmbeddingProvider | undefined
   readonly runtimeOverrides?: Partial<AgentRuntimeDeps> | undefined
+  readonly productImageContext?: ((companyId: string, query: string, includeImages: boolean, limit: number) => Promise<{ context: string; images: readonly import('@marketing-agent/shared').LlmImage[] }>) | undefined
   readonly companyId: string
   readonly conversationId: string | null
   readonly plan: PlanResult
@@ -176,6 +177,7 @@ async function executeTask(input: ExecuteTaskInput): Promise<TaskOutcome> {
       tools: input.tools,
       embedding: input.embedding,
       runtimeOverrides: input.runtimeOverrides,
+      productImageContext: input.productImageContext,
       publish: input.publish,
       companyId,
       role: input.assigneeRole as AgentRole,

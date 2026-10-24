@@ -13,6 +13,7 @@ import type { Repos } from '@marketing-agent/db'
 import type { AgentRuntimeDeps } from '@marketing-agent/agent-runtime'
 import type { EmbeddingProvider } from '@marketing-agent/kb'
 import type { ToolRegistry } from '@marketing-agent/tools'
+import type { LlmImage } from '@marketing-agent/shared'
 import { runAgentForTask } from './agent-runner.ts'
 import type { AppEvent } from './events.ts'
 import type { DispatchSummary, OrchestratorLimits, ReviewDecision, TaskOutcome } from './types.ts'
@@ -29,6 +30,10 @@ export interface ReviewInput {
   readonly limits: OrchestratorLimits
   readonly publish?: ((event: AppEvent) => void) | undefined
   readonly log?: ((message: string, data?: unknown) => void) | undefined
+  /** Product-image context loader shared with specialist runs. */
+  readonly productImageContext?:
+    | ((companyId: string, query: string, includeImages: boolean, limit: number) => Promise<{ context: string; images: readonly LlmImage[] }>)
+    | undefined
 }
 
 /** Một vấn đề phát hiện được, kèm mức độ và gợi ý sửa. */
@@ -205,6 +210,7 @@ async function askLeaderToJudge(input: ReviewInput, issues: readonly ReviewIssue
       'PHẦN CÒN LẠI: lý do ngắn, và nếu REVISE thì nêu chính xác cần sửa gì.',
     ].join('\n'),
     ...(input.log ? { log: input.log } : {}),
+    ...(input.productImageContext ? { productImageContext: input.productImageContext } : {}),
   })
 
   const text = result.run.output.trim()

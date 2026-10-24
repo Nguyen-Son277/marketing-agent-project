@@ -17,7 +17,7 @@ import { join } from 'node:path'
  * try/catch: module route phải nạp được ngay cả khi một gói chưa sẵn sàng, để
  * `main.ts` không phải bỏ toàn bộ các route còn lại.
  */
-import { AppError } from '@marketing-agent/shared'
+import { AppError, type LlmImage } from '@marketing-agent/shared'
 import type { Repos } from '@marketing-agent/db'
 import type { AppContext } from '../context.ts'
 import type { CoordinationHost, IntegrationStore, PlannedTaskInput, ToolDescriptor, ToolRegistry } from '@marketing-agent/tools'
@@ -25,6 +25,7 @@ import type { EmbeddingProvider } from '@marketing-agent/kb'
 import type { ConversationOrchestrator } from '@marketing-agent/orchestrator'
 import type { AgentRuntimeDeps } from '@marketing-agent/agent-runtime'
 import { readStoredLimits } from './company-settings.ts'
+import { readKnowledgeOriginal } from './knowledge-storage.ts'
 
 interface SharedServices {
   readonly registry: ToolRegistry
@@ -72,6 +73,68 @@ async function buildEmbedding(ctx: AppContext): Promise<EmbeddingProvider | unde
 }
 
 /**
+ * Load product-image metadata for an agent and, only when its selected model
+ * supports vision, attach the private image bytes. The model never receives a
+ * filesystem path; the URL in the textual context is the tenant-checked
+ * endpoint that the final report renderer can use.
+ */
+async function productImageContextFor(
+  ctx: AppContext,
+  companyId: string,
+  query: string,
+  includeImages: boolean,
+  limit: number,
+): Promise<{ context: string; images: readonly LlmImage[] }> {
+  const docs = ctx.repos.knowledge.listProductImages(companyId, query, Math.min(Math.max(limit, 0), 3))
+  if (docs.length === 0) return { context: '', images: [] }
+
+  const lines = ['## Ảnh sản phẩm trong Kho kiến thức', 'Chỉ dùng ảnh dưới đây khi đúng sản phẩm/thương hiệu; không tự bịa ảnh khác.']
+  const images: LlmImage[] = []
+  let rawBytes = 0
+  for (const [index, doc] of docs.entries()) {
+    const tags = parseImageTags(doc.tagsJson)
+    const imageUrl = `/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(doc.id)}/original`
+    lines.push(
+      `${index + 1}. Tên: ${doc.title}` +
+        `${doc.imageProduct ? `; sản phẩm: ${doc.imageProduct}` : ''}` +
+        `${doc.imageBrand ? `; thương hiệu: ${doc.imageBrand}` : ''}` +
+        `${tags.length > 0 ? `; tags: ${tags.join(', ')}` : ''}` +
+        `${doc.imageDescription ? `; mô tả: ${doc.imageDescription}` : ''}` +
+        `; URL nội bộ: ${imageUrl}`,
+    )
+
+    if (!includeImages || !doc.storageKey) continue
+    const mimeType = normalizeImageMime(doc.mimeType)
+    if (!mimeType) continue
+    try {
+      const bytes = await readKnowledgeOriginal(ctx.config.kbRoot, companyId, doc.storageKey)
+      if (rawBytes + bytes.length > 8 * 1024 * 1024) continue
+      rawBytes += bytes.length
+      images.push({ mimeType, data: bytes.toString('base64') })
+    } catch (error) {
+      // A missing original must not prevent the task from using metadata or
+      // the remaining images. The endpoint still enforces tenant membership.
+      console.warn('[services] không đọc được ảnh sản phẩm cho agent:', error instanceof Error ? error.message : String(error))
+    }
+  }
+  return { context: lines.join('\n'), images }
+}
+
+function parseImageTags(tagsJson: string): string[] {
+  try {
+    const value: unknown = JSON.parse(tagsJson)
+    return Array.isArray(value) ? value.filter((tag): tag is string => typeof tag === 'string').slice(0, 12) : []
+  } catch {
+    return []
+  }
+}
+
+function normalizeImageMime(value: string | null | undefined): LlmImage['mimeType'] | undefined {
+  if (value === 'image/png' || value === 'image/jpeg' || value === 'image/webp') return value
+  return undefined
+}
+
+/**
  * Provider nhúng dùng chung cho cả tiến trình. Trả `undefined` khi không cấu hình
  * được — index vẫn ghi chunk và tìm kiếm vẫn chạy bằng từ khoá.
  */
@@ -104,6 +167,8 @@ async function getOrchestrator(ctx: AppContext, companyId: string): Promise<Conv
       embedding: shared.embedding,
       publish: (event) => ctx.events.publish(event),
       limits: readStoredLimits(ctx.repos, companyId),
+      productImageContext: (imageCompanyId, query, includeImages, limit) =>
+        productImageContextFor(ctx, imageCompanyId, query, includeImages, limit),
       ...(overrides ? { runtimeOverrides: overrides } : {}),
       log: (message, data) => {
         if (data === undefined) console.log(`[orchestrator] ${message}`)

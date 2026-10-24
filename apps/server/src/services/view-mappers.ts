@@ -181,6 +181,7 @@ export function toKnowledgeDocumentView(doc: KbDocumentRecord, indexed: boolean,
     sizeBytes: doc.sizeBytes ?? null,
     ...(doc.mimeType?.startsWith('image/') ? {
       imageProduct: doc.imageProduct ?? null,
+      imageBrand: doc.imageBrand ?? null,
       imageDescription: doc.imageDescription ?? null,
       imageAnalysisStatus: doc.imageAnalysisStatus ?? 'none',
       imageAnalysisError: doc.imageAnalysisError ?? null,

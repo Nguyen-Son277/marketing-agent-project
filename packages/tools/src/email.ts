@@ -162,6 +162,42 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
   }
 }
 
+/** Open SMTP, negotiate TLS when advertised, and authenticate without sending a message. */
+export async function verifySmtpConnection(config: SmtpConfig, timeoutMs = DEFAULT_SMTP_TIMEOUT_MS): Promise<void> {
+  if (!config.host || !config.port) throw toolError('Cấu hình SMTP thiếu host hoặc port')
+  const implicitTls = config.port === 465
+  const socket: Socket | TLSSocket = implicitTls
+    ? connectTls({ host: config.host, port: config.port, servername: config.host, timeout: timeoutMs })
+    : createConnection({ host: config.host, port: config.port, timeout: timeoutMs })
+  await new Promise<void>((resolve, reject) => {
+    socket.once(implicitTls ? 'secureConnect' : 'connect', resolve)
+    socket.once('error', reject)
+    socket.setTimeout(timeoutMs, () => reject(new Error('SMTP hết thời gian chờ')))
+  })
+  let activeSocket: Socket | TLSSocket = socket
+  let session = new SmtpSession(socket)
+  try {
+    const greeting = await session.read()
+    if (greeting.code !== 220) throw toolError(`SMTP từ chối kết nối: ${truncate(greeting.lines.join(' '), 300)}`)
+    let ehlo = await session.command('EHLO marketing-agent', [250])
+    if (!implicitTls && /STARTTLS/i.test(ehlo.lines.join(' '))) {
+      await session.command('STARTTLS', [220])
+      const secured = await upgradeToTls(socket, config.host)
+      activeSocket = secured
+      session = new SmtpSession(secured)
+      ehlo = await session.command('EHLO marketing-agent', [250])
+    }
+    if (config.user) {
+      await session.command('AUTH LOGIN', [334])
+      await session.command(Buffer.from(config.user, 'utf8').toString('base64'), [334])
+      await session.command(Buffer.from(config.password, 'utf8').toString('base64'), [235])
+    }
+    await session.command('QUIT', [221, 250])
+  } finally {
+    try { activeSocket.end() } catch { /* already closed */ }
+  }
+}
+
 async function authenticateAndSend(session: SmtpSession, input: SendMailInput): Promise<void> {
   const { config } = input
   if (config.user) {

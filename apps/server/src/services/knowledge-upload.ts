@@ -6,6 +6,8 @@ import { PDFParse } from 'pdf-parse'
 import { AppError, KB_CATEGORY_CODES } from '@marketing-agent/shared'
 
 export const KNOWLEDGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+/** Images use a lower limit because originals are sent to vision models. */
+export const KNOWLEDGE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 export const KNOWLEDGE_UPLOAD_MAX_CHARS = 2_000_000
 const MAX_FIELD_BYTES = 16 * 1024
 const MAX_FIELDS = 12
@@ -54,6 +56,7 @@ export async function parseKnowledgeUpload(req: IncomingMessage): Promise<{
   category?: string
   title?: string
   imageProduct?: string
+  imageBrand?: string
   tags: string[]
 }> {
   return await new Promise((resolve, reject) => {
@@ -66,6 +69,7 @@ export async function parseKnowledgeUpload(req: IncomingMessage): Promise<{
     let category: string | undefined
     let title: string | undefined
     let imageProduct: string | undefined
+    let imageBrand: string | undefined
     let tags: string[] = []
     const finishError = (err: unknown) => {
       if (settled) return
@@ -114,6 +118,7 @@ export async function parseKnowledgeUpload(req: IncomingMessage): Promise<{
       if (name === 'category') category = value
       else if (name === 'title') title = value
       else if (name === 'product' || name === 'productName') imageProduct = value.trim().slice(0, 200)
+      else if (name === 'brand' || name === 'brandName') imageBrand = value.trim().slice(0, 200)
       else if (name === 'tags') {
         try { tags = parseTags(value) } catch (error) { finishError(error) }
       } else finishError(new KnowledgeUploadValidationError(`Unexpected field: ${name}`))
@@ -128,7 +133,7 @@ export async function parseKnowledgeUpload(req: IncomingMessage): Promise<{
       if (category !== undefined && !CATEGORIES.has(category)) { finishError(new KnowledgeUploadValidationError('Invalid category')); return }
       if (title !== undefined && title.length > 200) { finishError(new KnowledgeUploadValidationError('Title is too long')); return }
       settled = true
-      resolve({ filename, mimeType, bytes: buffer, ...(category ? {category} : {}), ...(title ? { title } : {}), ...(imageProduct ? { imageProduct } : {}), tags })
+      resolve({ filename, mimeType, bytes: buffer, ...(category ? {category} : {}), ...(title ? { title } : {}), ...(imageProduct ? { imageProduct } : {}), ...(imageBrand ? { imageBrand } : {}), tags })
     })
     let received = 0
     req.on('data', (chunk: Buffer) => {
@@ -212,6 +217,7 @@ function signature(bytes: Buffer, filename: string): 'pdf' | 'docx' | 'text' | '
 export async function extractKnowledgeFile(filename: string, bytes: Buffer): Promise<{ content: string; mimeType: string; isImage?: boolean }> {
   if (!bytes.length || bytes.length > KNOWLEDGE_UPLOAD_MAX_BYTES) return invalid('File must be non-empty and no larger than 10 MiB')
   const kind = signature(bytes, filename)
+  if (kind === 'image' && bytes.length > KNOWLEDGE_IMAGE_MAX_BYTES) return invalid('Ảnh vượt quá 5 MiB')
   let extracted: string
   const task = (async () => {
     if (kind === 'image') extracted = ''

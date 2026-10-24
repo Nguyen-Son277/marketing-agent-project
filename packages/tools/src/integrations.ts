@@ -32,13 +32,23 @@ export interface FirecrawlConfig {
 
 export interface MetaConfig {
   readonly accessToken: string
+  readonly refreshToken?: string
+  readonly clientId?: string
+  readonly clientSecret?: string
+  readonly expiresAt?: string
   readonly pageId?: string
+  /** Instagram business account related to the selected Facebook Page. */
+  readonly instagramAccountId?: string
   readonly adAccountId?: string
   readonly apiVersion?: string
 }
 
 export interface LinkedInConfig {
   readonly accessToken: string
+  readonly refreshToken?: string
+  readonly clientId?: string
+  readonly clientSecret?: string
+  readonly expiresAt?: string
   readonly organizationUrn?: string
   readonly apiVersion?: string
 }
@@ -127,10 +137,51 @@ export class IntegrationStore {
     }
   }
 
+  /** Resolve OAuth credentials and refresh expiring Meta/LinkedIn tokens before use. */
+  async requireFresh<K extends 'meta' | 'linkedin'>(companyId: string, kind: K, displayName: string): Promise<IntegrationConfigMap[K]> {
+    const row = this.repos.accounting.findIntegration(companyId, kind)
+    if (!row || !row.configEnc) throw needsConfiguration(`Chưa kết nối ${displayName}. Vào Cài đặt → Kết nối để thêm, sau đó thử lại.`, { kind })
+    const config = this.repos.accounting.resolveIntegrationConfig<IntegrationConfigMap[K]>(row)
+    if (!config) throw needsConfiguration(`Cấu hình ${displayName} trống hoặc không đọc được. Hãy kết nối lại trong Cài đặt.`, { kind })
+    const expiresAt = 'expiresAt' in config && typeof config.expiresAt === 'string' ? Date.parse(config.expiresAt) : NaN
+    if (!Number.isFinite(expiresAt) || expiresAt > Date.now() + 60_000) return config
+    try {
+      const refreshed = await refreshOAuthToken(kind, config as MetaConfig | LinkedInConfig)
+      const next = { ...config, ...refreshed }
+      this.repos.accounting.updateIntegrationConfig(companyId, row.id, refreshed)
+      this.repos.accounting.markIntegrationChecked(row.id, companyId, 'connected')
+      return next
+    } catch (error) {
+      this.repos.accounting.markIntegrationChecked(row.id, companyId, 'token_expired')
+      throw needsConfiguration(`${displayName} cần kết nối lại vì token đã hết hạn.`, { kind })
+    }
+  }
+
   markChecked(companyId: string, kind: keyof IntegrationConfigMap, status: string): void {
     const row = this.repos.accounting.findIntegration(companyId, kind)
     if (row) this.repos.accounting.markIntegrationChecked(row.id, companyId, status)
   }
+}
+
+async function refreshOAuthToken(kind: 'meta' | 'linkedin', config: MetaConfig | LinkedInConfig): Promise<Record<string, string>> {
+  if (kind === 'linkedin') {
+    if (!config.refreshToken || !config.clientId || !config.clientSecret) throw new Error('missing refresh credentials')
+    const body = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: config.refreshToken, client_id: config.clientId, client_secret: config.clientSecret })
+    const response = await fetch('https://www.linkedin.com/oauth/v2/accessToken', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body })
+    const data = await response.json() as Record<string, unknown>
+    if (!response.ok || typeof data.access_token !== 'string') throw new Error('LinkedIn refresh failed')
+    return { accessToken: data.access_token, ...(typeof data.refresh_token === 'string' ? { refreshToken: data.refresh_token } : {}), ...(typeof data.expires_in === 'number' ? { expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString() } : {}) }
+  }
+  if (!config.clientId || !config.clientSecret) throw new Error('missing refresh credentials')
+  const url = new URL('https://graph.facebook.com/v21.0/oauth/access_token')
+  url.searchParams.set('grant_type', 'fb_exchange_token')
+  url.searchParams.set('client_id', config.clientId)
+  url.searchParams.set('client_secret', config.clientSecret)
+  url.searchParams.set('fb_exchange_token', config.accessToken)
+  const response = await fetch(url)
+  const data = await response.json() as Record<string, unknown>
+  if (!response.ok || typeof data.access_token !== 'string') throw new Error('Meta refresh failed')
+  return { accessToken: data.access_token, ...(typeof data.expires_in === 'number' ? { expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString() } : {}) }
 }
 
 /** Convenience for tools that only need the store built from a run context. */

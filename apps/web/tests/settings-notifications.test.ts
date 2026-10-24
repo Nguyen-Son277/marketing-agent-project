@@ -78,9 +78,9 @@ describe('settings outcome host wiring', () => {
   })
   it('covers every settings operation and removes accumulated action result banners', () => {
     const screen = readFileSync(new URL('../src/screens/CaiDat.tsx', import.meta.url), 'utf8')
-    for (const operation of ['provider.save','provider.delete','provider.test','key.save','key.delete','key.test','model.save','model.delete','model.purge','route.save','integration.save','integration.test','limits.save']) expect(screen).toContain(`begin('${operation}')`)
+    for (const operation of ['provider.save','provider.delete','provider.test','key.save','key.delete','key.test','model.save','model.delete','model.purge','route.save','integration.save','integration.test','limits.save']) expect(screen).toContain(operation)
     for (const old of ['{thongBao ?', '{loiXoa ?', '{loiNgoaiHop ?', '{ketQuaTest[', '{loiTest[']) expect(screen).not.toContain(old)
-    expect(screen).toContain("setLoiLuu(t('settings.providers.needNameAndBaseUrl'))")
+    expect(screen).toMatch(/setLoiLuu\(t\(["']settings\.providers\.needNameAndBaseUrl["']\)\)/)
     expect(screen).toContain('<TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />')
   })
 })

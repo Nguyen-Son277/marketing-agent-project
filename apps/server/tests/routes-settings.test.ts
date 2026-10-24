@@ -144,7 +144,7 @@ describe('settings routes', () => {
 
     const integration = await ctx.client.request('POST', `${base}/integrations`, {
       headers: ownerCookie,
-      body: { kind: 'firecrawl', name: 'Firecrawl', config: { apiKey: 'fc-123' } },
+      body: { kind: 'firecrawl', name: 'Firecrawl', config: { apiKey: 'fc-123', baseUrl: await startModelsServer([]) } },
     })
     expect(integration.status).toBe(201)
     const integrationId = integration.json<{ integration: { id: string } }>().integration.id

@@ -986,4 +986,11 @@ ALTER TABLE kb_documents ADD COLUMN image_analysis_error TEXT;
 CREATE INDEX idx_kb_product_images ON kb_documents(company_id, mime_type, image_product);
 `,
   },
+  {
+    id: '0024_kb_product_image_brand',
+    sql: `
+ALTER TABLE kb_documents ADD COLUMN image_brand TEXT;
+CREATE INDEX idx_kb_product_image_brand ON kb_documents(company_id, image_brand);
+`,
+  },
 ]

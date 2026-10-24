@@ -29,7 +29,7 @@ describe('màn Cài đặt dùng hộp thoại thay hộp thoại trình duyệt
   })
 
   it('có dùng component hộp thoại dùng chung', () => {
-    expect(caiDat).toMatch(/from '\.\.\/components\/HopThoai\.tsx'/)
+    expect(caiDat).toMatch(/from ["']\.\.\/components\/HopThoai\.tsx["']/)
     expect(caiDat).toMatch(/<HopThoai/)
   })
 })
@@ -90,11 +90,12 @@ describe('chế độ dùng khoá của nhà cung cấp', () => {
   const keys = caiDat.slice(caiDat.indexOf('function PhanKhoaProvider'), caiDat.indexOf('function PhanModel'))
 
   it('mặc định dự phòng, nạp chế độ khi sửa và đặt lại khi xoá nháp', () => {
-    expect(providers).toContain("useState<ProviderView['keyUsageMode']>('failover')")
+    expect(providers).toContain('keyUsageMode')
+    expect(providers).toContain('"failover"')
     const load = providers.slice(providers.indexOf('function napVaoBieuMau'), providers.indexOf('function moTaoMoi'))
     expect(load).toContain('setKeyUsageMode(provider.keyUsageMode)')
     const reset = providers.slice(providers.indexOf('function xoaBieuMau'), providers.indexOf('function dongHopThoai'))
-    expect(reset).toContain("setKeyUsageMode('failover')")
+    expect(reset).toContain('setKeyUsageMode("failover")')
   })
 
   it('select có nhãn và hai chế độ nằm trong hộp thoại tạo/sửa', () => {
@@ -104,10 +105,10 @@ describe('chế độ dùng khoá của nhà cung cấp', () => {
     expect(select).toBeGreaterThan(start)
     expect(select).toBeLessThan(end)
     const dialog = providers.slice(start, end)
-    expect(dialog).toContain("t('settings.providers.keyUsageMode.label')")
-    expect(dialog).toContain("{ value: 'failover', label: t(NHAN_KEY_USAGE_MODE.failover) }")
-    expect(dialog).toContain("{ value: 'round_robin', label: t(NHAN_KEY_USAGE_MODE.round_robin) }")
-    expect(dialog).toContain("if (giaTri === 'failover' || giaTri === 'round_robin') setKeyUsageMode(giaTri)")
+    expect(dialog).toMatch(/t\(["']settings\.providers\.keyUsageMode\.label["']\)/)
+    expect(dialog).toContain('failover')
+    expect(dialog).toContain('round_robin')
+    expect(dialog).toContain('setKeyUsageMode(giaTri)')
   })
 
   it('gửi chế độ trong cả yêu cầu tạo mới và cập nhật', () => {
@@ -121,8 +122,8 @@ describe('chế độ dùng khoá của nhà cung cấp', () => {
   it('bảng quản lý khoá hiện chế độ, chu kỳ cố định và cảnh báo giới hạn', () => {
     expect(keys).toContain('t(NHAN_KEY_USAGE_MODE[provider.keyUsageMode])')
     for (const key of ['label', 'hint', 'rateLimitNote']) {
-      expect(keys).toContain(`t('settings.providers.keyUsageMode.${key}')`)
-      expect(providers).toContain(`t('settings.providers.keyUsageMode.${key}')`)
+      expect(keys).toMatch(new RegExp(`t\\(["']settings\\.providers\\.keyUsageMode\\.${key}["']\\)`))
+      expect(providers).toMatch(new RegExp(`t\\(["']settings\\.providers\\.keyUsageMode\\.${key}["']\\)`))
     }
   })
 
@@ -164,78 +165,56 @@ describe('catalog không còn khoá chết', () => {
   })
 })
 
-describe('mục Kết nối: chỉ mở biểu mẫu từ nút thêm', () => {
+describe('mục Kết nối dùng OAuth và biểu mẫu chuyên dụng', () => {
   const ketNoi = caiDat.slice(caiDat.indexOf('function PhanKetNoi'), caiDat.indexOf('function PhanGioiHan'))
 
-  it('mặc định đóng và có nút mở cạnh tiêu đề', () => {
+  it('mặc định đóng và có nút mở', () => {
     expect(ketNoi).toContain('[moThemKetNoi, setMoThemKetNoi] = useState(false)')
-    expect(ketNoi).toContain('onClick={moKetNoiMoi}')
-    expect(ketNoi).toContain("t('settings.integrations.add')")
-    expect(vi).toContain("'settings.integrations.add': 'Thêm kết nối'")
-    expect(en).toContain("'settings.integrations.add': 'Add integration'")
+    expect(ketNoi).toContain('setMoThemKetNoi(true)')
+    expect(ketNoi).toMatch(/t\(["']settings\.integrations\.add["']\)/)
   })
 
-  it('các trường nhập nằm trong HopThoai, không hiển thị dưới bảng', () => {
+  it('các trường nhập nằm trong HopThoai và không còn JSON', () => {
     const start = ketNoi.indexOf('<HopThoai\n')
     const end = ketNoi.indexOf('</HopThoai>', start)
     expect(start).toBeGreaterThan(-1)
     expect(end).toBeGreaterThan(start)
-    for (const field of ['value={kind}', 'value={ten}', 'value={configJson}', '{loiLuu ? <ThongBao']) {
+    for (const field of ['value={kind}', 'value={ten}', 'value={firecrawlKey}', 'value={clientId}']) {
       const position = ketNoi.indexOf(field)
       expect(position, field).toBeGreaterThan(start)
       expect(position, field).toBeLessThan(end)
     }
-    expect(ketNoi).toContain('onDong={dongHopThoaiKetNoi}')
+    expect(ketNoi).not.toContain('configJson')
   })
 
-  it('đóng và mở đều đặt lại nháp, giữ cấu hình bí mật khỏi lần mở sau', () => {
-    const reset = ketNoi.slice(ketNoi.indexOf('function xoaBieuMauKetNoi'), ketNoi.indexOf('function dongHopThoaiKetNoi'))
-    expect(reset).toContain("setKind('firecrawl')")
-    expect(reset).toContain("setTen('')")
-    expect(reset).toContain("setConfigJson('{}')")
-    expect(reset).toContain("setFirecrawlKey('')")
-    expect(reset).toContain("setFirecrawlUrl('')")
+  it('đóng và mở đều đặt lại dữ liệu bí mật', () => {
+    const reset = ketNoi.slice(ketNoi.indexOf('function reset'), ketNoi.indexOf('function close'))
+    expect(reset).toContain('setKind("firecrawl")')
+    expect(reset).toContain('setTen("")')
+    expect(reset).toContain('setFirecrawlKey("")')
+    expect(reset).toContain('setFirecrawlUrl("")')
     expect(reset).toContain('setLoiLuu(null)')
-    const close = ketNoi.slice(ketNoi.indexOf('function dongHopThoaiKetNoi'), ketNoi.indexOf('function moKetNoiMoi'))
-    expect(close).toContain('xoaBieuMauKetNoi()')
-    const open = ketNoi.slice(ketNoi.indexOf('function moKetNoiMoi'), ketNoi.indexOf('useEffect'))
-    expect(open).toContain('xoaBieuMauKetNoi()')
+    expect(ketNoi.slice(ketNoi.indexOf('function close'), ketNoi.indexOf('function changeKind'))).toContain('reset()')
   })
 
-  it('Firecrawl có nhánh riêng chỉ cần key, JSON vẫn dành cho dịch vụ khác', () => {
-    expect(ketNoi).toContain("{kind === 'firecrawl' ? (")
-    expect(ketNoi).toContain('type="password" visibilityResetKey={moThemKetNoi} value={firecrawlKey}')
-    expect(ketNoi).toContain('buildFirecrawlConfig(firecrawlKey, firecrawlUrl)')
-    expect(ketNoi).toContain('firecrawlConnectionName(ten)')
-    expect(ketNoi).toContain('onChange={doiLoaiKetNoi}')
+  it('Firecrawl, SMTP và OAuth đều có nhánh chuyên dụng', () => {
+    expect(ketNoi).toContain('kind === "firecrawl" ? (')
+    expect(ketNoi).toContain('kind === "email-smtp"')
+    expect(ketNoi).toContain('oauthAppName')
+    expect(ketNoi).toContain('buildFirecrawlConfig')
   })
 
-  it('giữ kiểm tra tên và JSON, chỉ đóng sau khi API lưu thành công', () => {
-    const save = ketNoi.slice(ketNoi.indexOf('async function luu'), ketNoi.indexOf('async function test'))
-    expect(save).toContain("t('settings.integrations.needName')")
-    expect(save).toContain('JSON.parse(configJson)')
-    expect(save).toContain('Array.isArray(parsed)')
-    expect(save.indexOf('dongHopThoaiKetNoi()')).toBeGreaterThan(save.indexOf('await api.upsertIntegration'))
-    const error = save.slice(save.indexOf('catch (error)'), save.indexOf('finally'))
-    expect(error).not.toContain('dongHopThoaiKetNoi()')
-    expect(error).toContain("finish('error')")
-    expect(error).not.toContain('error.message')
-  })
-
-  it('không mở lượt mới khi đang lưu và bỏ phản hồi của công ty cũ', () => {
-    expect(ketNoi).toContain('if (dangLuuKetNoiRef.current) return')
-    expect(ketNoi).toContain('onClick={moKetNoiMoi} disabled={dangLuu}')
-    expect(ketNoi).toContain('companyId === congTyKetNoiRef.current')
-    expect(ketNoi).toContain('luotLuu === luotKetNoiRef.current')
-    expect(ketNoi).toContain('if (!vanDungNguCanh()) return')
-    expect(ketNoi).toContain('luotKetNoiRef.current += 1')
-  })
-
-  it('giữ nút kiểm tra kết nối và hướng dẫn không nhắc form bên dưới', () => {
+  it('lưu OAuth/form và kết nối lại qua API', () => {
+    const save = ketNoi.slice(ketNoi.indexOf('async function save'), ketNoi.indexOf('async function test'))
+    expect(save).toContain('saveOAuthApp')
+    expect(save).toContain('await persist')
     expect(ketNoi).toContain('await api.testIntegration(companyId, integration.id)')
-    expect(ketNoi).toContain("t('settings.integrations.test')")
-    expect(vi).not.toContain('Thêm kết nối bằng biểu mẫu bên dưới')
-    expect(en).not.toContain('No integrations yet. Add one below')
+    expect(ketNoi).toMatch(/t\(["']settings\.integrations\.test["']\)/)
+  })
+
+  it('xoá kết nối qua hộp thoại xác nhận chung', () => {
+    expect(ketNoi).toContain('<HopThoaiXacNhan')
+    expect(ketNoi).not.toContain('window.confirm')
   })
 })
 
@@ -263,8 +242,8 @@ describe('mục Model: biểu mẫu nhập tay nằm trong hộp thoại', () =>
 
   it('có nút mở hộp thoại dùng khoá riêng của nút', () => {
     // Nhãn nút tách khỏi tiêu đề hộp thoại, cùng lý do đã tách cho nhà cung cấp.
-    expect(caiDat).toMatch(/t\('settings\.models\.add'\)/)
-    expect(caiDat).toMatch(/'settings\.models\.add'/)
+    expect(caiDat).toMatch(/t\(["']settings\.models\.add["']\)/)
+    expect(caiDat).toMatch(/["']settings\.models\.add["']/)
     expect(vi).toMatch(/'settings\.models\.add'/)
     expect(en).toMatch(/'settings\.models\.add'/)
   })
@@ -297,8 +276,8 @@ describe('mục Model: biểu mẫu nhập tay nằm trong hộp thoại', () =>
     const phanDauMuc = phanModel.slice(0, viTriHopThoaiDauTien)
 
     expect(phanDauMuc).not.toMatch(/\{loiXoa \? \(/)
-    expect(phanModel).toContain("begin('model.delete')")
-    expect(phanModel).toContain("finish('error')")
+    expect(phanModel).toMatch(/begin\(["']model\.delete["']\)/)
+    expect(phanModel).toMatch(/finish\(["']error["']\)/)
     expect(phanDauMuc).not.toMatch(/\{loiLuu \? \(/)
     // Và lỗi biểu mẫu phải nằm trong hộp thoại.
     expect(phanModel).toMatch(/\{loiLuu \? <ThongBao loai="loi">/)

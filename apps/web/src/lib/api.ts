@@ -633,6 +633,17 @@ export const api = {
     );
   },
 
+  async updateKnowledgeImageMetadata(
+    companyId: string,
+    documentId: string,
+    input: { product?: string; brand?: string; description?: string; tags?: string[] },
+  ): Promise<{ document: KnowledgeDocumentView }> {
+    return request(
+      `/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}/image-metadata`,
+      { method: "PATCH", body: input },
+    );
+  },
+
   async deleteKnowledge(companyId: string, documentId: string): Promise<void> {
     await request(`/api/companies/${companyId}/knowledge/${documentId}`, {
       method: "DELETE",
@@ -1057,6 +1068,10 @@ export const api = {
 
   async saveOAuthApp(companyId: string, provider: string, input: { clientId: string; clientSecret: string; name?: string }): Promise<void> {
     await request(`/api/companies/${encodeURIComponent(companyId)}/oauth/${encodeURIComponent(provider)}/app`, { method: "PATCH", body: input });
+  },
+
+  async oauthApp(companyId: string, provider: string): Promise<{ configured: boolean; name: string | null }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/oauth/${encodeURIComponent(provider)}/app`);
   },
 
   async integrationOptions(

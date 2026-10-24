@@ -51,6 +51,7 @@ export interface RunAgentForTaskInput {
   readonly signal?: AbortSignal | undefined
   readonly log?: ((message: string, data?: unknown) => void) | undefined
   readonly publish?: ((event: AppEvent) => void) | undefined
+  readonly productImageContext?: ((companyId: string, query: string, includeImages: boolean, limit: number) => Promise<{ context: string; images: readonly import('@marketing-agent/shared').LlmImage[] }>) | undefined
 }
 
 export interface RunAgentForTaskResult {
@@ -127,11 +128,22 @@ export async function runAgentForTask(input: RunAgentForTaskInput): Promise<RunA
     input.log?.(`Agent ${resolved.role} không có công cụ nào được cấp`)
   }
 
+  let imageContext = ''
+  let productImages: readonly import('@marketing-agent/shared').LlmImage[] = []
+  if (input.productImageContext) {
+    try {
+      const matched = await input.productImageContext(input.companyId, input.taskBrief, resolved.model?.supportsVision === true, 3)
+      imageContext = matched.context
+      productImages = matched.images
+    } catch (error) {
+      input.log?.('Không nạp được ngữ cảnh ảnh sản phẩm; tiếp tục bằng metadata', { error: error instanceof Error ? error.message : String(error) })
+    }
+  }
   const taskPrompt = composeTaskPrompt({
     role: resolved.role,
     displayName: resolved.displayName,
     taskBrief: input.taskBrief,
-    extraContext: input.extraContext,
+    extraContext: [input.extraContext, imageContext].filter((value): value is string => Boolean(value && value.trim())).join('\n\n'),
     ...(input.locale ? { locale: input.locale } : {}),
   })
 
@@ -156,7 +168,7 @@ export async function runAgentForTask(input: RunAgentForTaskInput): Promise<RunA
     {
       agent: resolved,
       context: toolContext,
-      messages: [{ role: 'user', content: taskPrompt, ...(input.images?.length ? { images: input.images } : {}) }],
+      messages: [{ role: 'user', content: taskPrompt, ...((input.images?.length || productImages.length) ? { images: [...(input.images ?? []), ...productImages] } : {}) }],
       tools: granted,
       observe,
       ...(input.maxSteps !== undefined ? { maxSteps: input.maxSteps } : {}),

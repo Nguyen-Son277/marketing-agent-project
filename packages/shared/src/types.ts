@@ -226,6 +226,7 @@ export interface KbDocumentRecord {
   readonly originalChecksum?: string | null
   /** Product image metadata; populated only for image uploads. */
   readonly imageProduct?: string | null
+  readonly imageBrand?: string | null
   readonly imageDescription?: string | null
   readonly imageAnalysisStatus?: 'none' | 'pending' | 'running' | 'ready' | 'failed'
   readonly imageAnalysisError?: string | null

@@ -26,6 +26,7 @@ import {
   updateModelSchema,
   updateProviderKeySchema,
   updateProviderSchema,
+  validation,
 } from '@marketing-agent/shared'
 import type {
   FetchModelsResponse,
@@ -49,6 +50,7 @@ import type { Router } from '../http/router.ts'
 import { invalidateOrchestrators, probeProvider } from '../services/agent-services.ts'
 import { readLimitsView, saveLimits } from '../services/company-settings.ts'
 import { toIntegrationView, toModelOptionView, toModelRouteView, toProviderView } from '../services/view-mappers.ts'
+import { verifyFirecrawlConnection, verifySmtpConnection } from '@marketing-agent/tools'
 
 /** Bổ sung `enabled` cho model vì `CreateModelBody` của hợp đồng không có trường này. */
 const createModelBodySchema = createModelSchema
@@ -512,15 +514,8 @@ export function settingsRoutes() {
         async (request) => {
           const companyId = request.params.companyId!
           const input = parseOrThrow(upsertIntegrationSchema, await request.body(), 'kết nối')
-          // OAuth credentials are entered in dedicated fields by the settings UI.
-          // Keep the legacy integration row for compatibility, while storing the
-          // provider app credentials in the encrypted OAuth app table used by the
-          // browser redirect flow.
-          const oauthProvider = typeof input.config.oauthProvider === 'string' ? input.config.oauthProvider : undefined
-          if (oauthProvider === 'google' || oauthProvider === 'meta' || oauthProvider === 'linkedin') {
-            const clientId = typeof input.config.clientId === 'string' ? input.config.clientId.trim() : ''
-            const clientSecret = typeof input.config.clientSecret === 'string' ? input.config.clientSecret.trim() : ''
-            if (clientId && clientSecret) repos.oauth.upsertApp({ companyId, provider: oauthProvider, clientId, clientSecret, name: input.name })
+          if (input.kind !== 'firecrawl' && input.kind !== 'email-smtp') {
+            throw validation('Kết nối Google, Meta và LinkedIn phải dùng nút OAuth; không nhận cấu hình JSON mới')
           }
           const record = repos.accounting.upsertIntegration({
             companyId,
@@ -553,7 +548,7 @@ export function settingsRoutes() {
           const companyId = request.params.companyId!
           const record = repos.accounting.requireIntegration(request.params.integrationId!, companyId)
           const started = Date.now()
-          const result = testIntegrationConfig(repos, record.kind, record.configEnc, record.configIv)
+          const result = await testIntegrationConfig(repos, record.kind, record.configEnc, record.configIv)
           repos.accounting.markIntegrationChecked(record.id, companyId, result.status)
           const response: IntegrationTestResponse = {
             ok: result.ok,
@@ -697,12 +692,12 @@ function modelRouteViews(repos: AppContext['repos'], companyId: string): ModelRo
  * Kiểm tra một cấu hình kết nối mà KHÔNG gọi mạng: xác nhận giải mã được và có đủ
  * trường bắt buộc. Kiểm tra sống còn thật sự cần quyền truy cập dịch vụ ngoài.
  */
-function testIntegrationConfig(
+async function testIntegrationConfig(
   repos: AppContext['repos'],
   kind: IntegrationKind,
   configEnc: string | null,
   configIv: string | null,
-): { ok: boolean; status: string; message: string } {
+): Promise<{ ok: boolean; status: string; message: string }> {
   let config: Record<string, unknown> | undefined
   try {
     config = repos.secrets.decryptJson<Record<string, unknown>>(configEnc, configIv)
@@ -718,6 +713,20 @@ function testIntegrationConfig(
   })
   if (missing.length > 0) {
     return { ok: false, status: 'invalid', message: `Thiếu trường bắt buộc: ${missing.join(', ')}.` }
+  }
+  if (kind === 'email-smtp') {
+    try {
+      await verifySmtpConnection(config as { host: string; port: number; user: string; password: string; from: string }, 8_000)
+    } catch (error) {
+      return { ok: false, status: 'error', message: error instanceof Error ? error.message : 'Không kết nối được SMTP.' }
+    }
+  }
+  if (kind === 'firecrawl') {
+    try {
+      await verifyFirecrawlConnection(config as { apiKey: string; baseUrl?: string }, 8_000)
+    } catch (error) {
+      return { ok: false, status: 'error', message: error instanceof Error ? error.message : 'Không kết nối được Firecrawl.' }
+    }
   }
   return { ok: true, status: 'ok', message: 'Cấu hình hợp lệ và đã giải mã được.' }
 }

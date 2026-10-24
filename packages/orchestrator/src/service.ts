@@ -91,6 +91,7 @@ export class ConversationOrchestrator implements CoordinationHost {
   private readonly publish: ((event: AppEvent) => void) | undefined
   private readonly log: ((message: string, data?: unknown) => void) | undefined
   private readonly runtimeOverrides: Partial<AgentRuntimeDeps> | undefined
+  private readonly productImageContext: OrchestratorDeps['productImageContext']
   private readonly writeDiagnostic:
     | ((name: string, content: string) => void | Promise<void>)
     | undefined
@@ -110,6 +111,7 @@ export class ConversationOrchestrator implements CoordinationHost {
     }
     this.log = deps.log
     this.runtimeOverrides = deps.runtimeOverrides
+    this.productImageContext = deps.productImageContext
     this.writeDiagnostic = deps.writeDiagnostic
   }
 
@@ -507,6 +509,7 @@ Conversation:\n${history}`})
       tools: this.tools,
       embedding: this.embedding,
       runtimeOverrides: this.runtimeOverrides,
+      productImageContext: this.productImageContext,
       publish: this.publish,
       companyId: input.companyId,
       conversationId: conversation.id,
@@ -523,6 +526,7 @@ Conversation:\n${history}`})
       tools: this.tools,
       embedding: this.embedding,
       runtimeOverrides: this.runtimeOverrides,
+      productImageContext: this.productImageContext,
       publish: this.publish,
       companyId: input.companyId,
       conversationId: conversation.id,

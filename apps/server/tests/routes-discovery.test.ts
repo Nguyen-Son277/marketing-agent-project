@@ -68,6 +68,6 @@ describe('route discovery', () => {
     for (const [method, path] of paths) {
       expect(app.router.match(method, path), `thiếu route ${method} ${path}`).toBeDefined()
     }
-    expect(optionalRouteModules()).toHaveLength(9)
+    expect(optionalRouteModules()).toHaveLength(10)
   })
 })

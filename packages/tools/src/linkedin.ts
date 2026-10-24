@@ -64,7 +64,7 @@ export function createLinkedInTools(store: IntegrationStore) {
     roles: ['social-media', 'content-writer'],
     requiresApproval: true,
     async handler(args, ctx): Promise<ToolResult> {
-      const config = store.require(ctx.companyId, 'linkedin', 'LinkedIn')
+      const config = await store.requireFresh(ctx.companyId, 'linkedin', 'LinkedIn')
       const commentary = requireStringArg(args, 'commentary')
       const link = optionalStringArg(args, 'link')
       const title = optionalStringArg(args, 'title')
@@ -143,7 +143,7 @@ export function createLinkedInTools(store: IntegrationStore) {
     },
     roles: ['social-media', 'analytics'],
     async handler(args, ctx): Promise<ToolResult> {
-      const config = store.require(ctx.companyId, 'linkedin', 'LinkedIn')
+      const config = await store.requireFresh(ctx.companyId, 'linkedin', 'LinkedIn')
       const organizationUrn = config.organizationUrn
       if (!organizationUrn) {
         throw toolError('Chưa cấu hình organizationUrn cho LinkedIn, không thể lấy số liệu tổ chức.')

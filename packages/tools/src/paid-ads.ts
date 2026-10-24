@@ -48,7 +48,7 @@ export function createPaidAdsTools(store: IntegrationStore) {
     requiresApproval: true,
     async handler(args, ctx): Promise<ToolResult> {
       const action = optionalStringArg(args, 'action') ?? 'plan'
-      const config = store.optional(ctx.companyId, 'meta')
+      const config = action === 'plan' ? store.optional(ctx.companyId, 'meta') : await store.requireFresh(ctx.companyId, 'meta', 'Meta (Facebook / Instagram)')
 
       if (action === 'plan') {
         const objective = optionalStringArg(args, 'objective')

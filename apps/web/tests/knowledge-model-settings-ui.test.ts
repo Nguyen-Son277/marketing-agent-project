@@ -18,7 +18,7 @@ describe('knowledge classification model settings', () => {
 
   it('uses the classification settings GET, PUT and saved-settings test endpoints', () => {
     expect(api).toContain('/knowledge/classification/settings`')
-    expect(api).toContain("method: 'PUT'")
+    expect(api).toMatch(/method: ["']PUT["']/)
     expect(api).toContain('/knowledge/classification/settings/test')
     expect(component).toContain('api.testClassificationModelSettings(requestCompany)')
     expect(component).toContain('disabled={changed}')

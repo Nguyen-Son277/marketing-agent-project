@@ -85,7 +85,7 @@ export function createMetaTools(store: IntegrationStore) {
     },
     roles: ['social-media', 'paid-media', 'community-care', 'analytics'],
     async handler(args, ctx): Promise<ToolResult> {
-      const config = store.require(ctx.companyId, 'meta', 'Meta (Facebook / Instagram)')
+      const config = await store.requireFresh(ctx.companyId, 'meta', 'Meta (Facebook / Instagram)')
       const target = optionalStringArg(args, 'target') ?? 'page'
       const requestedMetrics = readStringList(args['metrics'])
       const period = optionalStringArg(args, 'period') ?? 'day'
@@ -133,10 +133,12 @@ export function createMetaTools(store: IntegrationStore) {
         }
       }
 
-      const pageId = config.pageId
+      const pageId = target === 'instagram' ? (config.instagramAccountId ?? config.pageId) : config.pageId
       if (!pageId) {
         throw toolError(
-          'Chưa cấu hình pageId cho Meta. Thêm pageId trong Cài đặt → Kết nối.',
+          target === 'instagram'
+            ? 'Chưa cấu hình tài khoản Instagram cho Meta. Chọn Instagram liên quan trong Cài đặt → Kết nối.'
+            : 'Chưa cấu hình pageId cho Meta. Thêm pageId trong Cài đặt → Kết nối.',
         )
       }
       const metrics =
@@ -203,7 +205,7 @@ export function createMetaTools(store: IntegrationStore) {
     roles: ['social-media', 'community-care'],
     requiresApproval: true,
     async handler(args, ctx): Promise<ToolResult> {
-      const config = store.require(ctx.companyId, 'meta', 'Meta (Facebook / Instagram)')
+      const config = await store.requireFresh(ctx.companyId, 'meta', 'Meta (Facebook / Instagram)')
       const message = requireStringArg(args, 'message')
       const link = optionalStringArg(args, 'link')
       const published = args['published'] === true || ctx.automation !== undefined

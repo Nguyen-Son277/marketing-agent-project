@@ -12,6 +12,7 @@ import { fetchWithTimeout, readBounded } from './http-client.ts'
 import { defineTool, optionalNumberArg, optionalStringArg, requireStringArg } from './registry.ts'
 import type { IntegrationStore } from './integrations.ts'
 import { API_VERSIONS } from './integrations.ts'
+import type { FirecrawlConfig } from './integrations.ts'
 
 export interface HttpToolOptions {
   /** Hosts (or `*.suffix` patterns) the fetch tool may reach. Empty = public internet minus private ranges. */
@@ -27,6 +28,22 @@ export interface HttpToolOptions {
 const DEFAULT_TIMEOUT_MS = 20_000
 const DEFAULT_MAX_BYTES = 2_000_000
 const DEFAULT_MAX_SCRAPE_CHARS = 12_000
+
+/** Verify a Firecrawl key with a bounded, minimal search request. */
+export async function verifyFirecrawlConnection(config: FirecrawlConfig, timeoutMs = 8_000): Promise<void> {
+  const base = (config.baseUrl ?? 'https://api.firecrawl.dev').replace(/\/+$/, '')
+  const response = await fetchWithTimeout(
+    `${base}/${API_VERSIONS.firecrawl}/search`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
+      body: JSON.stringify({ query: 'marketing-agent connection test', limit: 1 }),
+    },
+    timeoutMs,
+  )
+  const text = await readBounded(response, 4_000)
+  if (!response.ok) throw toolError(`Firecrawl trả lỗi HTTP ${response.status}: ${truncate(text, 300)}`)
+}
 
 /** Private/link-local ranges a server-side fetch must never reach. */
 const BLOCKED_HOST_PATTERNS = [

@@ -20,7 +20,7 @@ describe('knowledge file-first uploads', () => {
 
   it('uses file-only multipart upload and exposes classification/detail endpoints', () => {
     expect(api).toContain('async uploadKnowledge(')
-    expect(api).toContain("form.append('file', input.file)")
+    expect(api).toContain('form.append("file", input.file)')
     expect(api).toContain('if (input.category) form.append')
     expect(api).toContain('if (input.tags) form.append')
     expect(api).toContain('classification/retry')
@@ -49,7 +49,7 @@ describe('knowledge file-first uploads', () => {
   it('distinguishes classification failures, pending documents, and ready lexical-only documents', () => {
     expect(api).toContain('chunkCount?: number')
     expect(api).toContain('classificationNextAttemptAt?: string | null')
-    expect(api).toContain('async retryFailedKnowledge(companyId: string)')
+    expect(api).toContain('async retryFailedKnowledge(')
     expect(screen).toContain('knowledge.noSearchableData')
     expect(screen).toContain('knowledge.processingNoSearch')
     expect(screen).toContain('knowledge.retryBackoff')

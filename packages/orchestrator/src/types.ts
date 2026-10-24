@@ -9,7 +9,7 @@
 import type { Repos } from '@marketing-agent/db'
 import type { EmbeddingProvider } from '@marketing-agent/kb'
 import type { ToolRegistry } from '@marketing-agent/tools'
-import type { ClarificationRequest } from '@marketing-agent/shared'
+import type { ClarificationRequest, LlmImage } from '@marketing-agent/shared'
 import type { AgentRunResult } from '@marketing-agent/agent-runtime'
 import type { AppEvent } from './events.ts'
 
@@ -141,6 +141,8 @@ export interface OrchestratorDeps {
     | undefined
   /** Ghi đè tham số chạy agent, dùng trong test để chèn adapter giả. */
   readonly runtimeOverrides?: Partial<Pick<import('@marketing-agent/agent-runtime').AgentRuntimeDeps, 'adapter' | 'adapters' | 'router' | 'meterFactory'>> | undefined
+  /** Product-image context loader. Descriptions are always supplied; raw bytes only when the selected model supports vision. */
+  readonly productImageContext?: ((companyId: string, query: string, includeImages: boolean, limit: number) => Promise<{ context: string; images: readonly LlmImage[] }>) | undefined
 }
 
 export const DEFAULT_LIMITS: OrchestratorLimits = {

@@ -34,6 +34,7 @@ interface DocRow {
   storage_key: string | null
   original_checksum: string | null
   image_product: string | null
+  image_brand: string | null
   image_description: string | null
   image_analysis_status: 'none' | 'pending' | 'running' | 'ready' | 'failed'
   image_analysis_error: string | null
@@ -117,6 +118,7 @@ const toDocument = (row: DocRow): KbDocumentRecord => ({
   storageKey: row.storage_key,
   originalChecksum: row.original_checksum,
   imageProduct: row.image_product,
+  imageBrand: row.image_brand,
   imageDescription: row.image_description,
   imageAnalysisStatus: row.image_analysis_status,
   imageAnalysisError: row.image_analysis_error,
@@ -163,6 +165,7 @@ export interface UploadMetadata {
   readonly storageKey: string | null
   readonly originalChecksum: string | null
   readonly imageProduct?: string | null
+  readonly imageBrand?: string | null
   readonly imageDescription?: string | null
   readonly imageAnalysisStatus?: 'none' | 'pending' | 'running' | 'ready' | 'failed'
   readonly imageAnalysisError?: string | null
@@ -203,10 +206,11 @@ export class KnowledgeRepo {
     return this.db.run(
       `UPDATE kb_documents SET original_name = @originalName, mime_type = @mimeType,
          size_bytes = @sizeBytes, storage_key = @storageKey, original_checksum = @originalChecksum,
-         image_product = COALESCE(@imageProduct, image_product), image_description = COALESCE(@imageDescription, image_description),
+         image_product = COALESCE(@imageProduct, image_product), image_brand = COALESCE(@imageBrand, image_brand),
+         image_description = COALESCE(@imageDescription, image_description),
          image_analysis_status = COALESCE(@imageAnalysisStatus, image_analysis_status), image_analysis_error = @imageAnalysisError
        WHERE company_id = @companyId AND id = @documentId`,
-      { imageProduct: null, imageDescription: null, imageAnalysisStatus: null, imageAnalysisError: null, ...metadata, companyId, documentId },
+      { imageProduct: null, imageBrand: null, imageDescription: null, imageAnalysisStatus: null, imageAnalysisError: null, ...metadata, companyId, documentId },
     ).changes > 0
   }
 
@@ -240,7 +244,17 @@ export class KnowledgeRepo {
   listProductImages(companyId: string, query?: string, limit = 50): KbDocumentRecord[] {
     const params: unknown[] = [companyId]
     let sql = `SELECT * FROM kb_documents WHERE company_id = ? AND mime_type LIKE 'image/%'`
-    if (query?.trim()) { sql += ' AND (title LIKE ? OR image_product LIKE ? OR image_description LIKE ? OR tags_json LIKE ?)'; const like = `%${query.trim()}%`; params.push(like, like, like, like) }
+    const tokens = imageSearchTokens(query)
+    if (query?.trim() && tokens.length === 0) {
+      sql += ' AND 1 = 0'
+    } else if (tokens.length > 0) {
+      const clauses = tokens.map(() => '(title LIKE ? OR image_product LIKE ? OR image_brand LIKE ? OR image_description LIKE ? OR tags_json LIKE ?)')
+      sql += ` AND (${clauses.join(' OR ')})`
+      for (const token of tokens) {
+        const like = `%${token}%`
+        params.push(like, like, like, like, like)
+      }
+    }
     sql += ' ORDER BY updated_at DESC LIMIT ?'; params.push(limit)
     return this.db.all<DocRow>(sql, params).map(toDocument)
   }
@@ -690,6 +704,24 @@ export class KnowledgeRepo {
       categories: categories?.n ?? 0,
     }
   }
+}
+
+/** Extract a small set of meaningful terms from a brief for image matching. */
+function imageSearchTokens(query: string | undefined): string[] {
+  if (!query?.trim()) return []
+  const stopWords = new Set([
+    'của', 'cho', 'với', 'vào', 'trong', 'theo', 'một', 'những', 'các', 'này', 'để', 'và', 'là',
+    'từ', 'trên', 'sản', 'phẩm', 'ảnh', 'hình', 'báo', 'cáo', 'tạo', 'dùng', 'thực', 'hiện',
+    'the', 'that', 'this', 'with', 'from', 'and', 'for', 'use', 'into', 'report', 'create',
+  ])
+  return [...new Set(
+    query
+      .normalize('NFKC')
+      .toLocaleLowerCase('vi-VN')
+      .match(/[\p{L}\p{N}]{3,}/gu) ?? [],
+  )]
+    .filter((token) => !stopWords.has(token))
+    .slice(0, 12)
 }
 
 /** Anchor link mirroring the GitHub heading slug so agents can cite a section. */

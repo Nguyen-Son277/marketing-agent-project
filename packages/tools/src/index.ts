@@ -116,7 +116,7 @@ export { IntegrationStore } from './integrations.ts'
 export type { CoordinationHost, PlannedTaskInput, PlannedTaskResult } from './coordination.ts'
 export type { CoreToolOptions } from './core.ts'
 export { hasCycle, topologicalOrder } from './coordination.ts'
-export { isBlockedHost, isHostAllowed, htmlToText } from './http-tools.ts'
+export { isBlockedHost, isHostAllowed, htmlToText, verifyFirecrawlConnection } from './http-tools.ts'
 export type { IntegrationConfigMap, IntegrationStatus } from './integrations.ts'
 export {
   defineTool,
@@ -126,6 +126,6 @@ export {
   requireStringArg,
 } from './registry.ts'
 export { fetchWithTimeout, parseJsonResponse, readBounded, extractErrorMessage } from './http-client.ts'
-export { sendMail, buildMimeMessage, extractAddress, buildMessageId } from './email.ts'
+export { sendMail, verifySmtpConnection, buildMimeMessage, extractAddress, buildMessageId } from './email.ts'
 export type { SendMailInput } from './email.ts'
 export { SocialBrowserService, createSocialBrowserTools, browserAssetPath, assertBrowserWorkerEndpoint } from './social-browser.ts'

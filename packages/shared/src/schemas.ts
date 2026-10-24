@@ -254,7 +254,16 @@ export const firecrawlConfigSchema = z.object({
       return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash
     } catch { return false }
   }, 'URL phải là HTTP/HTTPS, không chứa thông tin đăng nhập, query hoặc fragment').optional(),
-}).passthrough()
+}).strict()
+
+/** SMTP credentials are entered field-by-field in Settings; arbitrary JSON is not accepted. */
+export const smtpConfigSchema = z.object({
+  host: z.string().trim().min(1, 'Cần máy chủ SMTP').max(255),
+  port: z.coerce.number().int().min(1).max(65_535),
+  user: z.string().trim().min(1, 'Cần tài khoản SMTP').max(320),
+  password: z.string().min(1, 'Cần mật khẩu SMTP').max(2_000),
+  from: z.string().trim().min(1, 'Cần địa chỉ gửi').max(320),
+}).strict()
 
 export const upsertIntegrationSchema = z.object({
   kind: integrationKindSchema,
@@ -262,14 +271,17 @@ export const upsertIntegrationSchema = z.object({
   /** Integration secrets/credentials, encrypted before storage. */
   config: z.record(z.unknown()),
 }).superRefine((input, ctx) => {
-  if (input.kind !== 'firecrawl') return
-  const result = firecrawlConfigSchema.safeParse(input.config)
+  if (input.kind !== 'firecrawl' && input.kind !== 'email-smtp') return
+  const schema = input.kind === 'firecrawl' ? firecrawlConfigSchema : smtpConfigSchema
+  const result = schema.safeParse(input.config)
   if (!result.success) {
     for (const issue of result.error.issues) ctx.addIssue({ ...issue, path: ['config', ...issue.path] })
   }
 }).transform((input) => input.kind === 'firecrawl'
   ? { ...input, config: firecrawlConfigSchema.parse(input.config) }
-  : input)
+  : input.kind === 'email-smtp'
+    ? { ...input, config: smtpConfigSchema.parse(input.config) }
+    : input)
 export type UpsertIntegrationInput = z.infer<typeof upsertIntegrationSchema>
 
 export const costQuerySchema = z.object({

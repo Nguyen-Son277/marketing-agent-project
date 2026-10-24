@@ -201,6 +201,30 @@ describe('knowledge routes', () => {
     expect((await fetch(`${url}/${document.id}/download`,{headers:viewer.cookie})).status).toBe(200)
   })
 
+  it('lưu ảnh sản phẩm theo tenant, giữ bản gốc và cho sửa metadata brand', async () => {
+    const a = await tenant(ctx, 'kb-image-owner@example.com', 'Image owner')
+    const b = await tenant(ctx, 'kb-image-other@example.com', 'Image other')
+    const url = `${ctx.client.baseUrl}/api/companies/${a.company.id}/knowledge`
+    const png = Buffer.from('89504e470d0a1a0a', 'hex')
+    const form = new FormData()
+    form.set('file', new Blob([png], { type: 'image/png' }), 'product.png')
+    form.set('product', 'Sản phẩm A')
+    form.set('brand', 'Thương hiệu A')
+    const created = await fetch(`${url}/upload`, { method: 'POST', headers: a.ownerCookie, body: form })
+    expect(created.status).toBe(202)
+    const document = (await created.json() as { document: { id: string; imageProduct?: string; imageBrand?: string } }).document
+    expect(document.imageProduct).toBe('Sản phẩm A')
+    expect(document.imageBrand).toBe('Thương hiệu A')
+    const original = await fetch(`${url}/${document.id}/original`, { headers: a.ownerCookie })
+    expect(original.status).toBe(200)
+    expect(original.headers.get('content-type')).toBe('image/png')
+    expect(Buffer.from(await original.arrayBuffer())).toEqual(png)
+    expect((await fetch(`${ctx.client.baseUrl}/api/companies/${b.company.id}/knowledge/${document.id}/original`, { headers: b.ownerCookie })).status).toBe(404)
+    const metadata = await ctx.client.request('PATCH', `/api/companies/${a.company.id}/knowledge/${document.id}/image-metadata`, { headers: a.ownerCookie, body: { brand: 'Thương hiệu mới', description: 'Mô tả sản phẩm', tags: ['hero'] } })
+    expect(metadata.status).toBe(200)
+    expect(metadata.json<{ document: { imageBrand: string; imageDescription: string; tags: string[] } }>().document).toMatchObject({ imageBrand: 'Thương hiệu mới', imageDescription: 'Mô tả sản phẩm', tags: ['hero'] })
+  })
+
   it('xóa Markdown nguồn cũ không hồi sinh sau index lại', async () => {
     const { ownerCookie, company } = await tenant(ctx, 'kb-delete-file@example.com', 'Delete file')
     writeKbFile(ctx.kbRoot, company.slug, '00-cong-ty/delete.md', '# Xóa\n\nNội dung phải được xóa.')

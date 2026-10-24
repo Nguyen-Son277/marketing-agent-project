@@ -743,7 +743,7 @@ function PhanKhoaProvider({
     }
   }
 
-  /** Chạy sau khi người dùng xác nhận trong hộp thoại; hộp thoại thay `window.confirm`. */
+  /** Chạy sau khi người dùng xác nhận trong hộp thoại dùng chung. */
   async function purgeModels(): Promise<void> {
     setDangPurge(true);
     setLoi(null);
@@ -1703,11 +1703,13 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [oauthAppName, setOauthAppName] = useState("");
+  const [oauthAppConfigured, setOauthAppConfigured] = useState(false);
   const [moThemKetNoi, setMoThemKetNoi] = useState(false);
   const [dangLuu, setDangLuu] = useState(false);
   const [loiLuu, setLoiLuu] = useState<string | null>(null);
   const [dangTest, setDangTest] = useState<string | null>(null);
   const [dangXoa, setDangXoa] = useState<string | null>(null);
+  const [choXoa, setChoXoa] = useState<IntegrationView | null>(null);
   const [options, setOptions] = useState<
     readonly { id: string; name: string; type?: string }[]
   >([]);
@@ -1716,6 +1718,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   >({});
   const [optionsIntegrationId, setOptionsIntegrationId] = useState<string | null>(null);
   const [optionsKind, setOptionsKind] = useState<IntegrationKind | null>(null);
+  const [developerToken, setDeveloperToken] = useState("");
   const [savingOptions, setSavingOptions] = useState(false);
 
   const taiLai = useCallback(() => setLanThu((n) => n + 1), []);
@@ -1727,6 +1730,20 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
       : kind === "linkedin"
         ? "linkedin"
         : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    setOauthAppConfigured(false);
+    if (!oauthProvider) return;
+    void api.oauthApp(companyId, oauthProvider).then((result) => {
+      if (cancelled) return;
+      setOauthAppConfigured(result.configured);
+      if (result.name) setOauthAppName(result.name);
+    }).catch(() => {
+      // Cho phép nhập app riêng nếu endpoint kiểm tra không sẵn sàng.
+    });
+    return () => { cancelled = true; };
+  }, [companyId, oauthProvider]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1766,6 +1783,8 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
     setClientId("");
     setClientSecret("");
     setOauthAppName("");
+    setOauthAppConfigured(false);
+    setDeveloperToken("");
     setLoiLuu(null);
   }
   function close(): void {
@@ -1783,13 +1802,14 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
     setLoiLuu(null);
     if (oauthKind) {
       if (!oauthProvider) return;
-      if (!clientId.trim() || !clientSecret.trim()) {
+      const useSavedApp = oauthAppConfigured && !clientId.trim() && !clientSecret.trim();
+      if (!useSavedApp && (!clientId.trim() || !clientSecret.trim())) {
         setLoiLuu(t("settings.integrations.oauth.required"));
         return;
       }
       setDangLuu(true);
       try {
-        await api.saveOAuthApp(companyId, oauthProvider, { clientId: clientId.trim(), clientSecret, ...(oauthAppName.trim() ? { name: oauthAppName.trim() } : {}) });
+        if (!useSavedApp) await api.saveOAuthApp(companyId, oauthProvider, { clientId: clientId.trim(), clientSecret, ...(oauthAppName.trim() ? { name: oauthAppName.trim() } : {}) });
         window.location.assign(`${api.oauthStartUrl(companyId, oauthProvider)}&kind=${encodeURIComponent(kind)}`);
       } catch (error) {
         setLoiLuu(
@@ -1872,12 +1892,6 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
     }
   }
   async function remove(integration: IntegrationView): Promise<void> {
-    if (
-      !window.confirm(
-        t("settings.integrations.deleteConfirm", { name: integration.name }),
-      )
-    )
-      return;
     setDangXoa(integration.id);
     try {
       await api.deleteIntegration(companyId, integration.id);
@@ -1886,6 +1900,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
       /* toast handled by next refresh */
     } finally {
       setDangXoa(null);
+      setChoXoa(null);
     }
   }
   async function loadOptions(integration: IntegrationView): Promise<void> {
@@ -1904,10 +1919,15 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
   }
 
   async function saveOption(): Promise<void> {
-    if (!optionsIntegrationId || !optionsKind || !selectedOptions[optionsKind]) return;
-    const key = optionsKind === "meta" ? "pageId" : optionsKind === "linkedin" ? "organizationUrn" : optionsKind === "google-search-console" ? "siteUrl" : optionsKind === "google-ads" ? "customerId" : "propertyId";
+    if (!optionsIntegrationId || !optionsKind) return;
+    const selected = options.find((option) => option.id === selectedOptions[optionsKind]);
+    const key = optionsKind === "meta" ? (selected?.type === "ad-account" ? "adAccountId" : selected?.type === "instagram" ? "instagramAccountId" : "pageId") : optionsKind === "linkedin" ? "organizationUrn" : optionsKind === "google-search-console" ? "siteUrl" : optionsKind === "google-ads" ? "customerId" : "propertyId";
+    const defaults: Record<string, unknown> = {};
+    if (optionsKind === "google-ads" && developerToken.trim()) defaults.developerToken = developerToken.trim();
+    if (selectedOptions[optionsKind]) defaults[key] = selectedOptions[optionsKind];
+    if (Object.keys(defaults).length === 0) return;
     setSavingOptions(true);
-    try { await api.updateIntegrationDefaults(companyId, optionsIntegrationId, { [key]: selectedOptions[optionsKind] }); taiLai(); }
+    try { await api.updateIntegrationDefaults(companyId, optionsIntegrationId, defaults); setDeveloperToken(""); taiLai(); }
     finally { setSavingOptions(false); }
   }
 
@@ -1994,7 +2014,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
                       <Nut
                         bien="nguy-hiem"
                         nho
-                        onClick={() => void remove(integration)}
+                        onClick={() => setChoXoa(integration)}
                         dangTai={dangXoa === integration.id}
                       >
                         {t("common.delete")}
@@ -2007,9 +2027,11 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
           </table>
         </div>
       ) : null}
-      {options.length > 0 && optionsKind ? (
+      {optionsKind ? (
         <div className="cot" style={{ marginTop: 10 }}>
           <strong>{t("settings.integrations.resources")}</strong>
+          {optionsKind === "google-ads" ? <ONhap type="password" value={developerToken} onChange={setDeveloperToken} placeholder="Google Ads developer token" /> : null}
+          {options.length > 0 ? <>
           <OChon
             value={selectedOptions[optionsKind] ?? ""}
             onChange={(value) =>
@@ -2020,7 +2042,8 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
               label: option.name,
             }))}
           />
-          <Nut nho onClick={() => void saveOption()} dangTai={savingOptions} disabled={!selectedOptions[optionsKind]}>{t("common.save")}</Nut>
+          </> : null}
+          <Nut nho onClick={() => void saveOption()} dangTai={savingOptions} disabled={!selectedOptions[optionsKind] && !(optionsKind === "google-ads" && developerToken.trim())}>{t("common.save")}</Nut>
         </div>
       ) : null}
       <HopThoai
@@ -2151,6 +2174,15 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
           {loiLuu ? <ThongBao loai="loi">{loiLuu}</ThongBao> : null}
         </div>
       </HopThoai>
+      <HopThoaiXacNhan
+        mo={choXoa !== null}
+        tieuDe={t("settings.integrations.title")}
+        moTa={choXoa ? t("settings.integrations.deleteConfirm", { name: choXoa.name }) : ""}
+        nhanXacNhan={t("common.delete")}
+        dangXuLy={dangXoa !== null}
+        onXacNhan={() => { if (choXoa) void remove(choXoa); }}
+        onHuy={() => { if (dangXoa === null) setChoXoa(null); }}
+      />
     </Card>
   );
 }

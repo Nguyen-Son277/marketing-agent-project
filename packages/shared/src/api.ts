@@ -304,6 +304,7 @@ export interface KnowledgeDocumentView {
   readonly mimeType?: string | null
   readonly sizeBytes?: number | null
   readonly imageProduct?: string | null
+  readonly imageBrand?: string | null
   readonly imageDescription?: string | null
   readonly imageAnalysisStatus?: 'none' | 'pending' | 'running' | 'ready' | 'failed'
   readonly imageAnalysisError?: string | null

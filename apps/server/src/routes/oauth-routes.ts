@@ -12,6 +12,9 @@ const kindByProvider: Record<OAuthProvider, IntegrationKind> = { google: 'google
 const googleKinds = new Set<IntegrationKind>(['google-search-console', 'google-analytics', 'google-sheets', 'google-ads'])
 const googleScopes = ['openid', 'email', 'https://www.googleapis.com/auth/webmasters.readonly', 'https://www.googleapis.com/auth/analytics.readonly', 'https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/adwords']
 const oauthProvider = (value: string): OAuthProvider => { const parsed = providerSchema.safeParse(value); if (!parsed.success) throw new AppError('validation', 'Nhà cung cấp OAuth không hợp lệ'); return parsed.data }
+class OAuthProviderRequestError extends Error {
+  constructor(readonly status: number) { super('OAuth provider request failed') }
+}
 
 function callbackBase(ctx: AppContext): string {
   const base = (ctx.config.oauthCallbackBaseUrl ?? ctx.config.publicBaseUrl)?.replace(/\/+$/, '')
@@ -42,7 +45,7 @@ async function exchange(provider: OAuthProvider, code: string, app: { clientId: 
   const text = await response.text()
   let data: Record<string, unknown>
   try { data = JSON.parse(text) as Record<string, unknown> } catch { throw new AppError('provider_error', `OAuth ${provider} trả về dữ liệu không hợp lệ`) }
-  if (!response.ok || typeof data.access_token !== 'string' && typeof data.refresh_token !== 'string') throw new AppError('provider_error', `OAuth ${provider} từ chối cấp quyền`)
+  if (!response.ok || typeof data.access_token !== 'string') throw new AppError('provider_error', `OAuth ${provider} từ chối cấp quyền`)
   return data
 }
 
@@ -60,6 +63,13 @@ export function oauthRoutes() {
         repos.accounting.audit({ companyId, action: 'oauth.app.upsert', target: provider })
         request.json(200, { provider, configured: true })
       }, [requireMembership(repos), requireManage])
+
+      router.get('/api/companies/:companyId/oauth/:provider/app', async (request) => {
+        const companyId = request.params.companyId!
+        const provider = oauthProvider(request.params.provider!)
+        const app = repos.oauth.findApp(companyId, provider)
+        request.json(200, { provider, configured: Boolean(app), name: app?.name ?? null })
+      }, [requireMembership(repos)])
 
       router.get('/oauth/:provider/start', async (request) => {
         const auth = requireAuthState(request)
@@ -105,11 +115,12 @@ export function oauthRoutes() {
             const tokens = await exchange(provider, code, repos.oauth.resolveApp(app), state.redirectUri, repos.oauth.resolveCodeVerifier(state))
             const stateKind = stateValue.includes('.') ? decodeURIComponent(stateValue.slice(stateValue.indexOf('.') + 1)) : undefined
             const kind = provider === 'google' ? integrationKind(provider, stateKind) : kindByProvider[provider]
-            const config: Record<string, unknown> = { ...tokens, clientId: repos.oauth.resolveApp(app).clientId, clientSecret: repos.oauth.resolveApp(app).clientSecret }
-            if (provider === 'google' && !config.refresh_token) config.refreshToken = undefined
-            if (config.access_token) config.accessToken = config.access_token
-            if (config.refresh_token) config.refreshToken = config.refresh_token
             const existing = repos.accounting.findIntegration(state.companyId, kind)
+            const previous = existing ? repos.accounting.resolveIntegrationConfig<Record<string, unknown>>(existing) ?? {} : {}
+            const config: Record<string, unknown> = { ...previous, clientId: repos.oauth.resolveApp(app).clientId, clientSecret: repos.oauth.resolveApp(app).clientSecret }
+            if (typeof tokens.access_token === 'string') config.accessToken = tokens.access_token
+            if (typeof tokens.refresh_token === 'string') config.refreshToken = tokens.refresh_token
+            if (typeof tokens.expires_in === 'number') config.expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
             const name = existing?.name ?? (provider === 'google' ? `Google ${kind}` : provider[0]!.toUpperCase() + provider.slice(1))
             repos.accounting.upsertIntegration({ companyId: state.companyId, kind, name, config, status: 'connected' })
             repos.accounting.audit({ companyId: state.companyId, userId: state.userId, action: 'oauth.connected', target: `${provider}:${kind}` })
@@ -126,22 +137,35 @@ export function oauthRoutes() {
         const config = repos.accounting.resolveIntegrationConfig<Record<string, unknown>>(record) ?? {}
         const token = String(config.accessToken ?? config.access_token ?? '')
         if (!token) return request.json(200, { options: [] })
-        const options = (kind === 'google-search-console' ? await providerJson('https://www.googleapis.com/webmasters/v3/sites', token, 'siteEntry') : kind === 'google-analytics' ? await providerJson('https://analyticsadmin.googleapis.com/v1beta/properties', token, 'properties') : kind === 'google-ads' ? await providerJson('https://googleads.googleapis.com/v18/customers:listAccessibleCustomers', token, 'resourceNames') : kind === 'meta' ? await providerJson('https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token', token, 'data') : kind === 'linkedin' ? await providerJson('https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee', token, 'elements') : []).map((item) => {
-          if (typeof item === 'string') return { id: item, name: item.split('/').pop() ?? item }
-          const value = item as Record<string, unknown>
-          const id = String(value.siteUrl ?? value.id ?? value.organizationalTarget ?? '')
-          return { id, name: String(value.name ?? id) }
-        })
-        request.json(200, { options })
+        try {
+          const options = (kind === 'google-search-console' ? await providerJson('https://www.googleapis.com/webmasters/v3/sites', token, 'siteEntry') : kind === 'google-analytics' ? await providerJson('https://analyticsadmin.googleapis.com/v1beta/properties', token, 'properties') : kind === 'google-ads' ? await googleAdsCustomers(token, String(config.developerToken ?? '')) : kind === 'meta' ? await metaResources(token) : kind === 'linkedin' ? await providerJson('https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee', token, 'elements') : []).map((item) => {
+            if (typeof item === 'string') return { id: item, name: item.split('/').pop() ?? item }
+            const value = item as Record<string, unknown>
+            const id = String(value.siteUrl ?? value.id ?? value.organizationalTarget ?? '')
+            return { id, name: String(value.name ?? value.displayName ?? id), ...(typeof value.type === 'string' ? { type: value.type } : {}) }
+          })
+          request.json(200, { options })
+        } catch (error) {
+          const providerStatus = error instanceof OAuthProviderRequestError ? error.status : 0
+          const status = providerStatus === 401 ? 'token_expired' : 'permission_error'
+          repos.accounting.markIntegrationChecked(record.id, companyId, status)
+          request.json(200, { options: [], status })
+        }
       }, [requireMembership(repos)])
 
       router.patch('/api/companies/:companyId/integrations/:integrationId/defaults', async (request) => {
         const companyId = request.params.companyId!
         const rawBody = await request.body<Record<string, unknown>>()
         const body = (rawBody?.defaults && typeof rawBody.defaults === 'object' ? rawBody.defaults : rawBody) as Record<string, unknown>
-        const allowed = ['siteUrl', 'propertyId', 'customerId', 'pageId', 'adAccountId', 'organizationUrn', 'developerToken']
+        const allowed = ['siteUrl', 'propertyId', 'customerId', 'pageId', 'instagramAccountId', 'adAccountId', 'organizationUrn', 'developerToken']
         const patch = Object.fromEntries(Object.entries(body ?? {}).filter(([key]) => allowed.includes(key) && typeof body?.[key] === 'string'))
         const record = repos.accounting.updateIntegrationConfig(companyId, request.params.integrationId!, patch)
+        const resourceKey = Object.keys(patch).find((key) => ['siteUrl', 'propertyId', 'customerId', 'pageId', 'adAccountId', 'organizationUrn'].includes(key))
+        if (resourceKey) {
+          const resourceType = resourceKey === 'siteUrl' ? 'search-console-property' : resourceKey === 'propertyId' ? 'ga4-property' : resourceKey === 'customerId' ? 'google-ads-customer' : resourceKey === 'organizationUrn' ? 'linkedin-organization' : resourceKey === 'adAccountId' ? 'meta-ad-account' : resourceKey === 'instagramAccountId' ? 'meta-instagram-account' : 'meta-page'
+          const resourceId = String(patch[resourceKey])
+          repos.oauth.replaceResources(record.id, [{ resourceType, resourceId, label: resourceId, selected: true }])
+        }
         request.json(200, { integration: { id: record.id, kind: record.kind, status: record.status, configured: Boolean(record.configEnc) } })
       }, [requireMembership(repos), requireManage])
 
@@ -160,8 +184,45 @@ export function oauthRoutes() {
 
 async function providerJson(url: string, token: string, key: string): Promise<unknown[]> {
   const response = await fetch(url, { headers: { authorization: `Bearer ${token}` } })
-  if (!response.ok) return []
+  if (!response.ok) throw new OAuthProviderRequestError(response.status)
   const body = await response.json() as Record<string, unknown>
   const value = body[key]
   return Array.isArray(value) ? value : []
+}
+
+async function googleAdsCustomers(token: string, developerToken: string): Promise<unknown[]> {
+  if (!developerToken.trim()) return []
+  const response = await fetch('https://googleads.googleapis.com/v18/customers:listAccessibleCustomers', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'developer-token': developerToken, 'content-type': 'application/json' },
+    body: '{}',
+  })
+  if (!response.ok) throw new OAuthProviderRequestError(response.status)
+  const body = await response.json() as Record<string, unknown>
+  const values = body.resourceNames
+  return Array.isArray(values) ? values : []
+}
+
+async function metaResources(token: string): Promise<unknown[]> {
+  const [pages, adAccounts] = await Promise.all([
+    providerJson('https://graph.facebook.com/v20.0/me/accounts?fields=id,name,instagram_business_account{id,name}', token, 'data'),
+    providerJson('https://graph.facebook.com/v20.0/me/adaccounts?fields=id,name,account_id', token, 'data'),
+  ])
+  const resources: Record<string, unknown>[] = []
+  for (const item of pages) {
+    if (!item || typeof item !== 'object') continue
+    const page = item as Record<string, unknown>
+    resources.push({ id: String(page.id ?? ''), name: String(page.name ?? page.id ?? ''), type: 'page' })
+    const instagram = page.instagram_business_account
+    if (instagram && typeof instagram === 'object') {
+      const account = instagram as Record<string, unknown>
+      resources.push({ id: String(account.id ?? ''), name: String(account.name ?? account.id ?? ''), type: 'instagram' })
+    }
+  }
+  for (const item of adAccounts) {
+    if (!item || typeof item !== 'object') continue
+    const account = item as Record<string, unknown>
+    resources.push({ id: String(account.id ?? account.account_id ?? ''), name: String(account.name ?? account.account_id ?? account.id ?? ''), type: 'ad-account' })
+  }
+  return resources.filter((resource) => resource.id)
 }

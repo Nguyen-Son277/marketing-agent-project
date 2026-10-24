@@ -40,6 +40,7 @@ interface TepCho {
 
 const MAX_UPLOAD_FILES = 10
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
 const ALLOWED_UPLOAD_EXTENSIONS = new Set(['pdf', 'docx', 'txt', 'md'])
 const ALLOWED_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp'])
 
@@ -122,6 +123,9 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   const [thuongHieuAnh, setThuongHieuAnh] = useState('')
   const [chonId, setChonId] = useState<string | null>(null)
   const [bieuMau, setBieuMau] = useState<BieuMau>(() => taoBieuMauRong(t))
+  const [anhSanPham, setAnhSanPham] = useState('')
+  const [anhThuongHieu, setAnhThuongHieu] = useState('')
+  const [anhMoTa, setAnhMoTa] = useState('')
   const [dangTaoMoi, setDangTaoMoi] = useState(false)
   const [tepCho, setTepCho] = useState<TepCho[]>([])
   const [dangTaiLen, setDangTaiLen] = useState(false)
@@ -144,6 +148,9 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     setTepCho([])
     setDuLieu(null)
     setBieuMau(taoBieuMauRong(t))
+    setAnhSanPham('')
+    setAnhThuongHieu('')
+    setAnhMoTa('')
     setDangTaoMoi(false)
     setDangTaiLen(false)
   }, [companyId])
@@ -250,6 +257,9 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
       tags: taiLieu.tags.join(', '),
       content: taiLieu.content,
     })
+    setAnhSanPham(taiLieu.imageProduct ?? '')
+    setAnhThuongHieu(taiLieu.imageBrand ?? '')
+    setAnhMoTa(taiLieu.imageDescription ?? '')
     if (!uploaded) return
     try {
       const response = await api.knowledgeDocument(selectedCompany, selectedId)
@@ -270,9 +280,10 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     const accepted: TepCho[] = []
     for (const file of incoming) {
       const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-      const invalid = !ALLOWED_UPLOAD_EXTENSIONS.has(extension) && !ALLOWED_IMAGE_EXTENSIONS.has(extension)
+      const isImage = ALLOWED_IMAGE_EXTENSIONS.has(extension)
+      const invalid = !ALLOWED_UPLOAD_EXTENSIONS.has(extension) && !isImage
         ? t('knowledge.invalidFileType', { name: file.name })
-        : file.size > MAX_UPLOAD_BYTES
+        : file.size > (isImage ? MAX_IMAGE_UPLOAD_BYTES : MAX_UPLOAD_BYTES)
           ? t('knowledge.fileTooLarge', { name: file.name })
           : undefined
       if (invalid) {
@@ -383,10 +394,18 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     setDangLuu(true)
     setLoiLuu(null)
     try {
-      const result = await api.updateKnowledgeMetadata(companyId, chonId, {
+      let result = await api.updateKnowledgeMetadata(companyId, chonId, {
         title: bieuMau.title.trim(), ...(duLieu?.documents.find((doc)=>doc.id===chonId)?.source === 'upload-auto' ? {} : {category:bieuMau.category}),
         tags: bieuMau.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
       })
+      if (duLieu?.documents.find((doc) => doc.id === chonId)?.mimeType?.startsWith('image/')) {
+        result = await api.updateKnowledgeImageMetadata(companyId, chonId, {
+          product: anhSanPham.trim(),
+          brand: anhThuongHieu.trim(),
+          description: anhMoTa.trim(),
+          tags: bieuMau.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+        })
+      }
       setThongBao(t('knowledge.saveSuccess'))
       setDuLieu((current) => current ? { ...current, documents: current.documents.map((doc) => doc.id === chonId ? { ...doc, ...result.document } : doc) } : current)
     } catch (error) {
@@ -404,6 +423,9 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     setThongBao(null)
     setLoiLuu(null)
     setBieuMau(taoBieuMauRong(t))
+    setAnhSanPham('')
+    setAnhThuongHieu('')
+    setAnhMoTa('')
   }
 
   async function luu(): Promise<void> {
@@ -663,6 +685,9 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
                         {taiLieu.mimeType?.startsWith('image/') ? <img src={api.knowledgeImageUrl(companyId, taiLieu.id)} alt={taiLieu.title} loading="lazy" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, float: 'right', marginLeft: 8 }} /> : null}
                         {/* Tiêu đề và đường dẫn là dữ liệu tài liệu, giữ nguyên bản gốc. */}
                         <div style={{ fontWeight: 600 }}>{taiLieu.title}</div>
+                        {taiLieu.mimeType?.startsWith('image/') && (taiLieu.imageProduct || taiLieu.imageBrand) ? <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
+                          {[taiLieu.imageBrand, taiLieu.imageProduct].filter(Boolean).join(' · ')}
+                        </div> : null}
                         {taiLieu.source==='upload-auto' ? <div style={{fontSize:12}}>
                           {(taiLieu.categories ?? []).map(code=>nhanDanhMuc(code,t)).join(' · ')}
                           {taiLieu.sectionCount ? ` · ${formatNumber(taiLieu.sectionCount)} ${t('knowledge.sections')}` : ''}
@@ -784,6 +809,13 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
                   placeholder="tag1, tag2"
                 />
               </div>
+              {laTaiLen && activeDocument?.mimeType?.startsWith('image/') ? <div className="cot" style={{ gap: 8 }}>
+                <div className="luoi luoi--2">
+                  <ONhap value={anhSanPham} onChange={setAnhSanPham} placeholder={t('knowledge.imageProductPlaceholder')} />
+                  <ONhap value={anhThuongHieu} onChange={setAnhThuongHieu} placeholder={t('knowledge.imageBrandPlaceholder')} />
+                </div>
+                <OVanBan value={anhMoTa} onChange={setAnhMoTa} rows={4} placeholder={t('knowledge.imageDescriptionPlaceholder')} />
+              </div> : null}
               {laTaiLen ? <div>
                 {dangTaiNoiDung ? <DangTai nhan={t('knowledge.loadingContent')} /> : <>
                   <div className="nhan">{t('knowledge.markdownContent')}</div>
