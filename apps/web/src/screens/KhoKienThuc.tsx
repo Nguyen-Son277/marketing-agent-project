@@ -41,6 +41,7 @@ interface TepCho {
 const MAX_UPLOAD_FILES = 10
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 const ALLOWED_UPLOAD_EXTENSIONS = new Set(['pdf', 'docx', 'txt', 'md'])
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp'])
 
 type ReindexUiResponse = ReindexResponse & { queued?: number; processing?: number; classificationFailed?: number }
 
@@ -116,6 +117,9 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
 
   const [tuKhoa, setTuKhoa] = useState('')
   const [danhMucDangXem, setDanhMucDangXem] = useState<string>('tat-ca')
+  const [chiAnh, setChiAnh] = useState(false)
+  const [sanPhamAnh, setSanPhamAnh] = useState('')
+  const [thuongHieuAnh, setThuongHieuAnh] = useState('')
   const [chonId, setChonId] = useState<string | null>(null)
   const [bieuMau, setBieuMau] = useState<BieuMau>(() => taoBieuMauRong(t))
   const [dangTaoMoi, setDangTaoMoi] = useState(false)
@@ -192,6 +196,8 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   const taiLieuTheoDanhMuc = useMemo(() => {
     const tuKhoaChuan = tuKhoa.trim().toLowerCase()
     const loc = (taiLieu: KnowledgeDocumentView): boolean => {
+      const laAnh = Boolean(taiLieu.mimeType && taiLieu.mimeType.startsWith('image/'))
+      if (chiAnh && !laAnh) return false
       if (danhMucDangXem !== 'tat-ca' && !(taiLieu.categories ?? [taiLieu.category]).includes(danhMucDangXem)) return false
       if (tuKhoaChuan.length === 0) return true
       return (
@@ -214,7 +220,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
         danhSach: [...danhSach].sort((a, b) => a.title.localeCompare(b.title, locale)),
       }))
       .sort((a, b) => a.code.localeCompare(b.code))
-  }, [duLieu, tuKhoa, danhMucDangXem, t, locale])
+  }, [duLieu, tuKhoa, danhMucDangXem, chiAnh, t, locale])
 
   const soTaiLieuHienThi = taiLieuTheoDanhMuc.reduce((tong, nhom) => tong + nhom.danhSach.length, 0)
 
@@ -263,7 +269,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     const accepted: TepCho[] = []
     for (const file of incoming) {
       const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
-      const invalid = !ALLOWED_UPLOAD_EXTENSIONS.has(extension)
+      const invalid = !ALLOWED_UPLOAD_EXTENSIONS.has(extension) && !ALLOWED_IMAGE_EXTENSIONS.has(extension)
         ? t('knowledge.invalidFileType', { name: file.name })
         : file.size > MAX_UPLOAD_BYTES
           ? t('knowledge.fileTooLarge', { name: file.name })
@@ -292,7 +298,10 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
         if (item.status !== 'queued') continue
         setTepCho((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: 'uploading', message: undefined } : entry))
         try {
-          const result = await api.uploadKnowledge(batchCompany, { file: item.file })
+          const image = item.file.type.startsWith('image/') || ALLOWED_IMAGE_EXTENSIONS.has(item.file.name.split('.').pop()?.toLowerCase() ?? '')
+          const result = image
+            ? await api.uploadKnowledgeImage(batchCompany, { file: item.file, product: sanPhamAnh.trim() || undefined, brand: thuongHieuAnh.trim() || undefined })
+            : await api.uploadKnowledge(batchCompany, { file: item.file })
           if (activeCompany.current !== batchCompany) return
           setTepCho((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: 'success', message: result.warning } : entry))
           if (result.warning) setThongBao(result.warning)
@@ -314,7 +323,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   useEffect(() => {
     if (!tepCho.some((item) => item.status === 'queued') || dangTaiLen) return
     void taiLenTep()
-  }, [tepCho, dangTaiLen])
+  }, [tepCho, dangTaiLen, sanPhamAnh, thuongHieuAnh])
 
   useEffect(() => {
     if (!chonId || !laTaiLen) {
@@ -576,6 +585,10 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
 
       <Card tieuDe={t('knowledge.uploadTitle')} phu={t('knowledge.uploadHint')}>
         <div className="cot" style={{ gap: 10 }}>
+          <div className="luoi luoi--2">
+            <ONhap value={sanPhamAnh} onChange={setSanPhamAnh} placeholder={t('knowledge.imageProductPlaceholder')} />
+            <ONhap value={thuongHieuAnh} onChange={setThuongHieuAnh} placeholder={t('knowledge.imageBrandPlaceholder')} />
+          </div>
           <div>
             <Nut className="knowledge__choose-files" onClick={() => fileInputRef.current?.click()} ariaLabel={t('knowledge.chooseFiles')}>
               <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -583,7 +596,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
               </svg>
               {t('knowledge.chooseFiles')}
             </Nut>
-            <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.txt,.md" hidden onChange={(event) => { if (event.currentTarget.files) themTep(event.currentTarget.files); event.currentTarget.value = '' }} />
+            <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" hidden onChange={(event) => { if (event.currentTarget.files) themTep(event.currentTarget.files); event.currentTarget.value = '' }} />
           </div>
           <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); themTep(event.dataTransfer.files) }} style={{ border: '1px dashed var(--mau-vien)', borderRadius: 8, padding: 14, textAlign: 'center' }}>
             {t('knowledge.dropFiles')}
@@ -618,6 +631,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
               onChange={setDanhMucDangXem}
               options={[{ value: 'tat-ca', label: t('knowledge.allCategories') }, ...danhMucOptions]}
             />
+            <label className="hang" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" checked={chiAnh} onChange={(event) => setChiAnh(event.target.checked)} />{t('knowledge.imagesOnly')}</label>
           </div>
 
           {duLieu.documents.length === 0 ? (
@@ -645,6 +659,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
                         }}
                         onClick={() => chonTaiLieu(taiLieu)}
                       >
+                        {taiLieu.mimeType?.startsWith('image/') ? <img src={api.knowledgeImageUrl(companyId, taiLieu.id)} alt={taiLieu.title} loading="lazy" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, float: 'right', marginLeft: 8 }} /> : null}
                         {/* Tiêu đề và đường dẫn là dữ liệu tài liệu, giữ nguyên bản gốc. */}
                         <div style={{ fontWeight: 600 }}>{taiLieu.title}</div>
                         {taiLieu.source==='upload-auto' ? <div style={{fontSize:12}}>
