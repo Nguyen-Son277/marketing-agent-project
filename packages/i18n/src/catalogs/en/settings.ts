@@ -195,6 +195,7 @@ export const en_settings = {
   'settings.integrations.oauth.clientId': 'OAuth client ID',
   'settings.integrations.oauth.clientSecret': 'OAuth client secret',
   'settings.integrations.oauth.hint': 'Leave client ID and secret blank when the server already has a shared OAuth app configured.',
+  'settings.integrations.oauth.required': 'Enter the OAuth client ID and client secret once to connect this account.',
   'settings.integrations.testNote': 'Configuration checks only validate saved fields and decryption, not the API key with the provider.',
   'settings.integrations.firecrawl.apiKey': 'Firecrawl API key',
   'settings.integrations.firecrawl.nameOptional': 'Connection name (optional)',

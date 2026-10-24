@@ -1780,18 +1780,14 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
     setLoiLuu(null);
     if (oauthKind) {
       if (!oauthProvider) return;
+      if (!clientId.trim() || !clientSecret.trim()) {
+        setLoiLuu(t("settings.integrations.oauth.required"));
+        return;
+      }
       setDangLuu(true);
       try {
-        await api.upsertIntegration(companyId, {
-          kind,
-          name: (oauthAppName || t(NHAN_INTEGRATION[kind])).trim(),
-          config: {
-            oauthProvider,
-            ...(clientId ? { clientId } : {}),
-            ...(clientSecret ? { clientSecret } : {}),
-          },
-        });
-        window.location.assign(api.oauthStartUrl(companyId, oauthProvider));
+        await api.saveOAuthApp(companyId, oauthProvider, { clientId: clientId.trim(), clientSecret, ...(oauthAppName.trim() ? { name: oauthAppName.trim() } : {}) });
+        window.location.assign(`${api.oauthStartUrl(companyId, oauthProvider)}&kind=${encodeURIComponent(kind)}`);
       } catch (error) {
         setLoiLuu(
           error instanceof ApiError

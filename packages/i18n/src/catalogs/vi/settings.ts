@@ -197,6 +197,7 @@ export const vi_settings = {
   'settings.integrations.oauth.clientId': 'OAuth client ID',
   'settings.integrations.oauth.clientSecret': 'OAuth client secret',
   'settings.integrations.oauth.hint': 'Để trống client ID và secret nếu máy chủ đã cấu hình ứng dụng OAuth dùng chung.',
+  'settings.integrations.oauth.required': 'Nhập OAuth client ID và client secret một lần để kết nối tài khoản.',
   'settings.integrations.testNote': 'Kiểm tra cấu hình chỉ xác nhận các trường đã lưu và khả năng giải mã, chưa xác thực API key với nhà cung cấp.',
   'settings.integrations.firecrawl.apiKey': 'API key Firecrawl',
   'settings.integrations.firecrawl.nameOptional': 'Tên kết nối (tuỳ chọn)',

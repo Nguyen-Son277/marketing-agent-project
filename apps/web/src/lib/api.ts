@@ -1052,7 +1052,11 @@ export const api = {
   /** OAuth entry point. The API may return a URL or redirect directly; callers use
    * this method when an application wants to open the provider in the same tab. */
   oauthStartUrl(companyId: string, provider: string): string {
-    return `/api/companies/${encodeURIComponent(companyId)}/oauth/${encodeURIComponent(provider)}/start`;
+    return `/oauth/${encodeURIComponent(provider)}/start?companyId=${encodeURIComponent(companyId)}`;
+  },
+
+  async saveOAuthApp(companyId: string, provider: string, input: { clientId: string; clientSecret: string; name?: string }): Promise<void> {
+    await request(`/api/companies/${encodeURIComponent(companyId)}/oauth/${encodeURIComponent(provider)}/app`, { method: "PATCH", body: input });
   },
 
   async integrationOptions(
