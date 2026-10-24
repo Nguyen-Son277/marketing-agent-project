@@ -105,7 +105,8 @@ export function oauthRoutes() {
             if (provider === 'google' && !config.refresh_token) config.refreshToken = undefined
             if (config.access_token) config.accessToken = config.access_token
             if (config.refresh_token) config.refreshToken = config.refresh_token
-            const name = provider === 'google' ? `Google ${kind}` : provider[0]!.toUpperCase() + provider.slice(1)
+            const existing = repos.accounting.findIntegration(state.companyId, kind)
+            const name = existing?.name ?? (provider === 'google' ? `Google ${kind}` : provider[0]!.toUpperCase() + provider.slice(1))
             repos.accounting.upsertIntegration({ companyId: state.companyId, kind, name, config, status: 'connected' })
             repos.accounting.audit({ companyId: state.companyId, userId: state.userId, action: 'oauth.connected', target: `${provider}:${kind}` })
             request.redirect(frontendRedirect(ctx, provider, { status: 'connected', kind }))
