@@ -1077,7 +1077,7 @@ export const api = {
   ): Promise<{ integration: IntegrationView }> {
     return request(
       `/api/companies/${encodeURIComponent(companyId)}/integrations/${encodeURIComponent(integrationId)}/defaults`,
-      { method: "PATCH", body: { defaults } },
+      { method: "PATCH", body: defaults },
     );
   },
 
