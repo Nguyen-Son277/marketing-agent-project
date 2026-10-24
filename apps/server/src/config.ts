@@ -34,6 +34,9 @@ export interface ServerConfig {
   /** Max JSON request body size, guarding against accidental large uploads. */
   readonly maxBodyBytes: number
   readonly embedding: EmbeddingConfig
+  /** Public URL used as OAuth callback origin (e.g. https://marketing.example). */
+  readonly publicBaseUrl?: string
+  readonly oauthCallbackBaseUrl?: string
 }
 
 export interface EmbeddingConfig {
@@ -133,6 +136,8 @@ export function loadConfig(overrides: Partial<ServerConfig> = {}): ServerConfig 
       baseUrl: optionalString('EMBEDDING_BASE_URL'),
       apiKey: optionalString('EMBEDDING_API_KEY'),
     },
+    publicBaseUrl: overrides.publicBaseUrl ?? optionalString('PUBLIC_BASE_URL'),
+    oauthCallbackBaseUrl: overrides.oauthCallbackBaseUrl ?? optionalString('OAUTH_CALLBACK_BASE_URL'),
   }
 }
 

@@ -19,6 +19,7 @@ import { WorkforceRepo } from './repos/workforce.ts'
 import { DailyReportsRepo } from './repos/daily-reports.ts'
 import { SocialBrowserRepo } from './repos/social-browser.ts'
 import { CampaignRepo } from './repos/campaign.ts'
+import { OAuthRepo } from './repos/oauth.ts'
 
 export interface Repos {
   readonly db: Database
@@ -35,6 +36,7 @@ export interface Repos {
   readonly chatAttachments: ChatAttachmentsRepo
   readonly socialBrowser: SocialBrowserRepo
   readonly campaigns: CampaignRepo
+  readonly oauth: OAuthRepo
 }
 
 export interface CreateReposOptions extends OpenDatabaseOptions {
@@ -75,6 +77,7 @@ export function createRepos(options: CreateReposOptions): Repos {
     chatAttachments: new ChatAttachmentsRepo(db),
     socialBrowser: new SocialBrowserRepo(db, secrets),
     campaigns: new CampaignRepo(db, auth, secrets),
+    oauth: new OAuthRepo(db, secrets),
   }
 }
 
@@ -94,3 +97,4 @@ export * from './repos/llm.ts'
 export * from './repos/team.ts'
 export * from './repos/work.ts'
 export * from './repos/campaign.ts'
+export * from './repos/oauth.ts'

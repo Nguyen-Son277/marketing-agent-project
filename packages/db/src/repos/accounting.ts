@@ -373,6 +373,15 @@ export class AccountingRepo {
     return this.secrets.decryptJson<T>(integration.configEnc, integration.configIv)
   }
 
+  /** Merge non-secret defaults (selected property/page/customer) into a connection. */
+  updateIntegrationConfig(companyId: string, id: string, patch: Record<string, unknown>): IntegrationRecord {
+    const record = this.requireIntegration(id, companyId)
+    const current = this.resolveIntegrationConfig<Record<string, unknown>>(record) ?? {}
+    const encrypted = this.secrets.encryptJson({ ...current, ...patch })
+    this.db.run('UPDATE integrations SET config_enc = ?, config_iv = ? WHERE id = ? AND company_id = ?', [encrypted.enc, encrypted.iv, id, companyId])
+    return this.requireIntegration(id, companyId)
+  }
+
   /* --------------------------------------------------------------- audit */
 
   audit(input: {

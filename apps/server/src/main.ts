@@ -125,6 +125,7 @@ const OPTIONAL_ROUTE_MODULES: readonly { name: string; exportName: string }[] = 
   { name: 'chat', exportName: 'chatRoutes' },
   { name: 'tasks', exportName: 'taskRoutes' },
   { name: 'settings', exportName: 'settingsRoutes' },
+  { name: 'oauth', exportName: 'oauthRoutes' },
   { name: 'costs', exportName: 'costRoutes' },
   { name: 'diagram', exportName: 'diagramRoutes' },
   { name: 'dashboard', exportName: 'dashboardRoutes' },
