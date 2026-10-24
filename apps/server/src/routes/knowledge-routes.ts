@@ -80,6 +80,11 @@ export function knowledgeRoutes() {
         },
         [requireMembership(repos)],
       )
+      router.get('/api/companies/:companyId/knowledge/images', async (request) => {
+        const companyId = request.params.companyId!
+        const images = repos.knowledge.listProductImages(companyId, request.query('q'), Math.min(Number(request.query('limit') ?? 50) || 50, 200))
+        request.json(200, { images: images.map((doc) => knowledgeDocumentView(repos, doc)) })
+      }, [requireMembership(repos)])
 
       router.post(
         '/api/companies/:companyId/knowledge',

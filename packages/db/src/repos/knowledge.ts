@@ -236,6 +236,15 @@ export class KnowledgeRepo {
     return this.db.all<DocRow>(sql, params).map(toDocument)
   }
 
+  /** Product images available to a company, optionally matched against metadata. */
+  listProductImages(companyId: string, query?: string, limit = 50): KbDocumentRecord[] {
+    const params: unknown[] = [companyId]
+    let sql = `SELECT * FROM kb_documents WHERE company_id = ? AND mime_type LIKE 'image/%'`
+    if (query?.trim()) { sql += ' AND (title LIKE ? OR image_product LIKE ? OR image_description LIKE ? OR tags_json LIKE ?)'; const like = `%${query.trim()}%`; params.push(like, like, like, like) }
+    sql += ' ORDER BY updated_at DESC LIMIT ?'; params.push(limit)
+    return this.db.all<DocRow>(sql, params).map(toDocument)
+  }
+
   /** Insert or replace a document and its chunk set in one transaction. */
   upsertDocumentAndChunks(input: UpsertDocumentInput, chunks: readonly ChunkInput[]): KbDocumentRecord {
     const checksum = sha256(input.content)
