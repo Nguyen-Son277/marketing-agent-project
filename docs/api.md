@@ -276,6 +276,22 @@ suppress nếu deployment chưa đặt `PUBLIC_BASE_URL`, vì email phải có l
 
 ## 3. SSE — định dạng sự kiện
 
+## MCP
+
+Mỗi công ty có thể cấu hình MCP server tại `/api/companies/:companyId/mcp-servers`.
+Các server hỗ trợ `streamable_http`, `sse` và `stdio`; credential được mã hóa trong
+SQLite. `POST .../test` thực hiện handshake và discovery tools/resources/prompts.
+
+MCP server của Marketing Agent nằm tại `/mcp/:companyId` và nhận `Authorization:
+Bearer <inboundApiKey>` hoặc header `x-api-key`. API key được trả đúng một lần khi
+tạo server; không lưu trong giao diện. Endpoint này cung cấp tools, resource trạng
+thái và prompt brief marketing.
+
+Server dùng OAuth 2.1/PKCE khai báo `authorizationEndpoint`, `tokenEndpoint`,
+`clientId` và `redirectUri` trong `authConfig`; bắt đầu tại
+`GET .../mcp-servers/:serverId/oauth/start`. Callback tự trao đổi code và mã hóa
+access/refresh token vào cấu hình server.
+
 Endpoint: `GET /api/conversations/:id/stream`. Server ghi từng sự kiện theo đúng
 định dạng SSE chuẩn (`apps/server/src/http/router.ts`):
 

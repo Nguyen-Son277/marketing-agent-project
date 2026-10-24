@@ -1948,6 +1948,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
       }
     >
       <TrangThai dangTai={dangTai} loi={loi} taiLai={taiLai} />
+      <McpServerSection companyId={companyId} />
       <p style={{ fontSize: 13, color: "var(--mau-chu-mo)" }}>
         {t("settings.integrations.simpleHint")}
       </p>
@@ -2185,6 +2186,35 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
       />
     </Card>
   );
+}
+
+function McpServerSection({ companyId }: { companyId: string }): ReactNode {
+  const [servers, setServers] = useState<readonly Record<string, unknown>[]>([]);
+  const [name, setName] = useState('');
+  const [endpoint, setEndpoint] = useState('');
+  const [transport, setTransport] = useState('streamable_http');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const load = useCallback(() => { void api.mcpServers(companyId).then((result) => setServers(result.servers)).catch(() => undefined); }, [companyId]);
+  useEffect(() => { load(); }, [load]);
+  async function add(): Promise<void> {
+    if (!name.trim() || !endpoint.trim()) return;
+    setBusy(true); setMessage(null);
+    try { const result = await api.createMcpServer(companyId, { name: name.trim(), endpoint: endpoint.trim(), transport, authType: 'none', args: [] }); setMessage(result.inboundApiKey ? `MCP API key: ${result.inboundApiKey}` : 'Đã thêm MCP server'); setName(''); setEndpoint(''); load(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Không thể thêm MCP server'); }
+    finally { setBusy(false); }
+  }
+  return <div style={{ margin: '16px 0', padding: 12, border: '1px solid var(--mau-vien)', borderRadius: 8 }}>
+    <strong>MCP servers</strong><p style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>Kết nối tool, resource và prompt từ MCP server theo công ty.</p>
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <ONhap value={name} onChange={setName} placeholder="Tên server" />
+      <ONhap value={endpoint} onChange={setEndpoint} placeholder="https://example.com/mcp" />
+      <select value={transport} onChange={(event) => setTransport(event.target.value)}><option value="streamable_http">Streamable HTTP</option><option value="sse">SSE</option></select>
+      <Nut nho onClick={() => void add()} disabled={busy}>Thêm MCP</Nut>
+    </div>
+    {message ? <p style={{ fontSize: 12 }}>{message}</p> : null}
+    {servers.map((server) => <div key={String(server.id)} style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}><span>{String(server.name)} · {String(server.status)}</span>{server.authType === 'oauth2' ? <Nut nho bien="phu" onClick={() => { window.location.href = `/api/companies/${encodeURIComponent(companyId)}/mcp-servers/${encodeURIComponent(String(server.id))}/oauth/start`; }}>OAuth</Nut> : null}<Nut nho bien="phu" onClick={() => void api.testMcpServer(companyId, String(server.id)).then((result) => setMessage(result.ok ? 'Kết nối MCP thành công' : (result.message ?? 'Kết nối thất bại')))} >Kiểm tra</Nut><Nut nho bien="phu" onClick={() => void api.deleteMcpServer(companyId, String(server.id)).then(load)}>Xóa</Nut></div>)}
+  </div>
 }
 
 /* -------------------------------------------------------------- giới hạn */

@@ -1037,6 +1037,19 @@ export const api = {
     return request(`/api/companies/${companyId}/integrations`);
   },
 
+  async mcpServers(companyId: string): Promise<{ servers: readonly Record<string, unknown>[] }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/mcp-servers`);
+  },
+  async createMcpServer(companyId: string, input: Record<string, unknown>): Promise<{ server: Record<string, unknown>; inboundApiKey?: string }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/mcp-servers`, { method: "POST", body: input });
+  },
+  async testMcpServer(companyId: string, id: string): Promise<{ ok: boolean; capabilities?: unknown; message?: string }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/mcp-servers/${encodeURIComponent(id)}/test`, { method: "POST", body: {} });
+  },
+  async deleteMcpServer(companyId: string, id: string): Promise<void> {
+    await request(`/api/companies/${encodeURIComponent(companyId)}/mcp-servers/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+
   async upsertIntegration(
     companyId: string,
     input: UpsertIntegrationBody,

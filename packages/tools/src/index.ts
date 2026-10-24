@@ -129,3 +129,4 @@ export { fetchWithTimeout, parseJsonResponse, readBounded, extractErrorMessage }
 export { sendMail, verifySmtpConnection, buildMimeMessage, extractAddress, buildMessageId } from './email.ts'
 export type { SendMailInput } from './email.ts'
 export { SocialBrowserService, createSocialBrowserTools, browserAssetPath, assertBrowserWorkerEndpoint } from './social-browser.ts'
+export { connectMcpServer, discoverMcpServer, createMcpToolsForCompany, mcpCapabilityNames } from './mcp-client.ts'

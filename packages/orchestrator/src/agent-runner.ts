@@ -25,6 +25,7 @@ import {
   type AgentRunResult,
   type AgentRuntimeDeps,
 } from '@marketing-agent/agent-runtime'
+import { createMcpToolsForCompany } from '@marketing-agent/tools'
 
 import type { AppEvent } from './events.ts'
 
@@ -102,11 +103,13 @@ export async function runAgentForTask(input: RunAgentForTaskInput): Promise<RunA
   const resolved = input.repos.team.resolveAgent(input.companyId, input.role)
   const registry = input.tools
   const kbTools = buildKbToolsFor(input.repos, input.embedding)
+  const mcpTools = await createMcpToolsForCompany(input.repos.mcp, input.companyId)
   const granted = resolveAgentTools({
     registry,
-    tools: kbTools,
+    tools: [...kbTools, ...mcpTools],
     role: resolved.role,
-    grantedNames: input.toolNames ? resolved.toolNames.filter(n=>input.toolNames!.includes(n)) : resolved.toolNames,
+    // MCP capabilities are automatically available once the company enables a server.
+    grantedNames: input.toolNames ? [...resolved.toolNames.filter(n=>input.toolNames!.includes(n)), ...mcpTools.map((tool) => tool.name)] : [...resolved.toolNames, ...mcpTools.map((tool) => tool.name)],
   })
 
   const toolContext: ToolContext = {

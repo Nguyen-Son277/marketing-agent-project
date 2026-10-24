@@ -993,4 +993,56 @@ ALTER TABLE kb_documents ADD COLUMN image_brand TEXT;
 CREATE INDEX idx_kb_product_image_brand ON kb_documents(company_id, image_brand);
 `,
   },
+  {
+    id: '0025_mcp_servers',
+    sql: `
+CREATE TABLE mcp_servers (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  transport TEXT NOT NULL CHECK (transport IN ('streamable_http','sse','stdio')),
+  endpoint TEXT,
+  command TEXT,
+  args_json TEXT NOT NULL DEFAULT '[]',
+  auth_type TEXT NOT NULL CHECK (auth_type IN ('none','api_key','bearer','oauth2','stdio_env')),
+  auth_config_enc TEXT,
+  auth_config_iv TEXT,
+  env_enc TEXT,
+  env_iv TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'configured',
+  capabilities_json TEXT NOT NULL DEFAULT '{"tools":[],"resources":[],"prompts":[]}',
+  last_check_at TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(company_id, name)
+);
+CREATE INDEX idx_mcp_servers_company ON mcp_servers(company_id, enabled);
+`,
+  },
+  {
+    id: '0026_mcp_server_api_keys',
+    sql: `
+ALTER TABLE mcp_servers ADD COLUMN inbound_key_enc TEXT;
+ALTER TABLE mcp_servers ADD COLUMN inbound_key_iv TEXT;
+`,
+  },
+  {
+    id: '0027_mcp_oauth_states',
+    sql: `
+CREATE TABLE mcp_oauth_states (
+  state_hash TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  server_id TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  verifier_enc TEXT NOT NULL,
+  verifier_iv TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_mcp_oauth_states_expiry ON mcp_oauth_states(expires_at);
+`,
+  },
 ]
