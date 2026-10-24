@@ -27,6 +27,7 @@ import { settingsRoutes } from '../../src/routes/settings-routes.ts'
 import { costRoutes } from '../../src/routes/cost-routes.ts'
 import { diagramRoutes } from '../../src/routes/diagram-routes.ts'
 import { dashboardRoutes } from '../../src/routes/dashboard-routes.ts'
+import { oauthRoutes } from '../../src/routes/oauth-routes.ts'
 
 const SECRET = 'unit-test-app-secret-0123456789'
 
@@ -53,6 +54,7 @@ export function optionalRouteModules(): OptionalRouteModule[] {
     costRoutes(),
     diagramRoutes(),
     dashboardRoutes(),
+    oauthRoutes(),
   ]
 }
 
