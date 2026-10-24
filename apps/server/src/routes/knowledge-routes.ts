@@ -126,19 +126,32 @@ export function knowledgeRoutes() {
             return
           }
           const extracted = await extractKnowledgeFile(input.filename, input.bytes)
+          const isImage = extracted.isImage === true
           const { chunkMarkdown } = await loadKb()
-          if (chunkMarkdown(extracted.content).length === 0) throw validation('File không chứa nội dung văn bản có thể tìm kiếm')
+          if (!isImage && chunkMarkdown(extracted.content).length === 0) throw validation('File không chứa nội dung văn bản có thể tìm kiếm')
           const title = input.title?.trim() || input.filename.replace(/\.[^.]+$/, '')
           // The legacy category column is only a compatibility placeholder for auto
           // documents. No chunks are exposed until section categories are assigned.
           const checked = parseOrThrow(upsertKnowledgeSchema, {
             path: category ? `${category}/uploads/${randomUUID()}/${input.filename}` : `uploads/${randomUUID()}/${input.filename}`,
-            title, category: category ?? '00-cong-ty', tags: input.tags, content: extracted.content,
+            title, category: category ?? (isImage ? '10-brand' : '00-cong-ty'), tags: input.tags, content: extracted.content,
           }, 'tài liệu tải lên')
           const key = await storeKnowledgeOriginal(ctx.config.kbRoot, companyId, input.bytes)
           let saved = false
           let createdDocumentId: string | undefined
           try {
+            if (isImage) {
+              const document = repos.db.tx(() => {
+                const doc = repos.knowledge.upsertDocumentAndChunks({companyId,...checked,source:'product-image',userId:readAuth(request)?.user.id ?? null}, [])
+                repos.knowledge.setUploadMetadata(companyId,doc.id,{originalName:input.filename,mimeType:extracted.mimeType,sizeBytes:input.bytes.length,storageKey:key,originalChecksum:checksum,imageProduct:input.imageProduct ?? title,imageAnalysisStatus:'pending'})
+                return doc
+              })
+              createdDocumentId = document.id
+              saved = true
+              repos.accounting.audit({companyId,userId:readAuth(request)?.user.id,action:'knowledge.image.upload',target:document.path})
+              request.json(202,{document:knowledgeDocumentView(repos,repos.knowledge.findDocumentById(document.id,companyId)!),analysis:{status:'pending'}})
+              return
+            }
             if (!category) {
               const document = repos.db.tx(() => {
                 const doc = repos.knowledge.upsertDocumentAndChunks({companyId,...checked,source:'upload-auto',userId:readAuth(request)?.user.id ?? null}, [])
@@ -349,6 +362,19 @@ export function knowledgeRoutes() {
         if(!repos.knowledge.findDocumentById(docId,companyId)) throw notFound('Không tìm thấy tài liệu')
         request.json(200,{job:repos.knowledge.getClassificationJob(companyId,docId) ?? null})
       },[requireMembership(repos)])
+      router.patch('/api/companies/:companyId/knowledge/:docId/image-metadata', async (request) => {
+        const companyId = request.params.companyId!
+        const doc = repos.knowledge.findDocumentById(request.params.docId!, companyId)
+        if (!doc || !doc.mimeType?.startsWith('image/')) throw notFound('Không tìm thấy ảnh sản phẩm')
+        const body = await request.body<Record<string, unknown>>()
+        const product = typeof body.product === 'string' ? body.product.trim().slice(0, 200) : undefined
+        const description = typeof body.description === 'string' ? body.description.trim().slice(0, 4000) : undefined
+        const tags = Array.isArray(body.tags) ? body.tags.filter((tag): tag is string => typeof tag === 'string').map((tag) => tag.trim()).filter(Boolean).slice(0, 30) : undefined
+        if (product === undefined && description === undefined && tags === undefined) throw validation('Cần product, description hoặc tags')
+        if (tags) repos.db.run('UPDATE kb_documents SET tags_json = ?, updated_at = ? WHERE company_id = ? AND id = ?', [JSON.stringify(tags), new Date().toISOString(), companyId, doc.id])
+        repos.knowledge.setUploadMetadata(companyId, doc.id, {originalName: doc.originalName ?? null, mimeType: doc.mimeType, sizeBytes: doc.sizeBytes ?? null, storageKey: doc.storageKey ?? null, originalChecksum: doc.originalChecksum ?? null, ...(product !== undefined ? {imageProduct: product} : {}), ...(description !== undefined ? {imageDescription: description, imageAnalysisStatus: 'ready'} : {})})
+        request.json(200, {document: knowledgeDocumentView(repos, repos.knowledge.findDocumentById(doc.id, companyId)!)})
+      }, [requireMembership(repos), requireWork])
       router.post('/api/companies/:companyId/knowledge/:docId/classification/retry', async (request) => {
         const companyId=request.params.companyId!, docId=request.params.docId!
         const doc=repos.knowledge.findDocumentById(docId,companyId)
@@ -383,6 +409,14 @@ export function knowledgeRoutes() {
           'Cache-Control': 'no-store',
           'X-Content-Type-Options': 'nosniff',
         })
+        request.res.end(bytes)
+      }, [requireMembership(repos)])
+      router.get('/api/companies/:companyId/knowledge/:docId/original', async (request) => {
+        const companyId = request.params.companyId!
+        const doc = repos.knowledge.findDocumentById(request.params.docId!, companyId)
+        if (!doc?.storageKey) throw notFound('Không tìm thấy ảnh gốc của tài liệu')
+        const bytes = await readKnowledgeOriginal(ctx.config.kbRoot, companyId, doc.storageKey)
+        request.res.writeHead(200, {'Content-Type': doc.mimeType ?? 'application/octet-stream', 'Content-Length': bytes.length, 'Cache-Control': 'private, max-age=300', 'X-Content-Type-Options': 'nosniff'})
         request.res.end(bytes)
       }, [requireMembership(repos)])
       router.get('/api/companies/:companyId/knowledge/:docId', async (request) => {

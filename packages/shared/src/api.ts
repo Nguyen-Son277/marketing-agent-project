@@ -303,6 +303,10 @@ export interface KnowledgeDocumentView {
   readonly originalName?: string | null
   readonly mimeType?: string | null
   readonly sizeBytes?: number | null
+  readonly imageProduct?: string | null
+  readonly imageDescription?: string | null
+  readonly imageAnalysisStatus?: 'none' | 'pending' | 'running' | 'ready' | 'failed'
+  readonly imageAnalysisError?: string | null
   readonly classificationStatus?: 'pending' | 'running' | 'ready' | 'failed'
   readonly classificationError?: string | null
   readonly categories?: readonly string[]

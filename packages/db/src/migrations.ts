@@ -931,4 +931,59 @@ CREATE INDEX IF NOT EXISTS idx_agency_clients_company ON agency_clients(company_
     id: '0021_campaign_policy_hosts',
     sql: `ALTER TABLE automation_policies ADD COLUMN allowed_hosts_json TEXT NOT NULL DEFAULT '[]';`,
   },
+  {
+    id: '0022_oauth_connections',
+    sql: `
+CREATE TABLE oauth_apps (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('google','meta','linkedin')),
+  name TEXT,
+  client_id_enc TEXT NOT NULL,
+  client_id_iv TEXT NOT NULL,
+  client_secret_enc TEXT NOT NULL,
+  client_secret_iv TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(company_id, provider)
+);
+CREATE INDEX idx_oauth_apps_company ON oauth_apps(company_id, provider);
+
+CREATE TABLE oauth_states (
+  state_hash TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('google','meta','linkedin')),
+  redirect_uri TEXT NOT NULL,
+  code_verifier_enc TEXT,
+  code_verifier_iv TEXT,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_oauth_states_expiry ON oauth_states(expires_at);
+
+CREATE TABLE integration_oauth_resources (
+  id TEXT PRIMARY KEY,
+  integration_id TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+  resource_type TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  metadata_json TEXT,
+  selected INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  UNIQUE(integration_id, resource_type, resource_id)
+);
+CREATE INDEX idx_integration_oauth_resources ON integration_oauth_resources(integration_id, selected);
+`,
+  },
+  {
+    id: '0023_kb_product_images',
+    sql: `
+ALTER TABLE kb_documents ADD COLUMN image_product TEXT;
+ALTER TABLE kb_documents ADD COLUMN image_description TEXT;
+ALTER TABLE kb_documents ADD COLUMN image_analysis_status TEXT NOT NULL DEFAULT 'none' CHECK (image_analysis_status IN ('none','pending','running','ready','failed'));
+ALTER TABLE kb_documents ADD COLUMN image_analysis_error TEXT;
+CREATE INDEX idx_kb_product_images ON kb_documents(company_id, mime_type, image_product);
+`,
+  },
 ]

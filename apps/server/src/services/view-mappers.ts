@@ -179,6 +179,12 @@ export function toKnowledgeDocumentView(doc: KbDocumentRecord, indexed: boolean,
     originalName: doc.originalName ?? null,
     mimeType: doc.mimeType ?? null,
     sizeBytes: doc.sizeBytes ?? null,
+    ...(doc.mimeType?.startsWith('image/') ? {
+      imageProduct: doc.imageProduct ?? null,
+      imageDescription: doc.imageDescription ?? null,
+      imageAnalysisStatus: doc.imageAnalysisStatus ?? 'none',
+      imageAnalysisError: doc.imageAnalysisError ?? null,
+    } : {}),
     indexed,
     content,
   }

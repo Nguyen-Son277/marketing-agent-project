@@ -224,6 +224,11 @@ export interface KbDocumentRecord {
   readonly sizeBytes?: number | null
   readonly storageKey?: string | null
   readonly originalChecksum?: string | null
+  /** Product image metadata; populated only for image uploads. */
+  readonly imageProduct?: string | null
+  readonly imageDescription?: string | null
+  readonly imageAnalysisStatus?: 'none' | 'pending' | 'running' | 'ready' | 'failed'
+  readonly imageAnalysisError?: string | null
   readonly classificationStatus?: 'pending' | 'running' | 'ready' | 'failed'
   readonly mtime: string | null
   readonly version: number

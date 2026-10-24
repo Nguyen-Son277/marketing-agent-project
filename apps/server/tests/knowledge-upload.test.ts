@@ -87,6 +87,14 @@ describe('knowledge upload parsing', () => {
     await expect(extractKnowledgeFile('x.txt', Buffer.from([0xff, 0xfe]))).rejects.toBeInstanceOf(KnowledgeUploadValidationError)
     await expect(extractKnowledgeFile('x.md', Buffer.from('  '))).rejects.toBeInstanceOf(KnowledgeUploadValidationError)
   })
+
+  it('accepts product PNG/JPEG/WEBP files without text extraction', async () => {
+    const png = Buffer.from('89504e470d0a1a0a', 'hex')
+    const parsed = await parseKnowledgeUpload(multipart([{ name: 'product', value: 'Demo product' }, { name: 'file', filename: 'product.png', contentType: 'image/png', bytes: png }]))
+    expect(parsed.imageProduct).toBe('Demo product')
+    expect(await extractKnowledgeFile(parsed.filename, parsed.bytes)).toMatchObject({ mimeType: 'image/png', content: '', isImage: true })
+    await expect(extractKnowledgeFile('bad.png', Buffer.from('not-image'))).rejects.toBeInstanceOf(KnowledgeUploadValidationError)
+  })
 })
 
 declare module 'node:stream' {

@@ -33,6 +33,10 @@ interface DocRow {
   size_bytes: number | null
   storage_key: string | null
   original_checksum: string | null
+  image_product: string | null
+  image_description: string | null
+  image_analysis_status: 'none' | 'pending' | 'running' | 'ready' | 'failed'
+  image_analysis_error: string | null
 }
 
 interface ChunkRow {
@@ -112,6 +116,10 @@ const toDocument = (row: DocRow): KbDocumentRecord => ({
   sizeBytes: row.size_bytes,
   storageKey: row.storage_key,
   originalChecksum: row.original_checksum,
+  imageProduct: row.image_product,
+  imageDescription: row.image_description,
+  imageAnalysisStatus: row.image_analysis_status,
+  imageAnalysisError: row.image_analysis_error,
 })
 
 const toChunk = (row: ChunkRow): KbChunkRecord => ({
@@ -154,6 +162,10 @@ export interface UploadMetadata {
   readonly sizeBytes: number | null
   readonly storageKey: string | null
   readonly originalChecksum: string | null
+  readonly imageProduct?: string | null
+  readonly imageDescription?: string | null
+  readonly imageAnalysisStatus?: 'none' | 'pending' | 'running' | 'ready' | 'failed'
+  readonly imageAnalysisError?: string | null
 }
 
 export class KnowledgeRepo {
@@ -190,9 +202,11 @@ export class KnowledgeRepo {
   setUploadMetadata(companyId: string, documentId: string, metadata: UploadMetadata): boolean {
     return this.db.run(
       `UPDATE kb_documents SET original_name = @originalName, mime_type = @mimeType,
-         size_bytes = @sizeBytes, storage_key = @storageKey, original_checksum = @originalChecksum
+         size_bytes = @sizeBytes, storage_key = @storageKey, original_checksum = @originalChecksum,
+         image_product = COALESCE(@imageProduct, image_product), image_description = COALESCE(@imageDescription, image_description),
+         image_analysis_status = COALESCE(@imageAnalysisStatus, image_analysis_status), image_analysis_error = @imageAnalysisError
        WHERE company_id = @companyId AND id = @documentId`,
-      { ...metadata, companyId, documentId },
+      { imageProduct: null, imageDescription: null, imageAnalysisStatus: null, imageAnalysisError: null, ...metadata, companyId, documentId },
     ).changes > 0
   }
 

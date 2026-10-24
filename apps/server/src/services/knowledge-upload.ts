@@ -53,6 +53,7 @@ export async function parseKnowledgeUpload(req: IncomingMessage): Promise<{
   bytes: Buffer
   category?: string
   title?: string
+  imageProduct?: string
   tags: string[]
 }> {
   return await new Promise((resolve, reject) => {
@@ -64,6 +65,7 @@ export async function parseKnowledgeUpload(req: IncomingMessage): Promise<{
     let buffer: Buffer | undefined
     let category: string | undefined
     let title: string | undefined
+    let imageProduct: string | undefined
     let tags: string[] = []
     const finishError = (err: unknown) => {
       if (settled) return
@@ -111,6 +113,7 @@ export async function parseKnowledgeUpload(req: IncomingMessage): Promise<{
       if (info.valueTruncated) { finishError(new KnowledgeUploadValidationError('Multipart field too large')); return }
       if (name === 'category') category = value
       else if (name === 'title') title = value
+      else if (name === 'product' || name === 'productName') imageProduct = value.trim().slice(0, 200)
       else if (name === 'tags') {
         try { tags = parseTags(value) } catch (error) { finishError(error) }
       } else finishError(new KnowledgeUploadValidationError(`Unexpected field: ${name}`))
@@ -125,7 +128,7 @@ export async function parseKnowledgeUpload(req: IncomingMessage): Promise<{
       if (category !== undefined && !CATEGORIES.has(category)) { finishError(new KnowledgeUploadValidationError('Invalid category')); return }
       if (title !== undefined && title.length > 200) { finishError(new KnowledgeUploadValidationError('Title is too long')); return }
       settled = true
-      resolve({ filename, mimeType, bytes: buffer, ...(category ? {category} : {}), ...(title ? { title } : {}), tags })
+      resolve({ filename, mimeType, bytes: buffer, ...(category ? {category} : {}), ...(title ? { title } : {}), ...(imageProduct ? { imageProduct } : {}), tags })
     })
     let received = 0
     req.on('data', (chunk: Buffer) => {
@@ -174,8 +177,20 @@ function validateDocxArchive(bytes: Buffer): void {
   if (!hasDocument) return invalid('File is not a Word DOCX document')
 }
 
-function signature(bytes: Buffer, filename: string): 'pdf' | 'docx' | 'text' {
+function signature(bytes: Buffer, filename: string): 'pdf' | 'docx' | 'text' | 'image' {
   const extension = filename.toLowerCase().split('.').pop()
+  if (extension === 'png') {
+    if (bytes.length < 8 || bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') return invalid('PNG signature does not match filename')
+    return 'image'
+  }
+  if (extension === 'jpg' || extension === 'jpeg') {
+    if (bytes.length < 3 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) return invalid('JPEG signature does not match filename')
+    return 'image'
+  }
+  if (extension === 'webp') {
+    if (bytes.length < 12 || bytes.subarray(0, 4).toString('ascii') !== 'RIFF' || bytes.subarray(8, 12).toString('ascii') !== 'WEBP') return invalid('WEBP signature does not match filename')
+    return 'image'
+  }
   if (extension === 'pdf') {
     if (bytes.subarray(0, 5).toString('ascii') !== '%PDF-') return invalid('PDF signature does not match filename')
     return 'pdf'
@@ -191,15 +206,16 @@ function signature(bytes: Buffer, filename: string): 'pdf' | 'docx' | 'text' {
     try { new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { return invalid('Text file is not valid UTF-8') }
     return 'text'
   }
-  return invalid('Only PDF, DOCX, TXT, and MD files are supported')
+  return invalid('Only PDF, DOCX, TXT, MD, PNG, JPEG, and WEBP files are supported')
 }
 
-export async function extractKnowledgeFile(filename: string, bytes: Buffer): Promise<{ content: string; mimeType: string }> {
+export async function extractKnowledgeFile(filename: string, bytes: Buffer): Promise<{ content: string; mimeType: string; isImage?: boolean }> {
   if (!bytes.length || bytes.length > KNOWLEDGE_UPLOAD_MAX_BYTES) return invalid('File must be non-empty and no larger than 10 MiB')
   const kind = signature(bytes, filename)
   let extracted: string
   const task = (async () => {
-    if (kind === 'text') extracted = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    if (kind === 'image') extracted = ''
+    else if (kind === 'text') extracted = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     else if (kind === 'pdf') {
       const parser = new PDFParse({ data: new Uint8Array(bytes) })
       try {
@@ -222,10 +238,11 @@ export async function extractKnowledgeFile(filename: string, bytes: Buffer): Pro
   } finally {
     if (timer) clearTimeout(timer)
   }
-  if (!extracted!.trim()) return invalid('Document contains no extractable text (scanned documents are not supported)')
+  if (kind !== 'image' && !extracted!.trim()) return invalid('Document contains no extractable text (scanned documents are not supported)')
   if (extracted!.length > KNOWLEDGE_UPLOAD_MAX_CHARS) return invalid('Extracted text exceeds 2 million characters')
-  const mimeType = kind === 'pdf' ? 'application/pdf' : kind === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : filename.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain'
-  return { content: extracted!, mimeType }
+  const lower = filename.toLowerCase()
+  const mimeType = kind === 'image' ? (lower.endsWith('.png') ? 'image/png' : lower.endsWith('.webp') ? 'image/webp' : 'image/jpeg') : kind === 'pdf' ? 'application/pdf' : kind === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : lower.endsWith('.md') ? 'text/markdown' : 'text/plain'
+  return { content: extracted!, mimeType, ...(kind === 'image' ? { isImage: true } : {}) }
 }
 
 export { KnowledgeUploadValidationError as KnowledgeUploadError }
