@@ -1898,6 +1898,10 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
       setOptions([]);
     }
   }
+  function reconnect(integration: IntegrationView): void {
+    const provider = integration.kind.startsWith("google-") ? "google" : integration.kind === "meta" ? "meta" : integration.kind === "linkedin" ? "linkedin" : null;
+    if (provider) window.location.assign(`${api.oauthStartUrl(companyId, provider)}&kind=${encodeURIComponent(integration.kind)}`);
+  }
 
   async function saveOption(): Promise<void> {
     if (!optionsIntegrationId || !optionsKind || !selectedOptions[optionsKind]) return;
@@ -1976,6 +1980,9 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
                         {t("settings.integrations.test")}
                       </Nut>
                   {integration.kind !== 'firecrawl' && integration.kind !== 'email-smtp' ? (
+                        <Nut bien="phu" nho onClick={() => reconnect(integration)}>{t("settings.integrations.reconnect")}</Nut>
+                      ) : null}
+                      {integration.kind !== 'firecrawl' && integration.kind !== 'email-smtp' ? (
                         <Nut
                           bien="phu"
                           nho

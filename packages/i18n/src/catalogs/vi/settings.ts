@@ -191,6 +191,7 @@ export const vi_settings = {
   'settings.integrations.simpleHint': 'Kết nối tài khoản trong vài bước. Thông tin đăng nhập được mã hoá và không hiển thị lại.',
   'settings.integrations.connect': 'Kết nối tài khoản',
   'settings.integrations.resources': 'Chọn tài nguyên',
+  'settings.integrations.reconnect': 'Kết nối lại',
   'settings.integrations.deleteConfirm': 'Xoá kết nối “{{name}}”?',
   'settings.integrations.smtp.required': 'Cần nhập máy chủ SMTP, tài khoản, mật khẩu và địa chỉ gửi.',
   'settings.integrations.oauth.appName': 'Tên ứng dụng (tuỳ chọn)',

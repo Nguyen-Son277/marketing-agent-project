@@ -189,6 +189,7 @@ export const en_settings = {
   'settings.integrations.simpleHint': 'Connect an account in a few clicks. Credentials are encrypted and never shown here.',
   'settings.integrations.connect': 'Connect account',
   'settings.integrations.resources': 'Choose resources',
+  'settings.integrations.reconnect': 'Reconnect',
   'settings.integrations.deleteConfirm': 'Remove the connection “{{name}}”?',
   'settings.integrations.smtp.required': 'Enter SMTP host, username, password and sender address.',
   'settings.integrations.oauth.appName': 'App name (optional)',
