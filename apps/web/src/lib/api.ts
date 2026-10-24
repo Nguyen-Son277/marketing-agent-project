@@ -1065,9 +1065,18 @@ export const api = {
   ): Promise<{
     options: readonly { id: string; name: string; type?: string }[];
   }> {
-    return request(
+    const result = await request<{ options: readonly unknown[] }>(
       `/api/companies/${encodeURIComponent(companyId)}/integrations/${encodeURIComponent(kind)}/options`,
     );
+    return {
+      options: result.options.map((value, index) => {
+        if (typeof value === "string") return { id: value, name: value };
+        const item = value as Record<string, unknown>;
+        const id = String(item.id ?? item.resourceName ?? item.siteUrl ?? item.urn ?? index);
+        const name = String(item.name ?? item.displayName ?? item.siteUrl ?? item.resourceName ?? id);
+        return { id, name, ...(typeof item.type === "string" ? { type: item.type } : {}) };
+      }),
+    };
   },
 
   async updateIntegrationDefaults(
