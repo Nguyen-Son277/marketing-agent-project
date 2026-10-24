@@ -121,13 +121,19 @@ export function oauthRoutes() {
         const config = repos.accounting.resolveIntegrationConfig<Record<string, unknown>>(record) ?? {}
         const token = String(config.accessToken ?? config.access_token ?? '')
         if (!token) return request.json(200, { options: [] })
-        const options = kind === 'google-search-console' ? await providerJson('https://www.googleapis.com/webmasters/v3/sites', token, 'siteEntry') : kind === 'google-ads' ? await providerJson('https://googleads.googleapis.com/v18/customers:listAccessibleCustomers', token, 'resourceNames') : kind === 'meta' ? await providerJson('https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token', token, 'data') : kind === 'linkedin' ? await providerJson('https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee', token, 'elements') : []
+        const options = (kind === 'google-search-console' ? await providerJson('https://www.googleapis.com/webmasters/v3/sites', token, 'siteEntry') : kind === 'google-ads' ? await providerJson('https://googleads.googleapis.com/v18/customers:listAccessibleCustomers', token, 'resourceNames') : kind === 'meta' ? await providerJson('https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token', token, 'data') : kind === 'linkedin' ? await providerJson('https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee', token, 'elements') : []).map((item) => {
+          if (typeof item === 'string') return { id: item, name: item.split('/').pop() ?? item }
+          const value = item as Record<string, unknown>
+          const id = String(value.siteUrl ?? value.id ?? value.organizationalTarget ?? '')
+          return { id, name: String(value.name ?? id) }
+        })
         request.json(200, { options })
       }, [requireMembership(repos)])
 
       router.patch('/api/companies/:companyId/integrations/:integrationId/defaults', async (request) => {
         const companyId = request.params.companyId!
-        const body = await request.body<Record<string, unknown>>()
+        const rawBody = await request.body<Record<string, unknown>>()
+        const body = (rawBody?.defaults && typeof rawBody.defaults === 'object' ? rawBody.defaults : rawBody) as Record<string, unknown>
         const allowed = ['siteUrl', 'propertyId', 'customerId', 'pageId', 'adAccountId', 'organizationUrn', 'developerToken']
         const patch = Object.fromEntries(Object.entries(body ?? {}).filter(([key]) => allowed.includes(key) && typeof body?.[key] === 'string'))
         const record = repos.accounting.updateIntegrationConfig(companyId, request.params.integrationId!, patch)
