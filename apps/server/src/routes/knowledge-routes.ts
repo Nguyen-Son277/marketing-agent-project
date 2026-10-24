@@ -26,6 +26,7 @@ import { readKnowledgeModelSettings, saveKnowledgeModelSettings } from '../servi
 import { classifyKnowledgeSource } from '../services/knowledge-classifier.ts'
 import { embeddingFor } from '../services/agent-services.ts'
 import { extractKnowledgeFile, parseKnowledgeUpload } from '../services/knowledge-upload.ts'
+import { analyzeProductImage } from '../services/product-image-analysis.ts'
 import { readKnowledgeOriginal, removeKnowledgeOriginal, removeLegacyKnowledgeFile, storeKnowledgeOriginal } from '../services/knowledge-storage.ts'
 import {
   documentContent,
@@ -374,6 +375,20 @@ export function knowledgeRoutes() {
         if (tags) repos.db.run('UPDATE kb_documents SET tags_json = ?, updated_at = ? WHERE company_id = ? AND id = ?', [JSON.stringify(tags), new Date().toISOString(), companyId, doc.id])
         repos.knowledge.setUploadMetadata(companyId, doc.id, {originalName: doc.originalName ?? null, mimeType: doc.mimeType, sizeBytes: doc.sizeBytes ?? null, storageKey: doc.storageKey ?? null, originalChecksum: doc.originalChecksum ?? null, ...(product !== undefined ? {imageProduct: product} : {}), ...(description !== undefined ? {imageDescription: description, imageAnalysisStatus: 'ready'} : {})})
         request.json(200, {document: knowledgeDocumentView(repos, repos.knowledge.findDocumentById(doc.id, companyId)!)})
+      }, [requireMembership(repos), requireWork])
+      router.post('/api/companies/:companyId/knowledge/:docId/image-analysis', async (request) => {
+        const companyId = request.params.companyId!
+        const doc = repos.knowledge.findDocumentById(request.params.docId!, companyId)
+        if (!doc || !doc.mimeType?.startsWith('image/')) throw notFound('Không tìm thấy ảnh sản phẩm')
+        repos.db.run("UPDATE kb_documents SET image_analysis_status = 'running', image_analysis_error = NULL WHERE company_id = ? AND id = ?", [companyId, doc.id])
+        try {
+          const result = await analyzeProductImage(repos, ctx.config.kbRoot, companyId, doc.id)
+          request.json(200, { document: knowledgeDocumentView(repos, repos.knowledge.findDocumentById(doc.id, companyId)!), result })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Phân tích ảnh thất bại'
+          repos.db.run("UPDATE kb_documents SET image_analysis_status = 'failed', image_analysis_error = ? WHERE company_id = ? AND id = ?", [message, companyId, doc.id])
+          throw validation(message)
+        }
       }, [requireMembership(repos), requireWork])
       router.post('/api/companies/:companyId/knowledge/:docId/classification/retry', async (request) => {
         const companyId=request.params.companyId!, docId=request.params.docId!
