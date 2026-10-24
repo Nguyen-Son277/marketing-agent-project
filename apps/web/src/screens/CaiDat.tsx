@@ -1966,7 +1966,7 @@ function PhanKetNoi({ companyId }: { companyId: string }): ReactNode {
                       >
                         {t("settings.integrations.test")}
                       </Nut>
-                      {oauthKind ? (
+                  {integration.kind !== 'firecrawl' && integration.kind !== 'email-smtp' ? (
                         <Nut
                           bien="phu"
                           nho

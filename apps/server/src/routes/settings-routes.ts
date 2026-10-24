@@ -512,6 +512,16 @@ export function settingsRoutes() {
         async (request) => {
           const companyId = request.params.companyId!
           const input = parseOrThrow(upsertIntegrationSchema, await request.body(), 'kết nối')
+          // OAuth credentials are entered in dedicated fields by the settings UI.
+          // Keep the legacy integration row for compatibility, while storing the
+          // provider app credentials in the encrypted OAuth app table used by the
+          // browser redirect flow.
+          const oauthProvider = typeof input.config.oauthProvider === 'string' ? input.config.oauthProvider : undefined
+          if (oauthProvider === 'google' || oauthProvider === 'meta' || oauthProvider === 'linkedin') {
+            const clientId = typeof input.config.clientId === 'string' ? input.config.clientId.trim() : ''
+            const clientSecret = typeof input.config.clientSecret === 'string' ? input.config.clientSecret.trim() : ''
+            if (clientId && clientSecret) repos.oauth.upsertApp({ companyId, provider: oauthProvider, clientId, clientSecret, name: input.name })
+          }
           const record = repos.accounting.upsertIntegration({
             companyId,
             kind: input.kind,
