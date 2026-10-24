@@ -82,7 +82,7 @@ export function oauthRoutes() {
         url.searchParams.set('response_type', 'code')
         url.searchParams.set('state', state)
         url.searchParams.set('code_challenge', pkceChallenge(verifier)); url.searchParams.set('code_challenge_method', 'S256')
-        if (provider === 'google') url.searchParams.set('scope', googleScopes.join(' '));
+        if (provider === 'google') { url.searchParams.set('scope', googleScopes.join(' ')); url.searchParams.set('access_type', 'offline'); url.searchParams.set('prompt', 'consent') }
         if (provider === 'meta') { url.searchParams.set('scope', 'pages_show_list,pages_read_engagement,ads_read,instagram_basic'); url.searchParams.set('auth_type', 'rerequest') }
         if (provider === 'linkedin') url.searchParams.set('scope', 'openid profile email w_member_social')
         request.redirect(url.toString())
