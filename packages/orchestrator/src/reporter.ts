@@ -34,6 +34,20 @@ export function composeReport(input: BuildReportInput): string {
   sections.push('## 1. Tóm tắt điều hành')
   sections.push(executiveSummary(input, done, pending))
 
+  const productImages = input.repos.knowledge.listProductImages(input.companyId, input.brief, 3)
+  if (productImages.length > 0) {
+    sections.push('## Hình ảnh sản phẩm')
+    sections.push(
+      productImages
+        .map((image) => {
+          const url = `/api/companies/${encodeURIComponent(input.companyId)}/knowledge/${encodeURIComponent(image.id)}/original`
+          const description = image.imageDescription ? ` — ${image.imageDescription}` : ''
+          return `![${image.title}](${url})\n\n*${image.title}${description}*`
+        })
+        .join('\n\n'),
+    )
+  }
+
   sections.push('## 2. Kết quả theo mục tiêu')
   sections.push(...outcomeSections(input.summary.outcomes))
 

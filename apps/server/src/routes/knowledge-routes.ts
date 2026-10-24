@@ -155,6 +155,12 @@ export function knowledgeRoutes() {
               createdDocumentId = document.id
               saved = true
               repos.accounting.audit({companyId,userId:readAuth(request)?.user.id,action:'knowledge.image.upload',target:document.path})
+              // Vision analysis is best-effort and runs after the upload has been
+              // durably stored. The image remains usable with metadata if no vision
+              // model is configured or the provider is temporarily unavailable.
+              void analyzeProductImage(repos, ctx.config.kbRoot, companyId, document.id).catch((error) => {
+                repos.db.run("UPDATE kb_documents SET image_analysis_status = 'failed', image_analysis_error = ?, updated_at = ? WHERE company_id = ? AND id = ?", [error instanceof Error ? error.message : 'Phân tích ảnh thất bại', new Date().toISOString(), companyId, document.id])
+              })
               request.json(202,{document:knowledgeDocumentView(repos,repos.knowledge.findDocumentById(document.id,companyId)!),analysis:{status:'pending'}})
               return
             }

@@ -553,15 +553,15 @@ export const api = {
   },
 
   knowledgeImageUrl(companyId: string, documentId: string): string {
-    return `/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}/download`;
+    return `/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}/original`;
   },
 
   async retryKnowledgeImageAnalysis(
     companyId: string,
     documentId: string,
-  ): Promise<{ job: unknown }> {
+  ): Promise<{ document: KnowledgeDocumentView; result?: unknown }> {
     return request(
-      `/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}/vision/retry`,
+      `/api/companies/${encodeURIComponent(companyId)}/knowledge/${encodeURIComponent(documentId)}/image-analysis`,
       { method: "POST", body: {} },
     );
   },

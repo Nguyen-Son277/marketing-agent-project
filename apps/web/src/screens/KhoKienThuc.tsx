@@ -186,7 +186,8 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   useEffect(() => {
     const processing = duLieu?.documents.some((doc) => {
       const status = (doc as KnowledgeDocumentView & KnowledgeClassificationFields).classificationStatus
-      return status === 'pending' || status === 'running'
+      const imageStatus = (doc as KnowledgeDocumentView & { imageAnalysisStatus?: string }).imageAnalysisStatus
+      return status === 'pending' || status === 'running' || imageStatus === 'pending' || imageStatus === 'running'
     })
     if (!processing) return
     const timer = setInterval(taiLai, 3000)
@@ -674,7 +675,14 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
                           const doc = taiLieu as KnowledgeDocumentView & KnowledgeClassificationFields
                           const pending = doc.classificationStatus === 'pending' || doc.classificationStatus === 'running'
                           const error = thongBaoPhanLoai(doc.classificationError, t('knowledge.classificationError'))
+                          const image = taiLieu as KnowledgeDocumentView & { imageAnalysisStatus?: string; imageAnalysisError?: string | null }
+                          const imagePending = image.imageAnalysisStatus === 'pending' || image.imageAnalysisStatus === 'running'
+                          const imageFailed = image.imageAnalysisStatus === 'failed'
                           return <>
+                            {taiLieu.mimeType?.startsWith('image/') ? <div style={{ fontSize: 12, color: imageFailed ? 'var(--mau-loi)' : 'var(--mau-chu-mo)' }}>
+                              {imagePending ? t('knowledge.imageAnalysisPending') : imageFailed ? (image.imageAnalysisError ?? t('knowledge.imageAnalysisFailed')) : image.imageAnalysisStatus === 'ready' ? t('knowledge.imageAnalysisReady') : t('knowledge.imageAnalysisUnavailable')}
+                              {imageFailed ? <Nut nho bien="phu" onClick={() => { void api.retryKnowledgeImageAnalysis(companyId, taiLieu.id).then(() => taiLai()).catch((error) => setLoiLuu(error instanceof ApiError ? error.message : t('knowledge.imageAnalysisFailed'))) }}>{t('common.retry')}</Nut> : null}
+                            </div> : null}
                             {pending ? <div style={{ fontSize: 12 }}>{t('knowledge.processingNoSearch')}{doc.classificationNextAttemptAt ? ` ${t('knowledge.retryBackoff', { time: formatDateTime(doc.classificationNextAttemptAt) })}` : ''}</div> : null}
                             {doc.classificationStatus === 'failed' ? <div style={{ fontSize: 12, color: 'var(--mau-loi)' }}>{error ?? t('knowledge.classificationError')}</div> : null}
                             <div className="hang" style={{ gap: 6, marginTop: 6 }}>

@@ -114,7 +114,7 @@ export class CampaignRepo {
 
   listAgencyMembers(agencyId: string, userId: string): Array<AgencyMembershipRecord & { name: string; email: string }> {
     this.requireAgencyMembership(agencyId, userId)
-    return this.db.all<AgencyMemberRow>(
+    return this.db.all<AgencyMembershipRow & { name: string; email: string }>(
       `SELECT m.agency_id AS agencyId,m.user_id AS userId,m.role,m.created_at AS createdAt,u.name,u.email
        FROM agency_memberships m JOIN users u ON u.id=m.user_id WHERE m.agency_id=? ORDER BY u.name,u.email`,
       [agencyId],

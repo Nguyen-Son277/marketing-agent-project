@@ -161,6 +161,10 @@ function renderTable(rows: readonly string[]): string {
  */
 function inline(text: string): string {
   let out = escapeHtml(text)
+  // Render only same-origin knowledge images or HTTPS images. The URL is still
+  // escaped above, and restricting the source prevents agent-authored markup
+  // from loading arbitrary protocols.
+  out = out.replace(/!\[([^\]]*)\]\(((?:https:\/\/|\/api\/)[^\s)]+)\)/g, '<img src="$2" alt="$1" loading="lazy" />')
   // Code nội tuyến trước, để `*` bên trong code không thành in đậm.
   out = out.replace(/`([^`]+)`/g, (_match, code: string) => `<code>${code}</code>`)
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')

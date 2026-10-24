@@ -72,8 +72,11 @@ export function oauthRoutes() {
         if (!app) throw new AppError('needs_configuration', `Chưa cấu hình OAuth app cho ${provider}`)
         const resolved = repos.oauth.resolveApp(app)
         const requestedKind = request.query('kind')
-        const redirectUri = `${callbackUri(ctx, provider)}${requestedKind ? `?kind=${encodeURIComponent(requestedKind)}` : ''}`
-        const state = randomBytes(32).toString('base64url')
+        // Keep the registered redirect URI stable. Provider consoles generally
+        // require an exact match, so the selected Google service is carried in
+        // the opaque state value instead of a query string on redirect_uri.
+        const redirectUri = callbackUri(ctx, provider)
+        const state = `${randomBytes(32).toString('base64url')}${requestedKind ? `.${encodeURIComponent(requestedKind)}` : ''}`
         const verifier = pkceVerifier()
         repos.oauth.createState({ state, companyId, userId: auth.user.id, provider, redirectUri, codeVerifier: verifier, expiresAt: new Date(Date.now() + 10 * 60_000).toISOString() })
         const url = provider === 'google' ? new URL('https://accounts.google.com/o/oauth2/v2/auth') : provider === 'meta' ? new URL('https://www.facebook.com/v20.0/dialog/oauth') : new URL('https://www.linkedin.com/oauth/v2/authorization')
@@ -100,7 +103,8 @@ export function oauthRoutes() {
             const app = repos.oauth.findApp(state.companyId, provider)
             if (!app) throw new AppError('needs_configuration', 'OAuth app không còn tồn tại')
             const tokens = await exchange(provider, code, repos.oauth.resolveApp(app), state.redirectUri, repos.oauth.resolveCodeVerifier(state))
-            const kind = provider === 'google' ? integrationKind(provider, request.query('kind')) : kindByProvider[provider]
+            const stateKind = stateValue.includes('.') ? decodeURIComponent(stateValue.slice(stateValue.indexOf('.') + 1)) : undefined
+            const kind = provider === 'google' ? integrationKind(provider, stateKind) : kindByProvider[provider]
             const config: Record<string, unknown> = { ...tokens, clientId: repos.oauth.resolveApp(app).clientId, clientSecret: repos.oauth.resolveApp(app).clientSecret }
             if (provider === 'google' && !config.refresh_token) config.refreshToken = undefined
             if (config.access_token) config.accessToken = config.access_token
