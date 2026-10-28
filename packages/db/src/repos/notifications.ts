@@ -90,7 +90,7 @@ export class NotificationsRepo {
     const day=at.toISOString().slice(0,10)
     const spent=this.db.get<{n:number}>('SELECT COALESCE(SUM(cost_usd),0) AS n FROM runs WHERE company_id=? AND created_at>=? AND id<>?',[companyId,`${day}T00:00:00.000Z`,runId])!.n+runCost
     for(const [kind,used,limit,scope] of [['daily',spent,limits.dailyCostUsd,day],['task',runCost,limits.taskCostUsd,runId]] as const){
-      if(limit===undefined||!Number.isFinite(limit)||limit<0) continue
+      if(limit===undefined||!Number.isFinite(limit)||limit<=0) continue
       // A jump straight to 100% gets one alert, while consuming the 80% key.
       if(used>=limit && used>0) this.db.run('INSERT OR IGNORE INTO notification_events(company_id,dedupe_key,created_at) VALUES(?,?,?)',[companyId,`budget:${kind}:${scope}:${limit}:80`,nowIso()])
       for(const threshold of [80,100]){

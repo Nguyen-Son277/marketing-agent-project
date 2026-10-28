@@ -54,6 +54,15 @@ export function assertBrowserWorkerEndpoint(raw: string): string {
 
 /** One authenticated desktop per worker. Only the application owns business data. */
 export class SocialBrowserService {
+  async wordpress(companyId:string,actorId:string,jobId:string,input:Record<string,unknown>,signal?:AbortSignal):Promise<Record<string,unknown>>{
+    this.repos.socialBrowser.manage(companyId,actorId)
+    const job=this.repos.socialBrowser.job(companyId,jobId),channel=this.repos.socialBrowser.channel(companyId,job.channelId)
+    return this.exclusive(channel.desktopId,async()=>{
+      const desktop=this.repos.socialBrowser.desktop(companyId,channel.desktopId)
+      if(job.status!=='running'||desktop.activeJobId!==jobId||desktop.mode!=='agent')throw conflict('Không sở hữu phiên browser')
+      return this.json(companyId,desktop.id,'/wordpress',{...input,jobId},signal)
+    },signal)
+  }
   constructor(
     readonly repos: Repos,
     readonly companiesRoot: string,
@@ -92,8 +101,8 @@ export class SocialBrowserService {
         redirect: 'error',
         headers: { ...init.headers, Authorization: `Bearer ${config.token}` },
         signal: init.signal
-          ? AbortSignal.any([init.signal, AbortSignal.timeout(path.startsWith('/uploads/') ? 300000 : 20000)])
-          : AbortSignal.timeout(path.startsWith('/uploads/') ? 300000 : 20000),
+          ? AbortSignal.any([init.signal, AbortSignal.timeout(path.startsWith('/uploads/') ? 300000 : path === '/wordpress' ? 90000 : 20000)])
+          : AbortSignal.timeout(path.startsWith('/uploads/') ? 300000 : path === '/wordpress' ? 90000 : 20000),
       })
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string }

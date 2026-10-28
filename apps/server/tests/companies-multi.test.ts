@@ -150,10 +150,10 @@ describe('một tài khoản tạo nhiều công ty', () => {
     expect(companies.every((company) => company.role === 'owner')).toBe(true)
 
     const defs = ctx.repos.team.listAgentDefs()
-    expect(defs).toHaveLength(10)
+    expect(defs).toHaveLength(11)
     for (const company of created) {
-      // Mỗi công ty nhận đủ 10 preset như người dùng thấy trong màn Đội agent.
-      expect(ctx.repos.team.listPresets(company.id)).toHaveLength(10)
+      // Mỗi công ty nhận đủ 11 preset như người dùng thấy trong màn Đội agent.
+      expect(ctx.repos.team.listPresets(company.id)).toHaveLength(11)
       // Và đủ phân quyền kho kiến thức: mỗi agent có 6 danh mục, trong đó có danh mục đọc được.
       for (const def of defs) {
         expect(ctx.repos.team.listKnowledgeAcl(company.id, def.id)).toHaveLength(6)

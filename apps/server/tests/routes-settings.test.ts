@@ -165,6 +165,14 @@ describe('settings routes', () => {
 
     const readLimits = await ctx.client.request('GET', `${base}/limits`, { headers: ownerCookie })
     expect(readLimits.json<{ maxStepsPerRun: number }>().maxStepsPerRun).toBe(8)
+
+    const unlimits = await ctx.client.request('PATCH', `${base}/limits`, {
+      headers: ownerCookie,
+      body: { dailyCostUsd: 0, taskCostUsd: 0 },
+    })
+    expect(unlimits.status).toBe(200)
+    expect(unlimits.json<{ dailyCostUsd: number; taskCostUsd: number }>().dailyCostUsd).toBe(0)
+    expect(unlimits.json<{ dailyCostUsd: number; taskCostUsd: number }>().taskCostUsd).toBe(0)
   })
 
   it('provider mặc định failover, tạo round_robin và PATCH giữ hoặc đổi keyUsageMode', async () => {

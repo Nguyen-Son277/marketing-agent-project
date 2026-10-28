@@ -18,8 +18,10 @@ import { accountAccessMiddleware, sessionMiddleware } from './http/middleware.ts
 import { registerNotificationRoutes } from './routes/notification-routes.ts'
 import { registerDailyReportRoutes } from './routes/daily-report-routes.ts'
 import { registerSocialBrowserRoutes } from './routes/social-browser-routes.ts'
+import { registerWordpressRoutes } from './routes/wordpress-routes.ts'
 import { registerAdminRoutes } from './routes/admin-routes.ts'
 import { registerWorkforceRoutes } from './routes/workforce-routes.ts'
+import { registerOfficeRoutes } from './routes/office-routes.ts'
 import { campaignLoopRoutes } from './routes/campaign-loop-routes.ts'
 import { registerAuthRoutes, registerMemberRoutes } from './routes/auth-routes.ts'
 
@@ -50,8 +52,10 @@ export function buildApp(options: BuildAppOptions): App {
   registerMemberRoutes(router, repos)
   registerAdminRoutes(router, repos)
   registerWorkforceRoutes(router, repos)
+  registerOfficeRoutes(router, context)
   registerDailyReportRoutes(router, context)
   registerSocialBrowserRoutes(router, context)
+  registerWordpressRoutes(router, context)
   registerNotificationRoutes(router, repos)
   const campaignModule = campaignLoopRoutes()
   campaignModule.register(router, context)

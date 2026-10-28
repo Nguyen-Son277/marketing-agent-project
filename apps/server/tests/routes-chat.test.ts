@@ -157,4 +157,139 @@ describe('chat routes', () => {
     controller.abort()
     expect(received).toContain('event: warning')
   })
+
+  it('sửa tên cuộc trao đổi (PATCH) và cô lập quyền', async () => {
+    const { ownerCookie, company } = await tenant(ctx, 'chat-rename@example.com', 'Chat Rename')
+    const other = await tenant(ctx, 'chat-other@example.com', 'Chat Other')
+    const viewer = await addMember(ctx, company.id, 'chat-rename-viewer@example.com', 'viewer')
+    const conversationId = await newConversation(ownerCookie, company.id)
+
+    // Đổi tên thành công
+    const patchRes = await ctx.client.request('PATCH', `/api/conversations/${conversationId}`, {
+      headers: ownerCookie,
+      body: { title: 'Tên mới đã cập nhật' },
+    })
+    expect(patchRes.status).toBe(200)
+    expect(patchRes.json<{ conversation: { title: string } }>().conversation.title).toBe('Tên mới đã cập nhật')
+
+    // Lấy lại chi tiết kiểm tra tên mới
+    const detail = await ctx.client.request('GET', `/api/conversations/${conversationId}`, {
+      headers: ownerCookie,
+    })
+    expect(detail.json<{ conversation: { title: string } }>().conversation.title).toBe('Tên mới đã cập nhật')
+
+    // Tên rỗng bị từ chối
+    const invalidRes = await ctx.client.request('PATCH', `/api/conversations/${conversationId}`, {
+      headers: ownerCookie,
+      body: { title: '   ' },
+    })
+    expect(invalidRes.status).toBe(400)
+    expect(errorCode(invalidRes)).toBe('validation')
+
+    // Viewer không được sửa tên
+    const viewerRes = await ctx.client.request('PATCH', `/api/conversations/${conversationId}`, {
+      headers: viewer.cookie,
+      body: { title: 'Viewer thử sửa' },
+    })
+    expect(viewerRes.status).toBe(403)
+
+    // Công ty khác nhận 404
+    const otherRes = await ctx.client.request('PATCH', `/api/conversations/${conversationId}`, {
+      headers: other.ownerCookie,
+      body: { title: 'Hacker sửa' },
+    })
+    expect(otherRes.status).toBe(404)
+  })
+
+  it('xoá cuộc trao đổi (DELETE) giữ lại công việc khi deleteTasks=false', async () => {
+    const { ownerCookie, company } = await tenant(ctx, 'chat-del-keep@example.com', 'Chat Del Keep')
+    const conversationId = await newConversation(ownerCookie, company.id)
+
+    // Tạo một task thuộc cuộc trao đổi này
+    const task = ctx.repos.work.createTask({
+      companyId: company.id,
+      conversationId,
+      title: 'Việc cần giữ lại',
+      briefMd: 'Brief',
+    })
+
+    const delRes = await ctx.client.request('DELETE', `/api/conversations/${conversationId}?deleteTasks=false`, {
+      headers: ownerCookie,
+    })
+    expect(delRes.status).toBe(200)
+    expect(delRes.json<{ deleted: boolean; deleteTasks: boolean }>().deleted).toBe(true)
+    expect(delRes.json<{ deleted: boolean; deleteTasks: boolean }>().deleteTasks).toBe(false)
+
+    // Cuộc trao đổi đã bị xoá
+    const detailRes = await ctx.client.request('GET', `/api/conversations/${conversationId}`, {
+      headers: ownerCookie,
+    })
+    expect(detailRes.status).toBe(404)
+
+    // Task vẫn còn nhưng conversation_id chuyển thành null
+    const preservedTask = ctx.repos.work.findTask(task.id, company.id)
+    expect(preservedTask).toBeDefined()
+    expect(preservedTask?.conversationId).toBeNull()
+  })
+
+  it('xoá cuộc trao đổi (DELETE) kèm công việc khi deleteTasks=true', async () => {
+    const { ownerCookie, company } = await tenant(ctx, 'chat-del-all@example.com', 'Chat Del All')
+    const other = await tenant(ctx, 'chat-del-other@example.com', 'Chat Del Other')
+    const viewer = await addMember(ctx, company.id, 'chat-del-viewer@example.com', 'viewer')
+    const conversationId = await newConversation(ownerCookie, company.id)
+
+    // Tạo một task thuộc cuộc trao đổi này
+    const task = ctx.repos.work.createTask({
+      companyId: company.id,
+      conversationId,
+      title: 'Việc cần xoá theo',
+      briefMd: 'Brief',
+    })
+
+    // Viewer không được xoá
+    const viewerRes = await ctx.client.request('DELETE', `/api/conversations/${conversationId}`, {
+      headers: viewer.cookie,
+    })
+    expect(viewerRes.status).toBe(403)
+
+    // Công ty khác nhận 404
+    const otherRes = await ctx.client.request('DELETE', `/api/conversations/${conversationId}`, {
+      headers: other.ownerCookie,
+    })
+    expect(otherRes.status).toBe(404)
+
+    // Xoá kèm task
+    const delRes = await ctx.client.request('DELETE', `/api/conversations/${conversationId}?deleteTasks=true`, {
+      headers: ownerCookie,
+    })
+    expect(delRes.status).toBe(200)
+
+    // Cả cuộc trao đổi lẫn task đều bị xoá
+    expect(ctx.repos.work.findConversation(conversationId, company.id)).toBeUndefined()
+    expect(ctx.repos.work.findTask(task.id, company.id)).toBeUndefined()
+  })
+
+  it('tự động đặt tên cuộc trò chuyện theo nội dung tin nhắn đầu khi tiêu đề mặc định', async () => {
+    const { ownerCookie, company } = await tenant(ctx, 'chat-autotitle@example.com', 'Chat AutoTitle')
+    // Tạo cuộc trò chuyện với tiêu đề mặc định
+    const createRes = await ctx.client.request('POST', `/api/companies/${company.id}/conversations`, {
+      headers: ownerCookie,
+      body: { title: 'Cuộc trao đổi mới' },
+    })
+    const conversationId = createRes.json<{ conversation: { id: string } }>().conversation.id
+
+    // Gửi tin nhắn đầu tiên
+    await ctx.client.request('POST', `/api/conversations/${conversationId}/messages`, {
+      headers: ownerCookie,
+      body: { content: 'Lập kế hoạch content tháng 12 cho sản phẩm Sapa POS, mục tiêu 100 lead' },
+    })
+
+    // Kiểm tra tên cuộc trò chuyện đã tự động cập nhật
+    const detail = await ctx.client.request('GET', `/api/conversations/${conversationId}`, {
+      headers: ownerCookie,
+    })
+    const title = detail.json<{ conversation: { title: string } }>().conversation.title
+    expect(title).not.toBe('Cuộc trao đổi mới')
+    expect(title).toContain('Lập kế hoạch content tháng 12')
+  })
 })

@@ -30,7 +30,7 @@ describe('diagram routes', () => {
       workflow: unknown[]
       knowledge: { code: string; owners: string[] }[]
     }>()
-    expect(body.nodes).toHaveLength(10)
+    expect(body.nodes).toHaveLength(11)
     expect(body.nodes.find((node) => node.role === 'marketing-leader')?.layer).toBe('leader')
     expect(body.edges.some((edge) => edge.kind === 'delegates')).toBe(true)
     expect(body.workflow).toHaveLength(7)
@@ -62,8 +62,8 @@ describe('diagram routes', () => {
     expect(body.company.id).toBe(company.id)
     expect(body.company.role).toBe('owner')
     expect(body.counts.tasks['assigned']).toBe(1)
-    expect(body.counts.agentsEnabled).toBe(10)
-    expect(body.counts.agentsTotal).toBe(10)
+    expect(body.counts.agentsEnabled).toBe(11)
+    expect(body.counts.agentsTotal).toBe(11)
     expect(typeof body.cost.today).toBe('number')
     expect(body.cost.limitPerDay).toBeGreaterThan(0)
     expect(body.recentActivity.some((entry) => entry.kind === 'company.create')).toBe(true)

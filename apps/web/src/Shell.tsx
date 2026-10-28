@@ -27,7 +27,10 @@ import { CongTyCuaToi } from './screens/CongTyCuaToi.tsx'
 import { ChiPhi } from './screens/ChiPhi.tsx'
 import { SoDoDoiAgent } from './screens/SoDoDoiAgent.tsx'
 import { TrinhDuyetXaHoi } from './screens/TrinhDuyetXaHoi.tsx'
+import { Wordpress } from './screens/Wordpress.tsx'
 import { CampaignLoop } from './screens/CampaignLoop.tsx'
+import { VanPhongAI } from './screens/VanPhongAI.tsx'
+
 
 /**
  * Bảng định tuyến.
@@ -38,11 +41,13 @@ import { CampaignLoop } from './screens/CampaignLoop.tsx'
  */
 export const ROUTES = [
   { id: 'bang-dieu-khien', nhan: 'nav.dashboard', nhom: 'nav.group.work', bieuTuong: '📊' },
+  { id: 'van-phong', nhan: 'nav.office', nhom: 'nav.group.work', bieuTuong: '🏢' },
   { id: 'trao-doi', nhan: 'nav.chat', nhom: 'nav.group.work', bieuTuong: '💬' },
-  { id: 'campaign-loop', nhan: 'campaign.nav', nhom: 'nav.group.work', bieuTuong: '🚀' },
   { id: 'cong-viec', nhan: 'nav.tasks', nhom: 'nav.group.work', bieuTuong: '🗂️' },
+  { id: 'campaign-loop', nhan: 'campaign.nav', nhom: 'nav.group.work', bieuTuong: '🚀' },
   { id: 'giao-viec', nhan: 'nav.workforce', nhom: 'nav.group.work', bieuTuong: '🎨' },
   { id: 'bao-cao-hang-ngay', nhan: 'nav.dailyReports', nhom: 'nav.group.work', bieuTuong: '📝' },
+  { id: 'wordpress', nhan: 'nav.wordpress', nhom: 'nav.group.work', bieuTuong: '🌍' },
   { id: 'trinh-duyet-xa-hoi', nhan: 'nav.socialBrowser', nhom: 'nav.group.work', bieuTuong: '🌐' },
   { id: 'doi-agent', nhan: 'nav.team', nhom: 'nav.group.config', bieuTuong: '🎯' },
   { id: 'kho-kien-thuc', nhan: 'nav.knowledge', nhom: 'nav.group.config', bieuTuong: '📚' },
@@ -129,8 +134,12 @@ export function Shell(): ReactNode {
     switch (route) {
       case 'bang-dieu-khien':
         return <BangDieuKhien companyId={companyId} onNavigate={navigate} />
+      case 'van-phong':
+        return <VanPhongAI key={companyId} companyId={companyId} onNavigate={navigate} />
       case 'trao-doi':
         return <TraoDoi companyId={companyId} />
+      case 'wordpress':
+        return <Wordpress key={companyId} companyId={companyId} />
       case 'campaign-loop':
         return <CampaignLoop companyId={companyId} />
       case 'cong-viec':

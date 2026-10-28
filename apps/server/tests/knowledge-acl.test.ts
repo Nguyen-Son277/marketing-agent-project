@@ -24,13 +24,13 @@ afterEach(async () => {
 })
 
 describe('phân quyền tri thức khi tạo công ty', () => {
-  it('công ty tạo qua HTTP có đủ quyền đọc/ghi cho cả 10 agent', async () => {
+  it('công ty tạo qua HTTP có đủ quyền đọc/ghi cho cả 11 agent', async () => {
     const { company } = await tenant(ctx, 'acl-http@example.com', 'ACL HTTP')
 
     expect(hasKnowledgeAcl(ctx.repos, company.id)).toBe(true)
 
     const defs = ctx.repos.team.listAgentDefs()
-    expect(defs).toHaveLength(10)
+    expect(defs).toHaveLength(11)
     for (const def of defs) {
       const acl = ctx.repos.team.listKnowledgeAcl(company.id, def.id)
       expect(acl, `${def.role} thiếu bản ghi quyền`).toHaveLength(KB_CATEGORIES.length)
@@ -93,7 +93,7 @@ describe('phân quyền tri thức khi tạo công ty', () => {
 
   it('quyền mặc định phủ đúng 6 danh mục cho mỗi vai trò', () => {
     const grants = defaultKnowledgeGrants()
-    expect(grants).toHaveLength(10)
+    expect(grants).toHaveLength(11)
     for (const grant of grants) {
       for (const category of grant.read) {
         expect(KB_CATEGORIES.map((c) => c.code)).toContain(category)

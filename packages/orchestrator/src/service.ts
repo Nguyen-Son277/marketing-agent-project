@@ -41,7 +41,14 @@ import {
   validatePlan,
   type RawPlan,
 } from './planner.ts'
-import { BRIEF_EXTRACTION_INSTRUCTION, extractLabeledBrief, mergeBriefFields, parseExtractedBrief } from './brief.ts'
+import {
+  BRIEF_EXTRACTION_INSTRUCTION,
+  deriveConversationTitle,
+  extractLabeledBrief,
+  isDefaultConversationTitle,
+  mergeBriefFields,
+  parseExtractedBrief,
+} from './brief.ts'
 import { composeReport, persistReport } from './reporter.ts'
 import { reviewOutcomes } from './review.ts'
 import {
@@ -78,6 +85,7 @@ export interface SendMessageInput {
 }
 
 export interface PlanInput {
+  readonly actorUserId?: string
   readonly companyId: string
   readonly conversationId: string
 }
@@ -134,6 +142,20 @@ Conversation:\n${history}`})
     if(!run.run.output && !drafts.length) throw conflict(run.run.error ?? (locale==='en'?'The agent did not produce a response or a draft. Please retry.':'Agent chưa tạo được câu trả lời hoặc nháp. Hãy thử lại.'))
     const reply=run.run.output || (locale==='en'?'A draft needs manager confirmation; open Employee assignments.':'Nháp cần quản lý xác nhận; mở Giao việc nhân viên để kiểm tra.')
     this.repos.work.addMessage({companyId:input.companyId,conversationId:input.conversationId,role:'assistant',authorKind:'leader',authorAgent:'marketing-leader',contentMd:reply,meta:{mode:'workforce',workforceDraftIds:drafts}})
+    if (isDefaultConversationTitle(conversation.title)) {
+      const derivedTitle = deriveConversationTitle({ content: input.content })
+      if (derivedTitle && !isDefaultConversationTitle(derivedTitle)) {
+        this.repos.work.updateConversation(conversation.id, input.companyId, { title: derivedTitle })
+        ;(conversation as { title: string }).title = derivedTitle
+        this.publish?.(
+          event('conversation.updated', input.companyId, {
+            conversationId: conversation.id,
+            id: conversation.id,
+            title: derivedTitle,
+          }),
+        )
+      }
+    }
     return {reply,phase:conversation.phase,briefComplete:false,missingFields:[],runId:null,costUsd:run.run.usage.costUsd}
   }
 
@@ -204,6 +226,23 @@ Conversation:\n${history}`})
     }
 
     const brief = extracted
+    if (isDefaultConversationTitle(conversation.title)) {
+      const derivedTitle = deriveConversationTitle({
+        content: input.content,
+        objective: brief.objective,
+      })
+      if (derivedTitle && !isDefaultConversationTitle(derivedTitle)) {
+        this.repos.work.updateConversation(conversation.id, input.companyId, { title: derivedTitle })
+        ;(conversation as { title: string }).title = derivedTitle
+        this.publish?.(
+          event('conversation.updated', input.companyId, {
+            conversationId: conversation.id,
+            id: conversation.id,
+            title: derivedTitle,
+          }),
+        )
+      }
+    }
     const check = checkBrief(brief)
     this.publish?.(event('leader.thinking', input.companyId, { conversationId: conversation.id }))
 
@@ -340,6 +379,23 @@ Conversation:\n${history}`})
         meta: { mode: input.mode ?? 'campaign', attachmentAnalysis: true },
       })
     })
+    if (isDefaultConversationTitle(conversation.title)) {
+      const derivedTitle = deriveConversationTitle({
+        content: input.content,
+        filenames: files.map((f) => f.filename),
+      })
+      if (derivedTitle && !isDefaultConversationTitle(derivedTitle)) {
+        this.repos.work.updateConversation(conversation.id, input.companyId, { title: derivedTitle })
+        ;(conversation as { title: string }).title = derivedTitle
+        this.publish?.(
+          event('conversation.updated', input.companyId, {
+            conversationId: conversation.id,
+            id: conversation.id,
+            title: derivedTitle,
+          }),
+        )
+      }
+    }
     this.publish?.(event('leader.replied', input.companyId, { conversationId: input.conversationId }))
     const brief = checkBrief(parseBrief(conversation.briefJson))
     return { reply, phase: conversation.phase, briefComplete: brief.complete, missingFields: brief.missing, runId: result.run.runId, costUsd: result.run.usage.costUsd }
@@ -505,6 +561,7 @@ Conversation:\n${history}`})
     }
 
     const summary = await dispatchPlan({
+      actorUserId: input.actorUserId,
       repos: this.repos,
       tools: this.tools,
       embedding: this.embedding,
@@ -649,7 +706,7 @@ Conversation:\n${history}`})
   }
 
   async dispatchTask(
-    ctx: { companyId: string; conversationId: string | null },
+    ctx: { companyId: string; conversationId: string | null; actorUserId?: string },
     taskId: string,
   ): Promise<{ status: string; resultMd: string; artifactIds: readonly string[] }> {
     const task = this.repos.work.findTask(taskId, ctx.companyId)
@@ -673,6 +730,7 @@ Conversation:\n${history}`})
         runtimeOverrides: this.runtimeOverrides,
         publish: this.publish,
         companyId: ctx.companyId,
+        actorUserId: ctx.actorUserId,
         role,
         taskId,
         conversationId,
@@ -708,6 +766,7 @@ Conversation:\n${history}`})
    * lại mãi: quá giới hạn thì trả về tín hiệu để agent tự báo blocker.
    */
   async askPeer(input: {
+    actorUserId?: string
     companyId: string
     conversationId: string | null
     taskId: string | null
@@ -754,6 +813,7 @@ Conversation:\n${history}`})
       runtimeOverrides: this.runtimeOverrides,
       publish: this.publish,
       companyId: input.companyId,
+      actorUserId: input.actorUserId,
       role: input.toRole as never,
       taskId: input.taskId,
       conversationId: input.conversationId,
@@ -876,8 +936,9 @@ Conversation:\n${history}`})
     return conversation
   }
 
-  /** Chặn trước khi tốn token: vượt trần ngày thì không bắt đầu việc mới. */
+  /** Chặn trước khi tốn token: vượt trần ngày thì không bắt đầu việc mới (trần <= 0 nghĩa là không giới hạn). */
   private assertBudget(companyId: string): void {
+    if (this.limits.dailyCostUsd <= 0) return
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const usage = this.repos.accounting.usageSince(companyId, since)
     if (usage.costUsd >= this.limits.dailyCostUsd) {
@@ -1016,7 +1077,7 @@ Conversation:\n${history}`})
             '- Trình bày DUY NHẤT một bảng với đúng bốn cột, theo thứ tự:',
             '  | Công việc | Chuyên môn | Phụ thuộc | Đầu ra |',
             '- Cột "Chuyên môn" ghi đúng mã vai trò, ví dụ: market-research, seo-technical,',
-            '  content-writer, social-media, paid-media, email-crm, design-video,',
+            '  web-technical, content-writer, social-media, paid-media, email-crm, design-video,',
             '  analytics, community-care.',
             '- Ô "Phụ thuộc" ghi "không" nếu không phụ thuộc việc nào.',
             '- Không thêm cột khác, không thêm dòng ghi chú hay nhóm việc bên trong bảng.',
@@ -1295,7 +1356,7 @@ function laDongTieuDe(cells: readonly string[]): boolean {
 
 /** Tên canonical của mọi chuyên môn; dùng để nhận diện ô chuyên môn. */
 const TEN_CANONICAL =
-  /(marketing-leader|market-research|content-writer|seo-technical|social-media|paid-media|email-crm|design-video|analytics|community-care)/i
+  /(marketing-leader|market-research|content-writer|seo-technical|web-technical|social-media|paid-media|email-crm|design-video|analytics|community-care)/i
 
 /**
  * Ô này có phải tên chuyên môn không (khớp TRỌN ô, không khớp một phần).
@@ -1309,10 +1370,11 @@ function laOTenChuyenMon(cell: string): boolean {
   if (sach.length === 0) return false
   const tenViet = [
     'nghiên cứu thị trường', 'nghiên cứu', 'viết nội dung', 'seo kỹ thuật',
+    'kỹ thuật web & it', 'kỹ thuật web', 'kỹ thuật', 'it', 'web developer', 'web technical',
     'social media', 'quảng cáo trả phí', 'quảng cáo', 'email & crm', 'email và crm',
     'thiết kế & video', 'thiết kế và video', 'thiết kế', 'phân tích & báo cáo',
     'phân tích và báo cáo', 'phân tích', 'chăm sóc cộng đồng', 'cộng đồng',
-    'content writer', 'seo technical', 'leader', 'social', 'email',
+    'content writer', 'seo technical', 'web-technical', 'leader', 'social', 'email',
   ]
   const lower = sach.toLowerCase()
   // Khớp trọn ô với tên canonical hoặc tên tiếng Việt.
@@ -1395,6 +1457,14 @@ export function normalizeRole(value: string): string {
     'nội dung': 'content-writer',
     'seo kỹ thuật': 'seo-technical',
     seo: 'seo-technical',
+    'kỹ thuật web & it': 'web-technical',
+    'kỹ thuật web': 'web-technical',
+    'kỹ thuật': 'web-technical',
+    it: 'web-technical',
+    'web developer': 'web-technical',
+    'web-developer': 'web-technical',
+    webmaster: 'web-technical',
+    'web technical': 'web-technical',
     'social media': 'social-media',
     social: 'social-media',
     'quảng cáo trả phí': 'paid-media',

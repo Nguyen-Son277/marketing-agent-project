@@ -405,3 +405,7 @@ Giao diện **không** ghép chuỗi đường dẫn thủ công: dùng hằng s
 `packages/shared/src/api.ts` (ví dụ `API_ROUTES.team(companyId)`), để đổi đường dẫn
 chỉ phải sửa một chỗ.
 API môi trường Chrome, kho nội dung và tác vụ đăng bài: [Trình duyệt xã hội](trinh-duyet-xa-hoi.md#api).
+
+## WordPress
+
+API `/api/companies/:companyId/wordpress`: [kết nối, job, duyệt xóa, restore và capability](wordpress.md#api). Đọc cần membership; ghi và giao agent cần owner/admin, kiểm lại trusted actor khi chạy job.

@@ -72,6 +72,7 @@ export const vi_diagram = {
   'diagram.role.marketResearch': 'Nghiên cứu thị trường',
   'diagram.role.contentWriter': 'Viết nội dung',
   'diagram.role.seoTechnical': 'SEO kỹ thuật',
+  'diagram.role.webTechnical': 'Kỹ thuật Web & IT',
   'diagram.role.socialMedia': 'Social Media',
   'diagram.role.paidMedia': 'Quảng cáo trả phí',
   'diagram.role.emailCrm': 'Email & CRM',

@@ -194,6 +194,16 @@ export const createConversationSchema = z.object({
 })
 export type CreateConversationInput = z.infer<typeof createConversationSchema>
 
+export const updateConversationSchema = z.object({
+  title: z.string().trim().min(1, 'Cần có tên cuộc trao đổi').max(200, 'Tên cuộc trao đổi quá dài'),
+})
+export type UpdateConversationInput = z.infer<typeof updateConversationSchema>
+
+export const deleteConversationSchema = z.object({
+  deleteTasks: z.boolean().default(false),
+})
+export type DeleteConversationInput = z.infer<typeof deleteConversationSchema>
+
 export const sendMessageSchema = z.object({
   mode: z.enum(['campaign','workforce']).default('campaign'),
   content: z.string().trim().max(20_000).default(''),
@@ -382,3 +392,6 @@ export function parseOrThrow<S extends z.ZodTypeAny>(schema: S, payload: unknown
   }
   return result.data
 }
+
+export { officeDispatchSchema, officeFilterSchema, officeDeskPingSchema } from './office.ts'
+

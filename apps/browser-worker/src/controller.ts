@@ -77,6 +77,49 @@ export class BrowserWorkerController {
   status(): Record<string, unknown> {
     return { status: 'ready', mode: this.mode, sessionActive: !!this.session, protocol: 1 }
   }
+  /** Fixed WordPress adapters. No arbitrary selector, URL or script is accepted. */
+  wordpress(raw: unknown): Promise<Record<string,unknown>> {
+    return this.serial(async()=>{
+      const input=raw as {jobId?:string;siteUrl?:string;operation?:string;postId?:number;widgetId?:string;text?:string}
+      if(this.mode!=='agent'||this.session)throw conflict('Worker cần chế độ agent và không có phiên đang chạy')
+      if(!input.jobId||!input.siteUrl||!['backup','elementor','capture'].includes(input.operation??''))throw validation('WordPress adapter không hợp lệ')
+      const site=new URL(input.siteUrl)
+      if(site.protocol!=='https:'||site.username||site.password)throw forbidden('WordPress cần URL HTTPS')
+      const page=this.context.pages()[0]??await this.context.newPage()
+      this.session={jobId:input.jobId,kind:'publish',entryUrl:site.href,allowedHosts:[site.hostname],page,blocked:false}
+      try{
+        const target=input.operation==='backup'?`${input.siteUrl}/wp-admin/options-general.php?page=updraftplus`:input.operation==='elementor'?`${input.siteUrl}/wp-admin/post.php?post=${Number(input.postId)}&action=elementor`:input.siteUrl
+        await page.goto(target,{waitUntil:'domcontentloaded'})
+        if((await this.snapshot(this.session)).needsHuman)return {status:'waiting_human',message:'Cần người dùng đăng nhập/OTP hoặc tiếp quản browser'}
+        const before=(await page.screenshot({type:'jpeg',quality:45})).toString('base64')
+        if(input.operation==='backup'){
+          await page.locator('#updraft-backupnow-button').click()
+          await page.locator('#backupnow_database').check()
+          await page.locator('#backupnow_files').check()
+          await page.locator('#backupnow_go').click()
+          return {status:'started',before,after:(await page.screenshot({type:'jpeg',quality:45})).toString('base64')}
+        }
+        if(input.operation==='elementor'){
+          if(!Number.isInteger(input.postId)||!input.widgetId||!/^[a-zA-Z0-9]+$/.test(input.widgetId)||typeof input.text!=='string')throw validation('Cần postId, widgetId và text')
+          const iframe=page.frameLocator('#elementor-preview-iframe')
+          const widget=iframe.locator(`.elementor-element[data-id="${input.widgetId}"][data-widget_type="heading.default"]`)
+          if(await widget.count()!==1)throw conflict('Adapter chỉ hỗ trợ heading Elementor xác định duy nhất')
+          await widget.click()
+          const title=page.locator('textarea[data-setting="title"]')
+          if(await title.count()!==1)throw conflict('Giao diện Elementor không tương thích')
+          await title.fill(input.text)
+          const saved=page.waitForResponse(response=>response.url().includes('/wp-admin/admin-ajax.php')&&response.request().method()==='POST'&&(response.request().postData()??'').includes('save_builder'),{timeout:15000})
+          await page.locator('#elementor-panel-saver-button-publish').click()
+          const response=await saved
+          const payload=await response.json() as {success?:boolean}
+          if(!response.ok()||payload.success!==true)throw conflict('Elementor chưa xác nhận lưu thành công')
+          await page.reload({waitUntil:'domcontentloaded'})
+          await page.frameLocator('#elementor-preview-iframe').getByRole('heading',{name:input.text,exact:true}).waitFor()
+        }
+        return {status:'verified',before,after:(await page.screenshot({type:'jpeg',quality:45})).toString('base64')}
+      }finally{this.session=null}
+    })
+  }
   setMode(mode: 'human' | 'agent' | 'paused'): Promise<Record<string, unknown>> {
     return this.serial(async () => {
       this.mode = mode

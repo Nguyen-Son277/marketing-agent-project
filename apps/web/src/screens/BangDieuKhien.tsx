@@ -144,6 +144,7 @@ export function BangDieuKhien({
 
   const { counts, cost } = duLieu
   const soViecDangMo = DANG_MO.reduce((tong, trangThai) => tong + counts.tasks[trangThai], 0)
+  const tongTasks = TASK_STATUSES.reduce((tong, trangThai) => tong + counts.tasks[trangThai], 0)
   const tyLeChiPhi = cost.limitPerDay > 0 ? (cost.today / cost.limitPerDay) * 100 : 0
   const conLai = cost.limitPerDay - cost.today
 
@@ -152,11 +153,32 @@ export function BangDieuKhien({
       <div className="dashboard">
         <header className="dashboard__header">
           <div>
-            <TieuDeTrang moTa={t('dashboard.subtitle', { company: duLieu.company.name })}>
-              {t('dashboard.title')}
-            </TieuDeTrang>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+              <TieuDeTrang moTa={t('dashboard.subtitle', { company: duLieu.company.name })}>
+                {t('dashboard.title')}
+              </TieuDeTrang>
+              <span className="dashboard__status-pill">
+                <span className="dashboard__pulse-dot" aria-hidden="true" />
+                <span>{systemProblem ? systemProblem : t('dashboard.agentsReady')}</span>
+              </span>
+            </div>
           </div>
           <Nut bien="phu" onClick={taiLai} dangTai={dangTai}>
+            <svg
+              className={dangTai ? 'dashboard__spin' : ''}
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ marginRight: 6, verticalAlign: 'middle' }}
+              aria-hidden="true"
+            >
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+            </svg>
             {t('common.refresh')}
           </Nut>
         </header>
@@ -173,25 +195,143 @@ export function BangDieuKhien({
         ) : null}
 
         <div className="dashboard__stats">
-          <OSo
-            nhan={t('dashboard.openTasks')}
-            giaTri={formatNumber(soViecDangMo)}
-            moTa={t('dashboard.tasksHint')}
-          />
-          <OSo
-            nhan={t('dashboard.doneTasks')}
-            giaTri={formatNumber(counts.tasks.done)}
-            loai="thanh-cong"
-            moTa={t('dashboard.throughReview')}
-          />
-          <OSo nhan={t('dashboard.conversations')} giaTri={formatNumber(counts.conversations)} moTa={t('dashboard.withLeader')} />
-          <OSo nhan={t('dashboard.documents')} giaTri={formatNumber(counts.documents)} moTa={t('dashboard.inKnowledgeBase')} />
-          <OSo
-            nhan={t('dashboard.agentsEnabled')}
-            giaTri={`${formatNumber(counts.agentsEnabled)}/${formatNumber(counts.agentsTotal)}`}
-            loai={counts.agentsEnabled === 0 ? 'loi' : counts.agentsEnabled < counts.agentsTotal ? 'canh-bao' : 'thanh-cong'}
-            moTa={counts.agentsEnabled === 0 ? t('dashboard.noAgents') : t('dashboard.agentsReady')}
-          />
+          <div
+            className="card dashboard__stat-card"
+            role="button"
+            tabIndex={0}
+            title={t('dashboard.viewTasks')}
+            onClick={() => onNavigate('cong-viec')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onNavigate('cong-viec')
+              }
+            }}
+          >
+            <div className="dashboard__stat-top">
+              <span className="dashboard__stat-label">{t('dashboard.openTasks')}</span>
+              <span className="dashboard__stat-icon" aria-hidden="true">📋</span>
+            </div>
+            <div className="so dashboard__stat-val" style={{ color: 'var(--mau-chinh-dam)' }}>
+              {formatNumber(soViecDangMo)}
+            </div>
+            <div className="dashboard__stat-hint">{t('dashboard.tasksHint')}</div>
+          </div>
+
+          <div
+            className="card dashboard__stat-card"
+            role="button"
+            tabIndex={0}
+            title={t('dashboard.viewTasks')}
+            onClick={() => onNavigate('cong-viec')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onNavigate('cong-viec')
+              }
+            }}
+          >
+            <div className="dashboard__stat-top">
+              <span className="dashboard__stat-label">{t('dashboard.doneTasks')}</span>
+              <span className="dashboard__stat-icon dashboard__stat-icon--success" aria-hidden="true">✅</span>
+            </div>
+            <div className="so dashboard__stat-val" style={{ color: 'var(--mau-thanh-cong)' }}>
+              {formatNumber(counts.tasks.done)}
+            </div>
+            <div className="dashboard__stat-hint">{t('dashboard.throughReview')}</div>
+          </div>
+
+          <div
+            className="card dashboard__stat-card"
+            role="button"
+            tabIndex={0}
+            title={t('dashboard.openChat')}
+            onClick={() => onNavigate('trao-doi')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onNavigate('trao-doi')
+              }
+            }}
+          >
+            <div className="dashboard__stat-top">
+              <span className="dashboard__stat-label">{t('dashboard.conversations')}</span>
+              <span className="dashboard__stat-icon dashboard__stat-icon--purple" aria-hidden="true">💬</span>
+            </div>
+            <div className="so dashboard__stat-val" style={{ color: 'var(--mau-chinh-dam)' }}>
+              {formatNumber(counts.conversations)}
+            </div>
+            <div className="dashboard__stat-hint">{t('dashboard.withLeader')}</div>
+          </div>
+
+          <div
+            className="card dashboard__stat-card"
+            role="button"
+            tabIndex={0}
+            title={t('nav.knowledge')}
+            onClick={() => onNavigate('kho-kien-thuc')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onNavigate('kho-kien-thuc')
+              }
+            }}
+          >
+            <div className="dashboard__stat-top">
+              <span className="dashboard__stat-label">{t('dashboard.documents')}</span>
+              <span className="dashboard__stat-icon dashboard__stat-icon--amber" aria-hidden="true">📚</span>
+            </div>
+            <div className="so dashboard__stat-val" style={{ color: 'var(--mau-chinh-dam)' }}>
+              {formatNumber(counts.documents)}
+            </div>
+            <div className="dashboard__stat-hint">{t('dashboard.inKnowledgeBase')}</div>
+          </div>
+
+          <div
+            className="card dashboard__stat-card"
+            role="button"
+            tabIndex={0}
+            title={t('nav.team')}
+            onClick={() => onNavigate('doi-agent')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onNavigate('doi-agent')
+              }
+            }}
+          >
+            <div className="dashboard__stat-top">
+              <span className="dashboard__stat-label">{t('dashboard.agentsEnabled')}</span>
+              <span
+                className={`dashboard__stat-icon ${
+                  counts.agentsEnabled === 0
+                    ? 'dashboard__stat-icon--danger'
+                    : counts.agentsEnabled < counts.agentsTotal
+                      ? 'dashboard__stat-icon--warning'
+                      : 'dashboard__stat-icon--success'
+                }`}
+                aria-hidden="true"
+              >
+                🤖
+              </span>
+            </div>
+            <div
+              className="so dashboard__stat-val"
+              style={{
+                color:
+                  counts.agentsEnabled === 0
+                    ? 'var(--mau-loi)'
+                    : counts.agentsEnabled < counts.agentsTotal
+                      ? 'var(--mau-canh-bao)'
+                      : 'var(--mau-thanh-cong)',
+              }}
+            >
+              {`${formatNumber(counts.agentsEnabled)}/${formatNumber(counts.agentsTotal)}`}
+            </div>
+            <div className="dashboard__stat-hint">
+              {counts.agentsEnabled === 0 ? t('dashboard.noAgents') : t('dashboard.agentsReady')}
+            </div>
+          </div>
         </div>
 
         <div className="dashboard__overview">
@@ -202,11 +342,29 @@ export function BangDieuKhien({
               last30: formatCurrencyUsd(cost.last30Days),
             })}
           >
-            <div className="hang" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-              <span className="so" style={{ fontWeight: 700, fontSize: 20 }}>
+            <div className="hang" style={{ justifyContent: 'space-between', marginBottom: 8, alignItems: 'baseline' }}>
+              <span className="so" style={{ fontWeight: 800, fontSize: 26, color: 'var(--mau-chu)' }}>
                 {formatCurrencyUsd(cost.today)}
               </span>
-              <span style={{ color: 'var(--mau-chu-mo)', fontSize: 13 }}>
+              <span
+                className="badge"
+                style={{
+                  background:
+                    tyLeChiPhi >= 90
+                      ? 'var(--mau-loi-nen)'
+                      : tyLeChiPhi >= 70
+                        ? 'var(--mau-canh-bao-nen)'
+                        : 'var(--mau-thanh-cong-nen)',
+                  color:
+                    tyLeChiPhi >= 90
+                      ? 'var(--mau-loi)'
+                      : tyLeChiPhi >= 70
+                        ? 'var(--mau-canh-bao)'
+                        : 'var(--mau-thanh-cong)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
                 {cost.limitPerDay > 0
                   ? t('dashboard.costUsedPercent', { percent: Math.round(tyLeChiPhi) })
                   : t('dashboard.noDailyLimit')}
@@ -218,24 +376,101 @@ export function BangDieuKhien({
                 <ThongBao loai="loi">{t('dashboard.costCapReached')}</ThongBao>
               </div>
             ) : null}
+
+            <div className="dashboard__cost-subgrid">
+              <div className="dashboard__cost-box">
+                <div className="dashboard__cost-box-label">{t('nav.costs')}</div>
+                <div className="dashboard__cost-box-value">
+                  {cost.limitPerDay > 0 ? formatCurrencyUsd(cost.limitPerDay) : '—'}
+                </div>
+              </div>
+              <div className="dashboard__cost-box">
+                <div className="dashboard__cost-box-label">
+                  {conLai >= 0 ? 'Còn lại hôm nay' : 'Đã vượt trần'}
+                </div>
+                <div
+                  className="dashboard__cost-box-value"
+                  style={{
+                    color: conLai <= 0 && cost.limitPerDay > 0 ? 'var(--mau-loi)' : 'inherit',
+                  }}
+                >
+                  {cost.limitPerDay > 0 ? formatCurrencyUsd(Math.max(0, conLai)) : '—'}
+                </div>
+              </div>
+              <div className="dashboard__cost-box">
+                <div className="dashboard__cost-box-label">30 ngày qua</div>
+                <div className="dashboard__cost-box-value">{formatCurrencyUsd(cost.last30Days)}</div>
+              </div>
+            </div>
           </Card>
 
-          <Card tieuDe={t('dashboard.tasksByStatus')} phu={t('dashboard.viewTasksHint')}>
+          <Card
+            tieuDe={t('dashboard.tasksByStatus')}
+            phu={t('dashboard.viewTasksHint')}
+            hanhDong={
+              <Nut bien="phu" nho onClick={() => onNavigate('cong-viec')}>
+                {t('dashboard.viewTasks')} →
+              </Nut>
+            }
+          >
+            {tongTasks > 0 ? (
+              <div className="dashboard__distribution-bar" title={t('dashboard.tasksByStatus')}>
+                {TASK_STATUSES.map((st) => {
+                  const count = counts.tasks[st]
+                  if (count === 0) return null
+                  const pct = (count / tongTasks) * 100
+                  const color =
+                    st === 'in_progress'
+                      ? 'var(--mau-chinh)'
+                      : st === 'done'
+                        ? 'var(--mau-thanh-cong)'
+                        : st === 'blocked' || st === 'review'
+                          ? 'var(--mau-canh-bao)'
+                          : st === 'failed'
+                            ? 'var(--mau-loi)'
+                            : 'var(--mau-chu-mo)'
+                  return (
+                    <div
+                      key={st}
+                      className="dashboard__distribution-segment"
+                      style={{ width: `${pct}%`, background: color }}
+                      title={`${t(`taskStatus.${st}`)}: ${formatNumber(count)} (${Math.round(pct)}%)`}
+                    />
+                  )
+                })}
+              </div>
+            ) : null}
+
             <div className="dashboard__statuses">
               {TASK_STATUSES.map((trangThai) => {
                 // Nhãn suy từ mã trạng thái; viết tường minh từng khoá sẽ lặp lại tám lần
                 // cùng một quy tắc và dễ lệch khi hợp đồng thêm trạng thái mới.
                 const nhan = t(`taskStatus.${trangThai}`)
                 return (
-                  <div key={trangThai} className={`dashboard__status dashboard__status--${trangThai}`}>
-                    <span>{nhan}</span>
+                  <div
+                    key={trangThai}
+                    className={`dashboard__status dashboard__status--${trangThai}`}
+                    role="button"
+                    tabIndex={0}
+                    title={t('dashboard.viewTasks')}
+                    onClick={() => onNavigate('cong-viec')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onNavigate('cong-viec')
+                      }
+                    }}
+                  >
+                    <div className="dashboard__status-left">
+                      <span className="dashboard__status-dot" aria-hidden="true" />
+                      <span>{nhan}</span>
+                    </div>
                     <strong className="so">{formatNumber(counts.tasks[trangThai])}</strong>
                   </div>
                 )
               })}
             </div>
           </Card>
-
         </div>
 
         <div className="dashboard__bottom">
@@ -259,10 +494,66 @@ export function BangDieuKhien({
 
           <Card tieuDe={t('dashboard.quickActions')} phu={t('dashboard.quickHint')}>
             <div className="dashboard__actions">
-              <Nut onClick={() => onNavigate('trao-doi')}>{t('dashboard.openChat')}</Nut>
-              <Nut bien="phu" onClick={() => onNavigate('cong-viec')}>
-                {t('dashboard.viewTasks')}
-              </Nut>
+              <button
+                type="button"
+                className="dashboard__action-tile"
+                onClick={() => onNavigate('trao-doi')}
+              >
+                <div className="dashboard__action-tile-icon" aria-hidden="true">💬</div>
+                <div className="dashboard__action-tile-body">
+                  <div className="dashboard__action-tile-title">{t('dashboard.openChat')}</div>
+                  <div className="dashboard__action-tile-sub">Trao đổi chiến lược và giao việc cho AI Leader</div>
+                </div>
+                <div className="dashboard__action-tile-arrow" aria-hidden="true">→</div>
+              </button>
+
+              <button
+                type="button"
+                className="dashboard__action-tile"
+                onClick={() => onNavigate('cong-viec')}
+              >
+                <div className="dashboard__action-tile-icon" aria-hidden="true">🗂️</div>
+                <div className="dashboard__action-tile-body">
+                  <div className="dashboard__action-tile-title">{t('dashboard.viewTasks')}</div>
+                  <div className="dashboard__action-tile-sub">Kiểm tra tiến độ và bảng kanban nhiệm vụ</div>
+                </div>
+                <div className="dashboard__action-tile-arrow" aria-hidden="true">→</div>
+              </button>
+            </div>
+
+            <div className="dashboard__shortcuts-grid">
+              <button
+                type="button"
+                className="dashboard__shortcut-item"
+                onClick={() => onNavigate('campaign-loop')}
+              >
+                <span aria-hidden="true">🚀</span>
+                <span>{t('campaign.nav')}</span>
+              </button>
+              <button
+                type="button"
+                className="dashboard__shortcut-item"
+                onClick={() => onNavigate('kho-kien-thuc')}
+              >
+                <span aria-hidden="true">📚</span>
+                <span>{t('nav.knowledge')}</span>
+              </button>
+              <button
+                type="button"
+                className="dashboard__shortcut-item"
+                onClick={() => onNavigate('wordpress')}
+              >
+                <span aria-hidden="true">🌍</span>
+                <span>{t('nav.wordpress')}</span>
+              </button>
+              <button
+                type="button"
+                className="dashboard__shortcut-item"
+                onClick={() => onNavigate('doi-agent')}
+              >
+                <span aria-hidden="true">🎯</span>
+                <span>{t('nav.team')}</span>
+              </button>
             </div>
           </Card>
         </div>

@@ -21,6 +21,7 @@ import { SocialBrowserRepo } from './repos/social-browser.ts'
 import { CampaignRepo } from './repos/campaign.ts'
 import { OAuthRepo } from './repos/oauth.ts'
 import { McpRepo } from './repos/mcp.ts'
+import { WordpressRepo } from './repos/wordpress.ts'
 
 export interface Repos {
   readonly db: Database
@@ -39,6 +40,7 @@ export interface Repos {
   readonly campaigns: CampaignRepo
   readonly oauth: OAuthRepo
   readonly mcp: McpRepo
+  readonly wordpress: WordpressRepo
 }
 
 export interface CreateReposOptions extends OpenDatabaseOptions {
@@ -81,6 +83,7 @@ export function createRepos(options: CreateReposOptions): Repos {
     campaigns: new CampaignRepo(db, auth, secrets),
     oauth: new OAuthRepo(db, secrets),
     mcp: new McpRepo(db, secrets),
+    wordpress: new WordpressRepo(db, secrets),
   }
 }
 
@@ -102,3 +105,4 @@ export * from './repos/work.ts'
 export * from './repos/campaign.ts'
 export * from './repos/oauth.ts'
 export * from './repos/mcp.ts'
+export * from './repos/wordpress.ts'

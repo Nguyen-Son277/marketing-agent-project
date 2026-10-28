@@ -241,6 +241,14 @@ export function useSession(): SessionState {
   return context
 }
 
+/**
+ * Lấy trạng thái phiên nếu có, trả về `undefined` nếu component được render ngoài
+ * `<SessionProvider>` (ví dụ trong các bài unit test render màn hình độc lập).
+ */
+export function useOptionalSession(): SessionState | undefined {
+  return useContext(SessionContext)
+}
+
 /** Lấy công ty đang chọn, ném lỗi rõ ràng nếu chưa chọn — dùng trong màn hình cần companyId. */
 export function useRequiredCompany(): CompanySummary {
   const { company } = useSession()

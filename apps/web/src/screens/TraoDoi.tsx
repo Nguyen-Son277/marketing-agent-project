@@ -143,6 +143,12 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
   const [dangChay, setDangChay] = useState<'plan' | 'run' | 'report' | null>(null)
   const [baoKetQua, setBaoKetQua] = useState<string | null>(null)
   const [coTinMoi, setCoTinMoi] = useState(false)
+  const [cuocCanDoiTen, setCuocCanDoiTen] = useState<ConversationView | null>(null)
+  const [tenMoi, setTenMoi] = useState('')
+  const [dangLuuTen, setDangLuuTen] = useState(false)
+  const [cuocCanXoa, setCuocCanXoa] = useState<ConversationView | null>(null)
+  const [xoaCongViec, setXoaCongViec] = useState(false)
+  const [dangXoa, setDangXoa] = useState(false)
   /**
    * Thẻ vừa được trả lời trong phiên này, theo id tin nhắn.
    *
@@ -339,6 +345,57 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
     }
   }
 
+  async function luuDoiTen(): Promise<void> {
+    if (!cuocCanDoiTen || !tenMoi.trim() || dangLuuTen) return
+    const id = cuocCanDoiTen.id
+    const title = tenMoi.trim()
+    setDangLuuTen(true)
+    setLoi(null)
+    try {
+      const ketQua = await api.updateConversation(id, title)
+      setDanhSach((truoc) =>
+        truoc.map((c) => (c.id === id ? { ...c, title: ketQua.conversation.title } : c)),
+      )
+      if (chiTiet && chiTiet.conversation.id === id) {
+        setChiTiet((truoc) =>
+          truoc ? { ...truoc, conversation: { ...truoc.conversation, title: ketQua.conversation.title } } : null,
+        )
+      }
+      setCuocCanDoiTen(null)
+      setBaoKetQua(t('chat.renameSuccess'))
+    } catch (error) {
+      setLoi(error instanceof ApiError ? error.message : t('chat.errorUpdateConversation'))
+    } finally {
+      setDangLuuTen(false)
+    }
+  }
+
+  async function xacNhanXoa(): Promise<void> {
+    if (!cuocCanXoa || dangXoa) return
+    const id = cuocCanXoa.id
+    setDangXoa(true)
+    setLoi(null)
+    try {
+      await api.deleteConversation(id, xoaCongViec)
+      setDanhSach((truoc) => {
+        const conLai = truoc.filter((c) => c.id !== id)
+        if (dangChon === id) {
+          setDangChon(conLai[0]?.id ?? null)
+        }
+        return conLai
+      })
+      if (dangChon === id) {
+        setChiTiet(null)
+      }
+      setCuocCanXoa(null)
+      setBaoKetQua(t('chat.deleteSuccess'))
+    } catch (error) {
+      setLoi(error instanceof ApiError ? error.message : t('chat.errorDeleteConversation'))
+    } finally {
+      setDangXoa(false)
+    }
+  }
+
   /** Gửi một lượt tin; trả về `true` khi server nhận. `answers` chỉ có khi gửi từ thẻ chọn. */
   async function guiNoiDung(content: string, answers?: ClarificationAnswer[], attachmentIds: string[] = []): Promise<boolean> {
     if (!dangChon || (!content.trim() && attachmentIds.length === 0) || !acquireChatSend(sendLock)) return false
@@ -490,7 +547,38 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
           <Card>
             <div className="hang" style={{ justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontWeight: 650 }}>{chiTiet.conversation.title}</div>
+                <div className="hang" style={{ alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontWeight: 650 }}>{chiTiet.conversation.title}</div>
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    title={t('chat.rename')}
+                    aria-label={t('chat.rename')}
+                    onClick={() => {
+                      setCuocCanDoiTen(chiTiet.conversation)
+                      setTenMoi(chiTiet.conversation.title)
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-icon btn-icon--danger"
+                    title={t('chat.delete')}
+                    aria-label={t('chat.delete')}
+                    onClick={() => {
+                      setCuocCanXoa(chiTiet.conversation)
+                      setXoaCongViec(false)
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                  </button>
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
                   {t('chat.metaLine', {
                     phase: t(KHOA_GIAI_DOAN[chiTiet.conversation.phase]),
@@ -587,6 +675,75 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
         </HopThoai>
       ) : null}
 
+      <HopThoai
+        mo={cuocCanDoiTen !== null}
+        tieuDe={t('chat.renameTitle')}
+        onDong={() => setCuocCanDoiTen(null)}
+        chanDung={
+          <>
+            <Nut bien="phu" nho onClick={() => setCuocCanDoiTen(null)} disabled={dangLuuTen}>
+              {t('common.cancel')}
+            </Nut>
+            <Nut nho onClick={() => void luuDoiTen()} dangTai={dangLuuTen} disabled={!tenMoi.trim()}>
+              {t('common.save')}
+            </Nut>
+          </>
+        }
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            void luuDoiTen()
+          }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+        >
+          <label style={{ fontSize: 13, fontWeight: 600 }}>{t('chat.renameLabel')}</label>
+          <input
+            className="o-nhap"
+            value={tenMoi}
+            onChange={(e) => setTenMoi(e.target.value)}
+            maxLength={200}
+            autoFocus
+          />
+        </form>
+      </HopThoai>
+
+      <HopThoai
+        mo={cuocCanXoa !== null}
+        tieuDe={t('chat.deleteTitle')}
+        onDong={() => {
+          if (!dangXoa) setCuocCanXoa(null)
+        }}
+        chanDung={
+          <>
+            <Nut bien="phu" nho onClick={() => setCuocCanXoa(null)} disabled={dangXoa}>
+              {t('common.cancel')}
+            </Nut>
+            <Nut bien="nguy-hiem" nho onClick={() => void xacNhanXoa()} dangTai={dangXoa}>
+              {t('common.delete')}
+            </Nut>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55 }}>
+            {t('chat.deleteConfirm', { title: cuocCanXoa?.title ?? '' })}
+          </p>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', marginTop: 4 }}>
+            <input
+              type="checkbox"
+              checked={xoaCongViec}
+              onChange={(e) => setXoaCongViec(e.target.checked)}
+              style={{ marginTop: 3 }}
+            />
+            <span style={{ fontSize: 13, lineHeight: 1.4 }}>
+              <strong style={{ display: 'block' }}>{t('chat.deleteTasksOption')}</strong>
+              <span style={{ color: 'var(--mau-chu-mo)' }}>{t('chat.deleteTasksOptionHint')}</span>
+            </span>
+          </label>
+        </div>
+      </HopThoai>
+
       {/*
         Thẻ chat là `.card` con trực tiếp DUY NHẤT của `.the--cao-day`, nhờ đó nhận
         `flex: 1` rồi truyền chiều cao xuống `.chat` → `.chat__khung` (vùng cuộn duy nhất)
@@ -649,25 +806,59 @@ export function TraoDoi({ companyId }: { companyId: string }): ReactNode {
                   <p style={{ color: 'var(--mau-chu-mo)', fontSize: 14, margin: 0 }}>{t('chat.emptyList')}</p>
                 ) : (
                   danhSach.map((cuoc) => (
-                    <button
-                      key={cuoc.id}
-                      type="button"
-                      className={cuoc.id === dangChon ? 'app__nav-item app__nav-item--active' : 'app__nav-item'}
-                      // Chọn xong thì đóng bảng: mục đích đã đạt, để mở tiếp chỉ che khung chat.
-                      onClick={() => {
-                        setDangChon(cuoc.id)
-                        setMoDanhSach(false)
-                      }}
-                      style={{ display: 'block' }}
-                    >
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{cuoc.title}</div>
-                      <div style={{ fontSize: 11, opacity: 0.8 }}>
-                        {t('chat.listMeta', {
-                          phase: t(KHOA_GIAI_DOAN[cuoc.phase]),
-                          date: formatDateTime(cuoc.updatedAt),
-                        })}
-                      </div>
-                    </button>
+                    <div key={cuoc.id} className="ds-phien__muc">
+                      <button
+                        type="button"
+                        className={cuoc.id === dangChon ? 'app__nav-item app__nav-item--active' : 'app__nav-item'}
+                        // Chọn xong thì đóng bảng: mục đích đã đạt, để mở tiếp chỉ che khung chat.
+                        onClick={() => {
+                          setDangChon(cuoc.id)
+                          setMoDanhSach(false)
+                        }}
+                        style={{ display: 'block', flex: 1, minWidth: 0, textAlign: 'left' }}
+                      >
+                        <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cuoc.title}</div>
+                        <div style={{ fontSize: 11, opacity: 0.8 }}>
+                          {t('chat.listMeta', {
+                            phase: t(KHOA_GIAI_DOAN[cuoc.phase]),
+                            date: formatDateTime(cuoc.updatedAt),
+                          })}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        title={t('chat.rename')}
+                        aria-label={t('chat.rename')}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setMoDanhSach(false)
+                          setCuocCanDoiTen(cuoc)
+                          setTenMoi(cuoc.title)
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-icon btn-icon--danger"
+                        title={t('chat.delete')}
+                        aria-label={t('chat.delete')}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setMoDanhSach(false)
+                          setCuocCanXoa(cuoc)
+                          setXoaCongViec(false)
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
                   ))
                 )}
               </div>

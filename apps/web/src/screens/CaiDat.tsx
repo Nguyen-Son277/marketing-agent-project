@@ -43,6 +43,7 @@ import { HopThoai, HopThoaiXacNhan } from "../components/HopThoai.tsx";
 import { HopThoaiChonModel } from "../components/HopThoaiChonModel.tsx";
 import { KnowledgeModelSettings } from "../components/KnowledgeModelSettings.tsx";
 import { ModelPricingDialog } from "../components/ModelPricingDialog.tsx";
+import { WordpressSettings } from "../components/WordpressSettings.tsx";
 import {
   SettingsTabs,
   useSettingsTabActive,
@@ -2303,6 +2304,47 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
   const tyLe = tran > 0 ? (usedTodayUsd / tran) * 100 : 0;
   const phanTram = Math.max(0, Math.min(100, tyLe));
 
+  const DEFAULT_DAILY_COST = "20";
+  const DEFAULT_TASK_COST = "2";
+  const isUnlimitedCost = duLieu
+    ? soTuChuoi(duLieu.dailyCostUsd) === 0 && soTuChuoi(duLieu.taskCostUsd) === 0
+    : false;
+
+  function toggleUnlimitCost(): void {
+    if (!duLieu) return;
+    if (isUnlimitedCost) {
+      setDuLieu({
+        ...duLieu,
+        dailyCostUsd: DEFAULT_DAILY_COST,
+        taskCostUsd: DEFAULT_TASK_COST,
+      });
+    } else {
+      setDuLieu({
+        ...duLieu,
+        dailyCostUsd: "0",
+        taskCostUsd: "0",
+      });
+    }
+  }
+
+  function toggleUnlimitDailyCost(): void {
+    if (!duLieu) return;
+    const isZero = soTuChuoi(duLieu.dailyCostUsd) === 0;
+    setDuLieu({
+      ...duLieu,
+      dailyCostUsd: isZero ? DEFAULT_DAILY_COST : "0",
+    });
+  }
+
+  function toggleUnlimitTaskCost(): void {
+    if (!duLieu) return;
+    const isZero = soTuChuoi(duLieu.taskCostUsd) === 0;
+    setDuLieu({
+      ...duLieu,
+      taskCostUsd: isZero ? DEFAULT_TASK_COST : "0",
+    });
+  }
+
   return (
     <Card
       tieuDe={t("settings.limits.title")}
@@ -2319,8 +2361,16 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
             <span>
               {t("settings.limits.used24hPrefix")}{" "}
               <strong className="so">{formatCurrencyUsd(usedTodayUsd)}</strong>{" "}
-              {t("settings.limits.limitPrefix")}{" "}
-              <strong className="so">{formatCurrencyUsd(tran)}</strong>
+              {tran > 0 ? (
+                <>
+                  {t("settings.limits.limitPrefix")}{" "}
+                  <strong className="so">{formatCurrencyUsd(tran)}</strong>
+                </>
+              ) : (
+                <span style={{ color: "var(--mau-chu-mo)", marginLeft: 6 }}>
+                  ({t("settings.limits.unlimitedBadge")})
+                </span>
+              )}
             </span>
             <span style={{ fontSize: 13, color: "var(--mau-chu-mo)" }}>
               {tran > 0 ? `${Math.round(tyLe)}%` : t("settings.limits.noCap")}
@@ -2356,17 +2406,97 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
 
           <div className="luoi luoi--3" style={{ marginTop: 14 }}>
             <div>
-              <div className="nhan">{t("settings.limits.dailyCost")}</div>
+              <div
+                className="hang"
+                style={{
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 4,
+                }}
+              >
+                <span className="nhan">{t("settings.limits.dailyCost")}</span>
+                <div className="hang" style={{ gap: 6, alignItems: "center" }}>
+                  {soTuChuoi(duLieu.dailyCostUsd) === 0 ? (
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: "var(--mau-thanh-cong)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {t("settings.limits.unlimitedBadge")}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    style={{
+                      fontSize: 12,
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: "var(--mau-chinh)",
+                      textDecoration: "underline",
+                    }}
+                    onClick={toggleUnlimitDailyCost}
+                  >
+                    {soTuChuoi(duLieu.dailyCostUsd) === 0
+                      ? t("settings.limits.restoreDefault")
+                      : t("settings.limits.unlimit")}
+                  </button>
+                </div>
+              </div>
               <ONhap
                 value={duLieu.dailyCostUsd}
                 onChange={(v) => setDuLieu({ ...duLieu, dailyCostUsd: v })}
+                placeholder={t("settings.limits.zeroForUnlimitedHint")}
               />
             </div>
             <div>
-              <div className="nhan">{t("settings.limits.taskCost")}</div>
+              <div
+                className="hang"
+                style={{
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 4,
+                }}
+              >
+                <span className="nhan">{t("settings.limits.taskCost")}</span>
+                <div className="hang" style={{ gap: 6, alignItems: "center" }}>
+                  {soTuChuoi(duLieu.taskCostUsd) === 0 ? (
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: "var(--mau-thanh-cong)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {t("settings.limits.unlimitedBadge")}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    style={{
+                      fontSize: 12,
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: "var(--mau-chinh)",
+                      textDecoration: "underline",
+                    }}
+                    onClick={toggleUnlimitTaskCost}
+                  >
+                    {soTuChuoi(duLieu.taskCostUsd) === 0
+                      ? t("settings.limits.restoreDefault")
+                      : t("settings.limits.unlimit")}
+                  </button>
+                </div>
+              </div>
               <ONhap
                 value={duLieu.taskCostUsd}
                 onChange={(v) => setDuLieu({ ...duLieu, taskCostUsd: v })}
+                placeholder={t("settings.limits.zeroForUnlimitedHint")}
               />
             </div>
             <div>
@@ -2401,9 +2531,14 @@ function PhanGioiHan({ companyId }: { companyId: string }): ReactNode {
             </div>
           </div>
 
-          <div className="hang" style={{ marginTop: 12 }}>
+          <div className="hang" style={{ marginTop: 12, gap: 8 }}>
             <Nut onClick={() => void luu()} dangTai={dangLuu}>
               {t("settings.limits.submit")}
+            </Nut>
+            <Nut bien="phu" onClick={toggleUnlimitCost}>
+              {isUnlimitedCost
+                ? t("settings.limits.restoreDefaultCost")
+                : t("settings.limits.unlimitCosts")}
             </Nut>
           </div>
         </>
@@ -2427,6 +2562,7 @@ export function CaiDat({ companyId }: { companyId: string }): ReactNode {
           routes: <PhanRoute companyId={companyId} />,
           knowledge: <KnowledgeModelSettings companyId={companyId} />,
           integrations: <PhanKetNoi companyId={companyId} />,
+          wordpress: <WordpressSettings companyId={companyId} />,
           limits: <PhanGioiHan companyId={companyId} />,
         }}
       />

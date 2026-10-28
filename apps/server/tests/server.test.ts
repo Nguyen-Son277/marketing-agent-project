@@ -71,7 +71,7 @@ describe('health', () => {
     expect(response.status).toBe(200)
     const body = response.json<{ status: string; agentDefs: number }>()
     expect(body.status).toBe('ready')
-    expect(body.agentDefs).toBe(10)
+    expect(body.agentDefs).toBe(11)
   })
 })
 
@@ -172,7 +172,7 @@ describe('companies', () => {
     expect(created.status).toBe(201)
     const body = created.json<{ company: { id: string; slug: string }; presets: number; role: string }>()
     expect(body.role).toBe('owner')
-    expect(body.presets).toBe(10)
+    expect(body.presets).toBe(11)
     expect(body.company.slug).toBe('cong-ty-anh-duong')
 
     // Chưa chọn model thì agent KHÔNG được gắn model nào; đây là chủ ý để người dùng

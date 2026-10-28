@@ -33,6 +33,7 @@ flowchart TD
         A4["<b>social-media</b><br/>Social Media<br/><i>flash</i>"]
         A5["<b>paid-media</b><br/>Quảng cáo trả phí<br/><i>flash → pro</i>"]
         A6["<b>email-crm</b><br/>Email &amp; CRM<br/><i>flash</i>"]
+        A10["<b>web-technical</b><br/>Kỹ thuật Web &amp; IT<br/><i>flash</i>"]
     end
 
     subgraph L4["📈 Lớp đo lường &amp; chăm sóc"]
@@ -45,12 +46,12 @@ flowchart TD
     EXT["🌐 API ngoài<br/>Firecrawl · GSC · GA4<br/>Meta · LinkedIn · Sheets"]
 
     U -->|"yêu cầu / trả lời / phê duyệt"| L
-    L -->|"giao việc (task DAG)"| A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9
-    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 -->|"handoff: kết quả + nguồn"| L
-    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 <-.->|"hỏi đáp ngang hàng<br/>(tối đa 3 vòng)"| A1
-    A1 & A2 & A3 & A4 & A6 & A7 & A8 & A9 -->|"đọc (đã lọc theo ACL)"| KB
-    A1 & A3 & A8 -->|"ghi kết quả nghiên cứu"| KB
-    A3 & A4 & A5 & A6 & A8 & A9 --> TL
+    L -->|"giao việc (task DAG)"| A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 & A10
+    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 & A10 -->|"handoff: kết quả + nguồn"| L
+    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 & A10 <-.->|"hỏi đáp ngang hàng<br/>(tối đa 3 vòng)"| A1
+    A1 & A2 & A3 & A4 & A6 & A7 & A8 & A9 & A10 -->|"đọc (đã lọc theo ACL)"| KB
+    A1 & A3 & A8 & A10 -->|"ghi kết quả nghiên cứu/kỹ thuật"| KB
+    A3 & A4 & A5 & A6 & A8 & A9 & A10 --> TL
     TL --> EXT
     L -->|"📄 báo cáo tổng hợp + nguồn + chi phí"| U
 
@@ -58,7 +59,7 @@ flowchart TD
     classDef spec fill:#FAF9F6,stroke:#1B5E4A,color:#1A1A1A
     classDef store fill:#F2B705,stroke:#a67c00,color:#1A1A1A
     class L leader
-    class A1,A2,A3,A4,A5,A6,A7,A8,A9 spec
+    class A1,A2,A3,A4,A5,A6,A7,A8,A9,A10 spec
     class KB,TL store
 ```
 
@@ -93,12 +94,13 @@ lại sẽ làm prompt mơ hồ.
 | 2 | `market-research` | Nghiên cứu thị trường | Thị trường, đối thủ, ICP, xu hướng, đề xuất định vị | `deepseek-v4-flash` | market-research, competitor-analysis, persona-building | `kb_search`, `kb_read`, `kb_write`, `web_search`, `web_scrape`, `competitor_watch`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00-cong-ty`, `20-thi-truong`, `30-kenh` | Ghi `20-thi-truong` |
 | 3 | `content-writer` | Viết nội dung | Bài SEO, content social, email, landing copy | `deepseek-v4-flash` | copywriting, seo-writing, brand-voice | `kb_search`, `kb_read`, `files_write`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `10-brand`, `20`, `30-kenh` | Chỉ đọc — không ghi KB |
 | 4 | `seo-technical` | SEO kỹ thuật | Audit kỹ thuật, từ khoá → cluster, brief SEO, schema/sitemap | `deepseek-v4-flash` | keyword-research, technical-seo-audit, seo-writing | `kb_search`, `kb_read`, `kb_write`, `gsc_query`, `gsc_inspect_url`, `web_search`, `http_fetch`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `30-kenh`, `40-du-lieu`, `90-ket-qua` | Ghi `30-kenh` |
-| 5 | `social-media` | Social Media | Lịch đăng, caption, hashtag, brief visual | `deepseek-v4-flash` | content-calendar, social-copywriting, brand-voice | `kb_search`, `kb_read`, `files_write`, `meta_publish`, `linkedin_publish`, `meta_insights`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `10-brand`, `20`, `30-kenh` | Đăng công khai cần duyệt |
-| 6 | `paid-media` | Quảng cáo trả phí | Cấu trúc campaign, audience, ngân sách, A/B, tối ưu CPL/ROAS | `flash` → `pro` khi escalate | campaign-structure, audience-targeting, budget-optimization | `kb_search`, `kb_read`, `kb_write`, `meta_insights`, `ads_meta`, `ads_google`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `20`, `30-kenh`, `40-du-lieu` | Không tự tăng ngân sách |
-| 7 | `email-crm` | Email & CRM | Chuỗi nurture, phân nhóm, automation, A/B tiêu đề | `deepseek-v4-flash` | email-sequence, crm-segmentation, copywriting | `kb_search`, `kb_read`, `email_send`, `sheets_write`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `10-brand`, `40-du-lieu` | `email_send` mặc định **tắt** |
-| 8 | `design-video` | Thiết kế & Video | Brief thiết kế, storyboard, spec kích thước, prompt mô tả | `deepseek-v4-flash` | creative-brief, storyboarding | `kb_search`, `kb_read`, `files_write`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `10-brand`, `30-kenh` | Sinh spec, không render nặng |
-| 9 | `analytics` | Phân tích & Báo cáo | Đo KPI kênh/phễu, phát hiện bất thường, báo cáo định kỳ | `deepseek-v4-pro` | data-analysis, kpi-reporting, anomaly-detection | `kb_search`, `kb_read`, `kb_write`, `gsc_query`, `sheets_write`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `30-kenh`, `40-du-lieu`, `90-ket-qua` | Ghi `40-du-lieu` |
-| 10 | `community-care` | Chăm sóc cộng đồng | Trả lời bình luận/tin nhắn, moderation, leo thang khủng hoảng | `deepseek-v4-flash` | community-response, crisis-escalation, brand-voice | `kb_search`, `kb_read`, `meta_insights`, `meta_publish`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `10-brand`, `90-ket-qua` | Leo thang lên Leader |
+| 5 | `web-technical` | Kỹ thuật Web & IT | Quản trị website, sửa nội dung/giao diện web, gắn mã tracking, bảo trì kỹ thuật | `deepseek-v4-flash` | website-editing, web-technical-maintenance, technical-seo-audit | `kb_search`, `kb_read`, `kb_write`, `files_read`, `files_write`, `wordpress_*`, `http_fetch`, `web_search`, `web_scrape`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `30-kenh`, `40-du-lieu`, `90-ket-qua` | Ghi `30-kenh`, `90-ket-qua` |
+| 6 | `social-media` | Social Media | Lịch đăng, caption, hashtag, brief visual | `deepseek-v4-flash` | content-calendar, social-copywriting, brand-voice | `kb_search`, `kb_read`, `files_write`, `meta_publish`, `linkedin_publish`, `meta_insights`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `10-brand`, `20`, `30-kenh` | Đăng công khai cần duyệt |
+| 7 | `paid-media` | Quảng cáo trả phí | Cấu trúc campaign, audience, ngân sách, A/B, tối ưu CPL/ROAS | `flash` → `pro` khi escalate | campaign-structure, audience-targeting, budget-optimization | `kb_search`, `kb_read`, `kb_write`, `meta_insights`, `ads_meta`, `ads_google`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `20`, `30-kenh`, `40-du-lieu` | Không tự tăng ngân sách |
+| 8 | `email-crm` | Email & CRM | Chuỗi nurture, phân nhóm, automation, A/B tiêu đề | `deepseek-v4-flash` | email-sequence, crm-segmentation, copywriting | `kb_search`, `kb_read`, `email_send`, `sheets_write`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `10-brand`, `40-du-lieu` | `email_send` mặc định **tắt** |
+| 9 | `design-video` | Thiết kế & Video | Brief thiết kế, storyboard, spec kích thước, prompt mô tả | `deepseek-v4-flash` | creative-brief, storyboarding | `kb_search`, `kb_read`, `files_write`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `10-brand`, `30-kenh` | Sinh spec, không render nặng |
+| 10 | `analytics` | Phân tích & Báo cáo | Đo KPI kênh/phễu, phát hiện bất thường, báo cáo định kỳ | `deepseek-v4-pro` | data-analysis, kpi-reporting, anomaly-detection | `kb_search`, `kb_read`, `kb_write`, `gsc_query`, `sheets_write`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `30-kenh`, `40-du-lieu`, `90-ket-qua` | Ghi `40-du-lieu` |
+| 11 | `community-care` | Chăm sóc cộng đồng | Trả lời bình luận/tin nhắn, moderation, leo thang khủng hoảng | `deepseek-v4-flash` | community-response, crisis-escalation, brand-voice | `kb_search`, `kb_read`, `meta_insights`, `meta_publish`, `artifact_publish`, `agent_ask`, `agent_escalate` | `00`, `10-brand`, `90-ket-qua` | Leo thang lên Leader |
 
 ### Ma trận phân quyền tri thức
 
@@ -110,6 +112,7 @@ lại sẽ làm prompt mơ hồ.
 | market-research | ✅ | – | ✅ **ghi** | ✅ | – | – |
 | content-writer | ✅ | ✅ | ✅ | ✅ | – | – |
 | seo-technical | ✅ | – | – | ✅ **ghi** | ✅ | ✅ |
+| web-technical | ✅ | – | – | ✅ **ghi** | ✅ | ✅ **ghi** |
 | social-media | ✅ | ✅ | ✅ | ✅ **ghi** | – | – |
 | paid-media | ✅ | – | ✅ | ✅ **ghi** | ✅ | – |
 | email-crm | ✅ | ✅ | – | – | ✅ | – |

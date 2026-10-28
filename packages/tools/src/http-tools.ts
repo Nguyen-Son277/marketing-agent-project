@@ -126,7 +126,7 @@ export function createHttpTools(options: HttpToolOptions = {}) {
       required: ['url'],
       additionalProperties: false,
     },
-    roles: ['market-research', 'seo-technical', 'design-video', 'analytics', 'paid-media'],
+    roles: ['market-research', 'seo-technical', 'web-technical', 'design-video', 'analytics', 'paid-media'],
     async handler(args, ctx): Promise<ToolResult> {
       const raw = requireStringArg(args, 'url')
       let url: URL
@@ -222,7 +222,7 @@ export function createResearchTools(store: IntegrationStore, options: HttpToolOp
       required: ['query'],
       additionalProperties: false,
     },
-    roles: ['market-research', 'seo-technical', 'social-media', 'paid-media', 'content-writer'],
+    roles: ['market-research', 'seo-technical', 'web-technical', 'social-media', 'paid-media', 'content-writer'],
     async handler(args, ctx): Promise<ToolResult> {
       const query = requireStringArg(args, 'query')
       const limit = Math.min(15, Math.max(1, optionalNumberArg(args, 'limit', 6)))
@@ -261,7 +261,7 @@ export function createResearchTools(store: IntegrationStore, options: HttpToolOp
       required: ['url'],
       additionalProperties: false,
     },
-    roles: ['market-research', 'seo-technical', 'content-writer', 'paid-media', 'social-media'],
+    roles: ['market-research', 'seo-technical', 'web-technical', 'content-writer', 'paid-media', 'social-media'],
     async handler(args, ctx): Promise<ToolResult> {
       const url = requireStringArg(args, 'url')
       try {

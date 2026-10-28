@@ -40,6 +40,7 @@ const NHAN_VAI_TRO: Readonly<Record<string, MessageKey>> = {
   'market-research': 'diagram.role.marketResearch',
   'content-writer': 'diagram.role.contentWriter',
   'seo-technical': 'diagram.role.seoTechnical',
+  'web-technical': 'diagram.role.webTechnical',
   'social-media': 'diagram.role.socialMedia',
   'paid-media': 'diagram.role.paidMedia',
   'email-crm': 'diagram.role.emailCrm',

@@ -119,4 +119,14 @@ describe('CostMeter', () => {
     expect(error).toBeInstanceOf(AppError)
     expect((error as AppError).code).toBe('budget_exceeded')
   })
+
+  it('hạn mức bằng 0 được hiểu là không giới hạn chi phí', () => {
+    meter.open({ companyId: 'c1', agentDefId: 'def-1' })
+    meter.addUsage(model, { promptTokens: 100_000, completionTokens: 50_000, cachedTokens: 0 })
+
+    const status = meter.checkBudget('c1', { dailyCostUsd: 0, taskCostUsd: 0 })
+    expect(status.allowed).toBe(true)
+    expect(status.remainingTodayUsd).toBeNull()
+    expect(status.remainingTaskUsd).toBeNull()
+  })
 })

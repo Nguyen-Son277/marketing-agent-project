@@ -20,6 +20,7 @@ import { startDailyReportWorker } from './services/daily-report-worker.ts'
 import { preflight } from './services/company-service.ts'
 import { recoverBrowserJobs, stopBrowserJobs } from './services/browser-job-runner.ts'
 import { startCampaignWorker } from './services/campaign-worker.ts'
+import { startWordpressWorker } from './services/wordpress-worker.ts'
 
 export interface StartedServer {
   readonly server: Server
@@ -95,6 +96,7 @@ export async function startServer(overrides: Partial<ServerConfig> = {}): Promis
   const dailyWorker = startDailyReportWorker(repos)
   const knowledgeWorker = startKnowledgeClassificationWorker(repos,{embeddingFor:async()=>embeddingFor(context),intervalMs:2000})
   const campaignWorker = startCampaignWorker(context)
+  const wordpressWorker = startWordpressWorker(context)
 
   return {
     server,
@@ -106,6 +108,7 @@ export async function startServer(overrides: Partial<ServerConfig> = {}): Promis
       await knowledgeWorker.close()
       await dailyWorker.close()
       await campaignWorker.close()
+      await wordpressWorker.close()
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
       repos.db.close()
     },

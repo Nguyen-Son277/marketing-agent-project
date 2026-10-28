@@ -25,6 +25,7 @@ const ROLE_LAYER: Readonly<Record<AgentRole, DiagramNode['layer']>> = {
   'content-writer': 'content',
   'seo-technical': 'content',
   'design-video': 'content',
+  'web-technical': 'channel',
   'social-media': 'channel',
   'paid-media': 'channel',
   'email-crm': 'channel',
@@ -40,8 +41,12 @@ const ROLE_LAYER: Readonly<Record<AgentRole, DiagramNode['layer']>> = {
 const HANDOFFS: readonly (readonly [AgentRole, AgentRole])[] = [
   ['market-research', 'content-writer'],
   ['content-writer', 'seo-technical'],
+  ['content-writer', 'web-technical'],
   ['content-writer', 'social-media'],
+  ['design-video', 'web-technical'],
   ['design-video', 'social-media'],
+  ['seo-technical', 'web-technical'],
+  ['web-technical', 'analytics'],
   ['social-media', 'analytics'],
   ['paid-media', 'analytics'],
   ['email-crm', 'analytics'],
@@ -52,6 +57,7 @@ const HANDOFFS: readonly (readonly [AgentRole, AgentRole])[] = [
 /** Trao đổi ngang hàng: các chuyên môn nội dung phối hợp với nhau. */
 const PEERS: readonly (readonly [AgentRole, AgentRole])[] = [
   ['content-writer', 'design-video'],
+  ['seo-technical', 'web-technical'],
   ['social-media', 'paid-media'],
 ]
 

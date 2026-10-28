@@ -398,15 +398,17 @@ describe('parsePlanTable', () => {
 })
 
 describe('resolveRole', () => {
-  const co = ['marketing-leader', 'market-research', 'content-writer', 'seo-technical', 'analytics', 'paid-media']
+  const co = ['marketing-leader', 'market-research', 'content-writer', 'seo-technical', 'web-technical', 'analytics', 'paid-media']
 
   it('khớp tên viết đúng', () => {
     expect(resolveRole('content-writer', co)).toBe('content-writer')
+    expect(resolveRole('web-technical', co)).toBe('web-technical')
     expect(resolveRole('analytics', co)).toBe('analytics')
   })
 
   it('khớp tên tiếng Việt có dấu', () => {
     expect(resolveRole('SEO kỹ thuật', co)).toBe('seo-technical')
+    expect(resolveRole('Kỹ thuật Web & IT', co)).toBe('web-technical')
     expect(resolveRole('Nghiên cứu thị trường', co)).toBe('market-research')
     expect(resolveRole('Quảng cáo trả phí', co)).toBe('paid-media')
   })
@@ -414,11 +416,13 @@ describe('resolveRole', () => {
   it('bỏ số thứ tự ở đầu ô', () => {
     expect(resolveRole('1. Content Writer', co)).toBe('content-writer')
     expect(resolveRole('2) SEO kỹ thuật', co)).toBe('seo-technical')
+    expect(resolveRole('3) Kỹ thuật web', co)).toBe('web-technical')
   })
 
   it('khớp mờ khi Leader viết khác đi', () => {
     expect(resolveRole('Content Writer', co)).toBe('content-writer')
     expect(resolveRole('SEO Technical', co)).toBe('seo-technical')
+    expect(resolveRole('Web Developer', co)).toBe('web-technical')
     expect(resolveRole('Phân tích', co)).toBe('analytics')
   })
 
@@ -434,6 +438,9 @@ describe('role and dependency parsing', () => {
   it('chuẩn hoá tên vai trò tiếng Việt', () => {
     expect(normalizeRole('SEO kỹ thuật')).toBe('seo-technical')
     expect(normalizeRole('content-writer')).toBe('content-writer')
+    expect(normalizeRole('Kỹ thuật Web & IT')).toBe('web-technical')
+    expect(normalizeRole('IT')).toBe('web-technical')
+    expect(normalizeRole('webmaster')).toBe('web-technical')
     expect(normalizeRole('Phân tích & Báo cáo')).toBe('analytics')
     expect(normalizeRole('Quảng cáo trả phí')).toBe('paid-media')
   })
@@ -693,6 +700,31 @@ describe('budget guard', () => {
       orchestrator.sendMessage({ companyId, conversationId: conversation.id, userId: user.id, content: 'Chào' }),
     ).rejects.toThrow(/trần chi phí/i)
   })
+
+  it('không chặn khi dailyCostUsd bằng 0 (không giới hạn chi phí)', async () => {
+    const user = repos.auth.createUser({ email: 'unlimited-budget@example.com', password: 'matkhau-rat-dai-123', name: 'U' })
+    const conversation = repos.work.createConversation({ companyId, userId: user.id, title: 'Thử unlimit' })
+    const runId = repos.accounting.startRun({ companyId, agentDefId: 'x', modelId: 'm' })
+    repos.accounting.finishRun(runId, {
+      status: 'succeeded',
+      tokensIn: 0,
+      tokensOut: 0,
+      costUsd: 50,
+      latencyMs: 1,
+      steps: 1,
+    })
+
+    const orchestrator = new ConversationOrchestrator({
+      repos,
+      tools: buildTools(),
+      limits: { dailyCostUsd: 0 },
+      log: () => {},
+    })
+
+    // sendMessage không ném lỗi trần chi phí
+    const turn = await orchestrator.sendMessage({ companyId, conversationId: conversation.id, userId: user.id, content: 'Chào' })
+    expect(turn.reply).toBeDefined()
+  })
 })
 
 /* --------------------------------------------------------- peer ask limits */
@@ -766,7 +798,8 @@ describe('availableRoles', () => {
     const roles = orchestrator.availableRoles(companyId)
     expect(roles).toContain('marketing-leader')
     expect(roles).toContain('content-writer')
-    expect(roles).toHaveLength(10)
+    expect(roles).toContain('web-technical')
+    expect(roles).toHaveLength(11)
 
     const leader = repos.team.findAgentDefByRole('marketing-leader')!
     repos.team.updatePreset(companyId, leader.id, { enabled: false })

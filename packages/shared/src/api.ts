@@ -920,3 +920,11 @@ export const API_ROUTES = {
   health: '/healthz',
   ready: '/readyz',
 } as const
+
+export type {
+  OfficeOverviewResponse,
+  OfficeAgentDeskResponse,
+  OfficeDispatchTaskResponse,
+  OfficeTasksResponse,
+  OfficeDeskPingResponse,
+} from './office.ts'

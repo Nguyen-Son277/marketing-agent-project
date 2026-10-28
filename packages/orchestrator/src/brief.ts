@@ -196,3 +196,88 @@ export function parseExtractedBrief(output: string): Partial<Brief> {
 export function withoutToolCalls(calls: readonly LlmToolCall[]): string {
   return calls.map((call) => call.name).join(', ')
 }
+
+/**
+ * Kiểm tra tiêu đề có phải là tiêu đề mặc định của hệ thống.
+ */
+export function isDefaultConversationTitle(title: string | null | undefined): boolean {
+  if (!title) return true
+  const norm = title.trim().toLowerCase()
+  return (
+    norm === '' ||
+    norm === 'cuộc trao đổi mới' ||
+    norm === 'new conversation' ||
+    norm === 'cuộc trò chuyện mới' ||
+    norm === 'untitled'
+  )
+}
+
+/**
+ * Làm sạch và định dạng văn bản thành một tiêu đề hội thoại ngắn gọn, súc tích (<= 60 ký tự).
+ */
+export function cleanConversationTitle(text: string, maxLength = 60): string {
+  if (!text) return ''
+  // 1. Loại bỏ markdown fences, headers, bullets, quotes, links
+  let cleaned = text
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/^#+\s+/gm, '')
+    .replace(/^[-*+]\s+/gm, '')
+    .replace(/^>\s+/gm, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/https?:\/\/\S+/g, '')
+
+  // 2. Lấy dòng đầu tiên có chữ
+  const lines = cleaned.split('\n').map((l) => l.trim()).filter(Boolean)
+  cleaned = lines[0] ?? ''
+
+  // 3. Bỏ các từ chào hỏi, mở đầu xã giao
+  cleaned = cleaned.replace(/^(xin\s+chào|chào\s+(bạn|leader|anh|chị|em|ad)?|hello|hi|dear)\s*[,.:;!-]?\s*/i, '')
+  cleaned = cleaned.replace(/^(tôi\s+muốn|hãy\s+giúp\s+tôi|nhờ\s+leader|please\s+help\s+me\s+to|please)\s+/i, '')
+  cleaned = cleaned.replace(/^(mục\s+tiêu|muc\s+tieu|objective|yêu\s+cầu|yeu\s+cau)\s*[:：]\s*/i, '')
+  cleaned = cleaned.trim()
+
+  if (!cleaned) return ''
+
+  // 4. Cắt gọn tại ranh giới từ nếu vượt quá maxLength
+  if (cleaned.length > maxLength) {
+    const cut = cleaned.slice(0, maxLength)
+    const lastSpace = cut.lastIndexOf(' ')
+    cleaned = (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trim() + '…'
+  }
+
+  // 5. Viết hoa chữ cái đầu
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+}
+
+/**
+ * Trích xuất tiêu đề phù hợp nhất từ nội dung trao đổi, mục tiêu brief hoặc tệp đính kèm.
+ */
+export function deriveConversationTitle(input: {
+  content?: string
+  objective?: string
+  filenames?: readonly string[]
+}): string {
+  const objective = input.objective ? cleanConversationTitle(input.objective) : ''
+  const content = input.content ? cleanConversationTitle(input.content) : ''
+
+  const isObjectiveSubstantive =
+    objective.length >= 10 && !/^\d+/.test(objective)
+
+  if (isObjectiveSubstantive) {
+    return objective
+  }
+  if (content && content.length >= 8) {
+    return content
+  }
+  if (objective) {
+    return objective
+  }
+  if (content) {
+    return content
+  }
+  if (input.filenames && input.filenames.length > 0) {
+    return cleanConversationTitle(`Tài liệu: ${input.filenames[0]}`)
+  }
+  return 'Cuộc trao đổi mới'
+}

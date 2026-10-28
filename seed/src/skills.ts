@@ -261,6 +261,50 @@ Sắp xếp theo tác động/công sức giảm dần; nêu 3 việc nên làm 
 `.trim(),
   },
   {
+    name: 'website-editing',
+    description: 'Chỉnh sửa và cập nhật bài viết, trang, giao diện và nội dung website an toàn qua CMS/API.',
+    category: 'technical',
+    bodyMd: `
+# Kỹ năng: Chỉnh sửa nội dung website
+
+## Nguyên tắc an toàn
+1. **Kiểm tra trước khi sửa**: luôn đọc lại nội dung hiện tại (\`wordpress_read\`) và lưu snapshot trước khi thay đổi.
+2. **Bảo toàn cấu trúc**: giữ đúng cấu trúc HTML/Gutenberg block hợp lệ, không làm hỏng responsive CSS hay layout sẵn có.
+3. **Quy trình xuất bản**:
+   - Nội dung mới ưu tiên tạo ở trạng thái nháp (\`status: draft\`) hoặc chờ duyệt (\`status: pending\`).
+   - Cập nhật bài viết hiện tại cần đối chiếu URL, slug, canonical để không làm mất thứ hạng SEO.
+4. **Kiểm tra sau khi lưu**: tải lại trang hoặc gọi lại API để xác minh nội dung đã được cập nhật thành công.
+5. **Rollback**: nếu phát hiện lỗi vỡ giao diện hoặc mất nội dung, lập tức dùng snapshot hoặc tác vụ restore (\`wordpress_restore\`) để khôi phục.
+
+## Đầu ra
+Bảng tóm tắt: \`Tài nguyên | ID | URL | Thao tác | Trạng thái | Kiểm chứng\`.
+`.trim(),
+  },
+  {
+    name: 'web-technical-maintenance',
+    description: 'Kiểm tra sức khỏe website, cấu hình tracking pixel, tối ưu tốc độ và xử lý sự cố kỹ thuật.',
+    category: 'technical',
+    bodyMd: `
+# Kỹ năng: Bảo trì kỹ thuật website & Tối ưu
+
+## Quy trình thực hiện
+1. **Audit hiệu năng & Core Web Vitals**:
+   - Sử dụng công cụ audit (\`wordpress_audit\`, Lighthouse) để đo LCP, CLS, TBT trên cả mobile và desktop.
+   - Phát hiện các tài nguyên gây nghẽn: ảnh chưa nén, CSS/JS chặn render, font chữ ngoài.
+2. **Cấu hình & Tối ưu hóa**:
+   - Tối ưu kích thước ảnh, hỗ trợ định dạng WebP (\`wordpress_optimize\`).
+   - Kiểm tra cache page, cache object và purge cache khi cập nhật.
+   - Gắn mã đo lường (GA4, GTM, Meta Pixel) đúng vị trí (head/body) theo brief kỹ thuật.
+3. **Kiểm tra an toàn & sự cố**:
+   - Xác minh chứng chỉ HTTPS, redirect HTTP -> HTTPS.
+   - Kiểm tra liên kết gãy 404, lỗi 5xx trên các trang đích chính.
+   - Xác minh backup gần nhất (UpdraftPlus/server snapshot) trước khi can thiệp theme/plugin.
+
+## Đầu ra
+Bảng báo cáo: \`Hạng mục kiểm tra | Trạng thái | Chỉ số đo được | Khuyến nghị / Cách khắc phục | Mức độ ưu tiên\`.
+`.trim(),
+  },
+  {
     name: 'content-calendar',
     description: 'Xây lịch nội dung theo tỉ lệ mục tiêu, nhịp đăng và khung giờ hợp lý.',
     category: 'social',

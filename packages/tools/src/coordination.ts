@@ -34,11 +34,12 @@ export interface PlannedTaskResult {
  */
 export interface CoordinationHost {
   /** Create the plan's tasks and dependency edges; returns ids in input order. */
-  createTasks(ctx: { companyId: string; conversationId: string | null }, tasks: readonly PlannedTaskInput[]): Promise<PlannedTaskResult[]>
+  createTasks(ctx: { companyId: string; conversationId: string | null; actorUserId?: string }, tasks: readonly PlannedTaskInput[]): Promise<PlannedTaskResult[]>
   /** Dispatch one task to its assigned agent and wait for the handoff result. */
-  dispatchTask(ctx: { companyId: string; conversationId: string | null }, taskId: string): Promise<{ status: string; resultMd: string; artifactIds: readonly string[] }>
+  dispatchTask(ctx: { companyId: string; conversationId: string | null; actorUserId?: string }, taskId: string): Promise<{ status: string; resultMd: string; artifactIds: readonly string[] }>
   /** Deliver a peer question and return the peer's answer. */
   askPeer(input: {
+    actorUserId?: string
     companyId: string
     conversationId: string | null
     taskId: string | null
@@ -149,7 +150,7 @@ export function createCoordinationTools(host: CoordinationHost) {
       }
 
       const created = await host.createTasks(
-        { companyId: ctx.companyId, conversationId: ctx.conversationId },
+        { companyId: ctx.companyId, conversationId: ctx.conversationId, actorUserId: ctx.actorUserId },
         planned,
       )
       const lines = created.map((task, index) => {
@@ -183,7 +184,7 @@ export function createCoordinationTools(host: CoordinationHost) {
     async handler(args, ctx): Promise<ToolResult> {
       const taskId = requireStringArg(args, 'taskId')
       const outcome = await host.dispatchTask(
-        { companyId: ctx.companyId, conversationId: ctx.conversationId },
+        { companyId: ctx.companyId, conversationId: ctx.conversationId, actorUserId: ctx.actorUserId },
         taskId,
       )
       const artifacts =
@@ -221,6 +222,7 @@ export function createCoordinationTools(host: CoordinationHost) {
       }
 
       const outcome = await host.askPeer({
+        actorUserId: ctx.actorUserId,
         companyId: ctx.companyId,
         conversationId: ctx.conversationId,
         taskId: ctx.taskId,

@@ -87,6 +87,18 @@ export const en_chat = {
   'chat.errorCreateConversation': 'Could not create the conversation.',
   'chat.errorSendMessage': 'Could not send the message.',
   'chat.errorStep': 'Could not run this step.',
+  'chat.rename': 'Rename',
+  'chat.renameTitle': 'Rename conversation',
+  'chat.renameLabel': 'Conversation title',
+  'chat.renameSuccess': 'Conversation renamed.',
+  'chat.delete': 'Delete conversation',
+  'chat.deleteTitle': 'Delete conversation',
+  'chat.deleteConfirm': 'Are you sure you want to delete conversation “{{title}}”? All messages and attachments in this conversation will be permanently deleted.',
+  'chat.deleteTasksOption': 'Delete tasks related to this conversation',
+  'chat.deleteTasksOptionHint': 'If unchecked, planned tasks will be kept in the task list.',
+  'chat.deleteSuccess': 'Conversation deleted.',
+  'chat.errorDeleteConversation': 'Could not delete conversation.',
+  'chat.errorUpdateConversation': 'Could not rename conversation.',
 
   /* ------------------------------------------------------ SSE event log */
   'chat.event.leaderThinking': '🎯 Leader is analyzing the request…',

@@ -118,6 +118,10 @@ const server = createServer(async (req, res) => {
       send(200, await controller.agent(await readJson(req)))
       return
     }
+    if(req.method==='POST'&&path==='/wordpress'){
+      send(200,await controller.wordpress(await readJson(req)))
+      return
+    }
     if (req.method === 'GET' && path === '/screen') {
       const bytes = await controller.screen()
       res.writeHead(200, { 'Content-Type': 'image/png' })

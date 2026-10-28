@@ -144,6 +144,14 @@ describe('main co đúng theo cửa sổ', () => {
     expect(rule('.app__user')).toContain('text-overflow: ellipsis')
     expect(shell).toContain('className="o-chon app__company-picker"')
   })
+
+  it('đặt bảng điều khiển ở vị trí đầu tiên trong danh sách route', () => {
+    const routeBlockStart = shell.indexOf('export const ROUTES = [')
+    const routeBlockEnd = shell.indexOf('] as const satisfies', routeBlockStart)
+    const routeBlock = shell.slice(routeBlockStart, routeBlockEnd)
+    const firstRoute = routeBlock.match(/{\s*id:\s*'([^']+)'/)?.[1]
+    expect(firstRoute).toBe('bang-dieu-khien')
+  })
 })
 
 describe('dashboard responsive và đủ nội dung', () => {

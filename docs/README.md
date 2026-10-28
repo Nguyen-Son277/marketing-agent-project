@@ -171,3 +171,5 @@ lời "vì sao không phải X".
   - Schema DB → `packages/db/src/migrations.ts`
   - Cấu hình và biến môi trường → `apps/server/src/config.ts`, `.env.example`
   - Lệnh chạy → `package.json` (scripts)
+
+Quản trị website: [WordPress — cài bridge, kết nối, job, backup và kiểm thử](wordpress.md).

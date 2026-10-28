@@ -384,10 +384,20 @@ describe('danh sách cuộc trao đổi mở theo yêu cầu', () => {
     expect(enChat).toMatch(/'chat\.emptyList'/)
     expect(viChat).not.toMatch(/'chat\.emptyList':[^\n]*Bấm \+/)
     expect(enChat).not.toMatch(/'chat\.emptyList':[^\n]*Press \+/)
-    // Và hai khoá mới của thanh công cụ phải có ở cả hai ngôn ngữ.
-    for (const khoa of ['chat.listConversations', 'chat.closeList']) {
+    // Và các khoá của thanh công cụ, sửa và xoá phải có ở cả hai ngôn ngữ.
+    for (const khoa of ['chat.listConversations', 'chat.closeList', 'chat.rename', 'chat.renameTitle', 'chat.delete', 'chat.deleteTitle', 'chat.deleteConfirm', 'chat.deleteTasksOption', 'chat.deleteTasksOptionHint']) {
       expect(viChat, `vi thiếu ${khoa}`).toMatch(new RegExp(`'${khoa.replace('.', '\\.')}'`))
       expect(enChat, `en thiếu ${khoa}`).toMatch(new RegExp(`'${khoa.replace('.', '\\.')}'`))
     }
+  })
+
+  it('hỗ trợ sửa tên và xoá cuộc trao đổi có hộp thoại xác nhận', () => {
+    expect(traoDoi).toMatch(/t\('chat\.rename'\)/)
+    expect(traoDoi).toMatch(/t\('chat\.delete'\)/)
+    expect(traoDoi).toMatch(/t\('chat\.renameTitle'\)/)
+    expect(traoDoi).toMatch(/t\('chat\.deleteTitle'\)/)
+    expect(traoDoi).toMatch(/t\('chat\.deleteTasksOption'\)/)
+    expect(traoDoi).toMatch(/api\.updateConversation/)
+    expect(traoDoi).toMatch(/api\.deleteConversation/)
   })
 })

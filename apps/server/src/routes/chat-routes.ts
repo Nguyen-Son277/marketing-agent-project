@@ -14,7 +14,7 @@
  *  - `/api/conversations/:id` không chứa `companyId`, nên quyền được kiểm bằng
  *    middleware tra ngược `resource-access.ts` (fail closed: 404).
  */
-import { conflict, forbidden, notFound, validation, chatAttachmentView, CHAT_ATTACHMENT_MAX_FILES, CHAT_ATTACHMENT_TOTAL_BYTES, parseOrThrow, createConversationSchema, sendMessageSchema } from '@marketing-agent/shared'
+import { conflict, forbidden, notFound, validation, chatAttachmentView, CHAT_ATTACHMENT_MAX_FILES, CHAT_ATTACHMENT_TOTAL_BYTES, parseOrThrow, createConversationSchema, sendMessageSchema, updateConversationSchema } from '@marketing-agent/shared'
 import type {
   ConversationDetailResponse,
   ConversationPhase,
@@ -140,6 +140,69 @@ export function chatRoutes() {
         [conversationMembership(repos)],
       )
 
+      router.patch(
+        '/api/conversations/:id',
+        async (request) => {
+          const { companyId, conversationId } = conversationScope(request)
+          const input = parseOrThrow(updateConversationSchema, await request.body(), 'cuộc trao đổi')
+          const updated = repos.work.updateConversation(conversationId, companyId, { title: input.title })
+          repos.accounting.audit({
+            companyId,
+            userId: readAuth(request)?.user.id,
+            action: 'conversation.rename',
+            target: conversationId,
+            payload: { title: input.title },
+          })
+          ctx.events.publish({
+            type: 'conversation.updated',
+            companyId,
+            at: new Date().toISOString(),
+            payload: { conversationId, id: conversationId, title: updated.title, phase: updated.phase },
+          })
+          request.json(200, {
+            conversation: toConversationView(updated, conversationCost(repos, companyId, conversationId)),
+          })
+        },
+        [conversationMembership(repos), requireWork],
+      )
+
+      router.delete(
+        '/api/conversations/:id',
+        async (request) => {
+          const { companyId, conversationId } = conversationScope(request)
+          const deleteTasksQuery = request.query('deleteTasks')
+          let deleteTasks = deleteTasksQuery === 'true' || deleteTasksQuery === '1'
+          if (!deleteTasks && request.req.headers['content-type']?.includes('application/json')) {
+            try {
+              const body = (await request.body()) as { deleteTasks?: boolean }
+              if (body?.deleteTasks) deleteTasks = true
+            } catch {
+              // query param takes precedence
+            }
+          }
+          const conversation = repos.work.findConversation(conversationId, companyId)
+          if (!conversation) throw notFound('Không tìm thấy cuộc trao đổi')
+
+          repos.work.deleteConversation(conversationId, companyId, { deleteTasks })
+          repos.accounting.deleteSetting(`run-state:${companyId}:${conversationId}`)
+          repos.accounting.audit({
+            companyId,
+            userId: readAuth(request)?.user.id,
+            action: 'conversation.delete',
+            target: conversationId,
+            payload: { deleteTasks, title: conversation.title },
+          })
+          ctx.events.publish({
+            type: 'conversation.updated',
+            companyId,
+            at: new Date().toISOString(),
+            payload: { conversationId, id: conversationId, deleted: true, deleteTasks },
+          })
+          request.json(200, { deleted: true, conversationId, deleteTasks })
+        },
+        [conversationMembership(repos), requireWork],
+      )
+
       router.get(
         '/api/conversations/:id/workflow',
         (request) => {
@@ -213,7 +276,7 @@ export function chatRoutes() {
         async (request) => {
           const { companyId, conversationId } = conversationScope(request)
           const orchestrator = await orchestratorFor(ctx, companyId)
-          const result = await orchestrator.runPlan({ companyId, conversationId })
+          const result = await orchestrator.runPlan({ companyId, conversationId, actorUserId: readAuth(request)?.user.id })
           saveRunState(ctx.repos, companyId, conversationId, result)
           repos.accounting.audit({
             companyId,

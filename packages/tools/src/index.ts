@@ -24,6 +24,7 @@ import { createPaidAdsTools } from './paid-ads.ts'
 import { IntegrationStore } from './integrations.ts'
 import { createWorkforceTools } from './workforce.ts'
 import { createSocialBrowserTools } from './social-browser.ts'
+import { createWordpressTools } from './wordpress.ts'
 
 export interface BuildToolRegistryOptions {
   /** Required by the core tools; omit to build a registry without file tools. */
@@ -49,6 +50,7 @@ export interface BuiltToolRegistry {
 export function buildToolRegistry(options: BuildToolRegistryOptions = {}): BuiltToolRegistry {
   const tools: ToolDefinition[] = []
   if(options.repos) tools.push(...createWorkforceTools(options.repos))
+  if(options.repos) tools.push(...createWordpressTools(options.repos))
 
   const http = createHttpTools({ allowedHosts: options.allowedHosts })
   tools.push(http.httpFetch)
@@ -130,3 +132,4 @@ export { sendMail, verifySmtpConnection, buildMimeMessage, extractAddress, build
 export type { SendMailInput } from './email.ts'
 export { SocialBrowserService, createSocialBrowserTools, browserAssetPath, assertBrowserWorkerEndpoint } from './social-browser.ts'
 export { connectMcpServer, discoverMcpServer, createMcpToolsForCompany, mcpCapabilityNames } from './mcp-client.ts'
+export { WordpressService, createWordpressTools, wordpressHash, assertWordpressUrl } from './wordpress.ts'

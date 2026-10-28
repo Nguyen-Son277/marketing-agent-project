@@ -19,11 +19,13 @@ const inputSchema = z.object({
 
 function view(record: any, includeKey = false): Record<string, unknown> { return { id:record.id, name:record.name, transport:record.transport, endpoint:record.endpoint, command:record.command, args:record.args, authType:record.authType, enabled:record.enabled, status:record.status, capabilities:record.capabilities, lastCheckAt:record.lastCheckAt, lastError:record.lastError, ...(includeKey ? { serverApiKey: record.serverApiKey } : {}) } }
 
-function apiKeyValid(ctx: any, ctxRepos: AppContext['repos'], companyId: string): boolean {
+function apiKeyActor(ctx: any, ctxRepos: AppContext['repos'], companyId: string): string | undefined {
   const auth = String(ctx.req.headers.authorization ?? '')
   const provided = String(ctx.req.headers['x-api-key'] ?? '') || (auth.startsWith('Bearer ') ? auth.slice(7) : '')
-  if (!provided) return false
-  return ctxRepos.mcp.list(companyId).some((record) => record.enabled && (() => { try { return ctxRepos.mcp.inboundKey(record) === provided } catch { return false } })())
+  if (!provided) return undefined
+  const matched = ctxRepos.mcp.list(companyId).find(record => record.enabled && (() => { try { return ctxRepos.mcp.inboundKey(record) === provided } catch { return false } })())
+  if (!matched) return undefined
+  return ctxRepos.db.get<{actor: string}>('SELECT actor_user_id AS actor FROM mcp_servers WHERE id=? AND company_id=?', [matched.id, companyId])?.actor ?? undefined
 }
 
 export function mcpRoutes() {
@@ -35,6 +37,7 @@ export function mcpRoutes() {
       if (input.transport === 'stdio' && !input.command) throw new Error('MCP stdio cần command')
       if (input.transport !== 'stdio' && !input.endpoint) throw new Error('MCP HTTP cần endpoint')
       const record = repos.mcp.create({ companyId, ...input })
+      repos.db.run('UPDATE mcp_servers SET actor_user_id=? WHERE id=? AND company_id=?',[requireAuthState(request).user.id,record.id,companyId])
       repos.accounting.audit({ companyId, action: 'mcp.server.create', target: record.id })
       request.json(201, { server: view(record), inboundApiKey: repos.mcp.inboundKey(record) })
     }, [requireMembership(repos), requireManage])
@@ -55,13 +58,15 @@ export function mcpRoutes() {
     })
 
     const serve = async (request: any) => {
-      if (!apiKeyValid(request, ctx.repos, request.params.companyId!)) { request.json(401, { error: { code: 'unauthorized', message: 'MCP API key không hợp lệ' } }); return }
+      const actorUserId=apiKeyActor(request,ctx.repos,request.params.companyId!)
+      if (!actorUserId) { request.json(401, { error: { code: 'unauthorized', message: 'MCP API key không hợp lệ' } }); return }
+      ctx.repos.wordpress.manage(request.params.companyId!,actorUserId)
       const companyId = request.params.companyId!, server = new McpServer({ name: 'marketing-agent', version: '0.1.0' }, { capabilities: { tools: {}, resources: {}, prompts: {} }, maxToolInputElements: 1000 })
       const registry = buildToolRegistry({ repos: ctx.repos, coreOptions: { companiesRoot: ctx.config.companiesRoot } }).registry
       for (const tool of registry?.list() ?? []) {
         const definition = registry?.get(tool.name); if (!definition) continue
         server.registerTool(tool.name, { description: definition.description, inputSchema: z.record(z.unknown()) }, async (args: Record<string, unknown>) => {
-          const result = await registry.execute(tool.name, args as Record<string, unknown>, { companyId, agentRole: 'marketing-leader', agentDefId: 'mcp', taskId: null, conversationId: null, log: () => undefined }, [tool.name])
+          const result = await registry.execute(tool.name, args as Record<string, unknown>, { companyId, actorUserId, agentRole: 'marketing-leader', agentDefId: 'mcp', taskId: null, conversationId: null, log: () => undefined }, [tool.name])
           return { content: [{ type: 'text', text: result.content }], isError: result.isError }
         })
       }

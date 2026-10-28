@@ -3,12 +3,13 @@
  * knowledge categories. Kept dependency-free so any layer may import it.
  */
 
-/** The ten specialist roles plus the orchestrating leader. Order is display order. */
+/** The eleven specialist roles plus the orchestrating leader. Order is display order. */
 export const AGENT_ROLES = [
   'marketing-leader',
   'market-research',
   'content-writer',
   'seo-technical',
+  'web-technical',
   'social-media',
   'paid-media',
   'email-crm',
@@ -133,6 +134,8 @@ export const SKILL_NAMES = [
   'brand-voice',
   'keyword-research',
   'technical-seo-audit',
+  'website-editing',
+  'web-technical-maintenance',
   'content-calendar',
   'social-copywriting',
   'campaign-structure',

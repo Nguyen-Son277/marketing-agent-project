@@ -146,4 +146,41 @@ describe('tenancy isolation', () => {
     expect(repos.work.findConversation(conversation.id, 'c-a')).toBeDefined()
     expect(repos.work.findConversation(conversation.id, 'c-b')).toBeUndefined()
   })
+
+  it('deletes conversation and its tasks when deleteTasks is true', () => {
+    const user = repos.auth.createUser({ email: 'u1@example.com', password: 'password-123', name: 'U1' })
+    repos.db.run('INSERT INTO companies (id, name, slug, created_at) VALUES (?, ?, ?, ?)', ['c-1', 'Company 1', 'comp-1', 'now'])
+    const conv = repos.work.createConversation({ companyId: 'c-1', userId: user.id, title: 'To Delete' })
+    repos.work.addMessage({ companyId: 'c-1', conversationId: conv.id, role: 'user', authorKind: 'user', contentMd: 'Hi' })
+    const task = repos.work.createTask({ companyId: 'c-1', conversationId: conv.id, title: 'Task 1', briefMd: 'Brief' })
+
+    repos.work.deleteConversation(conv.id, 'c-1', { deleteTasks: true })
+
+    expect(repos.work.findConversation(conv.id, 'c-1')).toBeUndefined()
+    expect(repos.work.listMessages(conv.id, 'c-1')).toHaveLength(0)
+    expect(repos.work.findTask(task.id, 'c-1')).toBeUndefined()
+  })
+
+  it('deletes conversation but preserves tasks when deleteTasks is false', () => {
+    const user = repos.auth.createUser({ email: 'u2@example.com', password: 'password-123', name: 'U2' })
+    repos.db.run('INSERT INTO companies (id, name, slug, created_at) VALUES (?, ?, ?, ?)', ['c-2', 'Company 2', 'comp-2', 'now'])
+    const conv = repos.work.createConversation({ companyId: 'c-2', userId: user.id, title: 'To Delete Keep Tasks' })
+    repos.work.addMessage({ companyId: 'c-2', conversationId: conv.id, role: 'user', authorKind: 'user', contentMd: 'Hi' })
+    const task = repos.work.createTask({ companyId: 'c-2', conversationId: conv.id, title: 'Task Keep', briefMd: 'Brief' })
+
+    repos.work.deleteConversation(conv.id, 'c-2', { deleteTasks: false })
+
+    expect(repos.work.findConversation(conv.id, 'c-2')).toBeUndefined()
+    expect(repos.work.listMessages(conv.id, 'c-2')).toHaveLength(0)
+    const preserved = repos.work.findTask(task.id, 'c-2')
+    expect(preserved).toBeDefined()
+    expect(preserved?.conversationId).toBeNull()
+  })
+
+  it('sets and deletes app settings', () => {
+    repos.accounting.setSetting('test:key', { foo: 'bar' })
+    expect(repos.accounting.getSetting('test:key')).toEqual({ foo: 'bar' })
+    repos.accounting.deleteSetting('test:key')
+    expect(repos.accounting.getSetting('test:key')).toBeUndefined()
+  })
 })

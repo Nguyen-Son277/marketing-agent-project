@@ -111,7 +111,7 @@ export async function classifyKnowledgeSource(repos: Repos, companyId: string, s
           const refreshed = readLimitsView(repos, companyId)
           meter.checkBudget(companyId, refreshed)
           const reserve = (promptTokens * model.costInPerMtok + maxTokens * model.costOutPerMtok) / 1_000_000
-          if (spentTaskUsd + reserve > refreshed.taskCostUsd || reserve + refreshed.usedTodayUsd > refreshed.dailyCostUsd) throw new Error('budget_exceeded: Classification budget does not permit this request')
+          if ((refreshed.taskCostUsd > 0 && spentTaskUsd + reserve > refreshed.taskCostUsd) || (refreshed.dailyCostUsd > 0 && reserve + refreshed.usedTodayUsd > refreshed.dailyCostUsd)) throw new Error('budget_exceeded: Classification budget does not permit this request')
           let selection: { readonly adapter: ProviderAdapter } | undefined
           try { selection = options.selectAdapterFor ? options.selectAdapterFor(model) : registry.selectAdapterFor(model) }
           catch (error) { lastError = error; allowFallback = isTransientKnowledgeClassificationError(error); break }

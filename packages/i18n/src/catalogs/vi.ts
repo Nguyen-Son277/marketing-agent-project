@@ -32,8 +32,12 @@ import { vi_diagram } from './vi/diagram.ts'
 import { vi_notifications } from './vi/notifications.ts'
 import { vi_socialBrowser } from './vi/social-browser.ts'
 import { vi_campaign } from './vi/campaign.ts'
+import { vi_office } from './vi/office.ts'
 
 export const vi = {
+  ...vi_office,
+  'nav.wordpress': 'WordPress',
+
   ...vi_socialBrowser,
   ...vi_notifications,
   /* ------------------------------------------------------------- chung */

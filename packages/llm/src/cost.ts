@@ -138,13 +138,13 @@ export class CostMeter implements RunMeter {
     const runCost = this.finished ? 0 : this.totals.costUsd
     const spentTodayUsd = round(today.costUsd + runCost, 6)
 
-    if (limits.dailyCostUsd !== undefined && spentTodayUsd > limits.dailyCostUsd) {
+    if (limits.dailyCostUsd !== undefined && limits.dailyCostUsd > 0 && spentTodayUsd > limits.dailyCostUsd) {
       throw budgetExceeded(
         `Đã vượt hạn mức chi phí trong ngày (${spentTodayUsd} / ${limits.dailyCostUsd} USD). Hãy chờ sang ngày mới hoặc nâng hạn mức.`,
         { spentTodayUsd, dailyCostUsd: limits.dailyCostUsd },
       )
     }
-    if (limits.taskCostUsd !== undefined && runCost > limits.taskCostUsd) {
+    if (limits.taskCostUsd !== undefined && limits.taskCostUsd > 0 && runCost > limits.taskCostUsd) {
       throw budgetExceeded(
         `Lượt chạy này đã vượt hạn mức chi phí cho một việc (${runCost} / ${limits.taskCostUsd} USD).`,
         { spentThisRunUsd: runCost, taskCostUsd: limits.taskCostUsd },
@@ -156,9 +156,9 @@ export class CostMeter implements RunMeter {
       spentTodayUsd,
       spentThisRunUsd: runCost,
       remainingTodayUsd:
-        limits.dailyCostUsd === undefined ? null : round(Math.max(0, limits.dailyCostUsd - spentTodayUsd), 6),
+        !limits.dailyCostUsd || limits.dailyCostUsd <= 0 ? null : round(Math.max(0, limits.dailyCostUsd - spentTodayUsd), 6),
       remainingTaskUsd:
-        limits.taskCostUsd === undefined ? null : round(Math.max(0, limits.taskCostUsd - runCost), 6),
+        !limits.taskCostUsd || limits.taskCostUsd <= 0 ? null : round(Math.max(0, limits.taskCostUsd - runCost), 6),
     }
   }
 

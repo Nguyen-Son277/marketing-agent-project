@@ -71,6 +71,7 @@ export const en_diagram = {
   'diagram.role.marketResearch': 'Market research',
   'diagram.role.contentWriter': 'Content writer',
   'diagram.role.seoTechnical': 'Technical SEO',
+  'diagram.role.webTechnical': 'Web & IT Engineer',
   'diagram.role.socialMedia': 'Social Media',
   'diagram.role.paidMedia': 'Paid media',
   'diagram.role.emailCrm': 'Email & CRM',

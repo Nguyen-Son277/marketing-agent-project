@@ -31,8 +31,12 @@ import { en_diagram } from './en/diagram.ts'
 import { en_notifications } from './en/notifications.ts'
 import { en_socialBrowser } from './en/social-browser.ts'
 import { en_campaign } from './en/campaign.ts'
+import { en_office } from './en/office.ts'
 
 export const en = {
+  ...en_office,
+  'nav.wordpress': 'WordPress',
+
   ...en_socialBrowser,
   ...en_notifications,
   /* ------------------------------------------------------------- general */

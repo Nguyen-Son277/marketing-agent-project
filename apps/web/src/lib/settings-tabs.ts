@@ -4,6 +4,7 @@ export const SETTINGS_TABS = [
   { id: 'routes', label: 'settings.tabs.routes' },
   { id: 'knowledge', label: 'settings.tabs.knowledge' },
   { id: 'integrations', label: 'settings.tabs.integrations' },
+  { id: 'wordpress', label: 'settings.tabs.wordpress' },
   { id: 'limits', label: 'settings.tabs.limits' },
 ] as const
 export type SettingsTabId = (typeof SETTINGS_TABS)[number]['id']

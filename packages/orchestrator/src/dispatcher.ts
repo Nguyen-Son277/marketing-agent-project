@@ -21,6 +21,7 @@ import { event, type AppEvent } from './events.ts'
 import type { DispatchSummary, OrchestratorLimits, PlanResult, TaskOutcome } from './types.ts'
 
 export interface DispatchPlanInput {
+  readonly actorUserId?: string
   readonly repos: Repos
   readonly tools: ToolRegistry
   readonly embedding?: EmbeddingProvider | undefined
@@ -173,6 +174,7 @@ async function executeTask(input: ExecuteTaskInput): Promise<TaskOutcome> {
     }))
 
     const result = await runAgentForTask({
+      actorUserId: input.actorUserId,
       repos,
       tools: input.tools,
       embedding: input.embedding,

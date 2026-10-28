@@ -91,6 +91,18 @@ export const vi_chat = {
   'chat.errorCreateConversation': 'Không tạo được cuộc trao đổi.',
   'chat.errorSendMessage': 'Không gửi được tin nhắn.',
   'chat.errorStep': 'Không thực hiện được bước này.',
+  'chat.rename': 'Đổi tên',
+  'chat.renameTitle': 'Đổi tên cuộc trao đổi',
+  'chat.renameLabel': 'Tên cuộc trao đổi',
+  'chat.renameSuccess': 'Đã đổi tên cuộc trao đổi.',
+  'chat.delete': 'Xoá cuộc trao đổi',
+  'chat.deleteTitle': 'Xoá cuộc trao đổi',
+  'chat.deleteConfirm': 'Bạn có chắc chắn muốn xoá cuộc trao đổi “{{title}}”? Toàn bộ tin nhắn và tệp đính kèm trong cuộc trao đổi này sẽ bị xoá vĩnh viễn.',
+  'chat.deleteTasksOption': 'Xoá các công việc liên quan đến cuộc trao đổi này',
+  'chat.deleteTasksOptionHint': 'Nếu không chọn, các công việc đã lập vẫn được giữ lại trong danh sách công việc.',
+  'chat.deleteSuccess': 'Đã xoá cuộc trao đổi.',
+  'chat.errorDeleteConversation': 'Không xoá được cuộc trao đổi.',
+  'chat.errorUpdateConversation': 'Không đổi được tên cuộc trao đổi.',
 
   /* --------------------------------------------------- nhật ký sự kiện SSE */
   'chat.event.leaderThinking': '🎯 Leader đang phân tích yêu cầu…',

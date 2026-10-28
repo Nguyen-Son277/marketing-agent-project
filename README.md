@@ -1,9 +1,9 @@
 # Đội Agent Marketing
 
 Website tự host cho **một đội agent marketing** vận hành theo từng công ty. Bạn chỉ
-nói chuyện với **Leader**; Leader làm rõ yêu cầu, chia việc cho chín chuyên môn
-(nghiên cứu, nội dung, SEO, social, quảng cáo, email, thiết kế, phân tích, chăm sóc
-cộng đồng), kiểm tra chất lượng rồi trả về **một báo cáo có nguồn và có chi phí**.
+nói chuyện với **Leader**; Leader làm rõ yêu cầu, chia việc cho mười chuyên môn
+(nghiên cứu, nội dung, SEO, kỹ thuật web, social, quảng cáo, email, thiết kế, phân
+tích, chăm sóc cộng đồng), kiểm tra chất lượng rồi trả về **một báo cáo có nguồn và có chi phí**.
 
 Điểm khác biệt không nằm ở chỗ "có nhiều agent". Nó nằm ở chỗ hệ thống **không cho
 phép agent bịa**: thiếu dữ liệu thì phải báo bị chặn, thiếu nguồn thì không được
@@ -44,11 +44,11 @@ truy vấn, không phải bằng lời dặn trong prompt.
 - **Budget guard** — ba trần: chi phí mỗi task, chi phí mỗi công ty mỗi ngày, số
   bước model mỗi lượt chạy. Vượt trần là dừng ngay, không tiêu trong im lặng.
 
-**Đội 10 agent, mỗi agent một vai trò và một bộ quyền**
-- Leader điều hành + 9 chuyên môn, chia 4 lớp theo phụ thuộc dữ liệu (nghiên cứu →
+**Đội 11 agent, mỗi agent một vai trò và một bộ quyền**
+- Leader điều hành + 10 chuyên môn, chia 4 lớp theo phụ thuộc dữ liệu (nghiên cứu →
   nội dung → kênh → đo lường).
 - Mỗi agent có model riêng theo tier, skill riêng, tool riêng, và **danh mục tri
-  thức đọc/ghi riêng**. Chín chuyên môn có thể hỏi nhau (tối đa 3 vòng) thay vì bịa.
+  thức đọc/ghi riêng**. Mười chuyên môn có thể hỏi nhau (tối đa 3 vòng) thay vì bịa.
 - Chi tiết: [docs/so-do-doi-agent.md](docs/so-do-doi-agent.md).
 
 **Kho kiến thức riêng cho từng công ty**
@@ -239,3 +239,5 @@ pnpm test         # vitest run
 Test chạy với provider LLM **giả** (không cần mạng) và embedding `hash` (tất định,
 offline). Smoke test gọi gateway thật chỉ chạy khi đặt `LLM_LIVE=1`.
 Luồng đăng bài bằng trình duyệt và cấu hình worker trên VPS: [Trình duyệt xã hội](docs/trinh-duyet-xa-hoi.md).
+
+Quản trị WordPress, SEO, Lighthouse và plugin kết nối: [Hướng dẫn WordPress](docs/wordpress.md).

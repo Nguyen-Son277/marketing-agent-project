@@ -451,6 +451,10 @@ export class AccountingRepo {
       [key, JSON.stringify(value), nowIso()],
     )
   }
+
+  deleteSetting(key: string): void {
+    this.db.run('DELETE FROM app_settings WHERE key = ?', [key])
+  }
 }
 
 function safeJson(json: string): unknown {

@@ -19,7 +19,7 @@ export function createDailySynthesizer(repos:Repos):DailySynthesizer {
   const maxTokens=Math.min(model.maxOutput,16000),estimatedInput=payload.length+1500
   if(estimatedInput+maxTokens>model.contextWindow)throw new Error('Nội dung nhóm vượt giới hạn ngữ cảnh model. Chọn model có ngữ cảnh lớn hơn.')
   const reserve=(estimatedInput*model.costInPerMtok+maxTokens*model.costOutPerMtok)/1000000
-  if(reserve>limits.taskCostUsd||reserve+limits.usedTodayUsd>limits.dailyCostUsd)throw new Error('Ngân sách không đủ cho giới hạn token của báo cáo này.')
+  if((limits.taskCostUsd>0&&reserve>limits.taskCostUsd)||(limits.dailyCostUsd>0&&reserve+limits.usedTodayUsd>limits.dailyCostUsd))throw new Error('Ngân sách không đủ cho giới hạn token của báo cáo này.')
   const agent=repos.db.get<{id:string}>(`SELECT id FROM agent_defs WHERE role='marketing-leader'`)
   if(!agent)throw new Error('Chưa cài catalog agent để ghi nhận chi phí.')
   meter.open({companyId,agentDefId:agent.id,providerId:provider.id,modelId:model.id})

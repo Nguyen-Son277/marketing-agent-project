@@ -61,6 +61,15 @@ import type {
   UpsertRouteBody,
   WorkflowSnapshotResponse,
   ChatAttachmentView,
+  WordpressSiteView,
+  WordpressJobView,
+  WordpressJobInput,
+  OfficeOverviewResponse,
+  OfficeAgentDeskResponse,
+  OfficeTasksResponse,
+  OfficeDispatchTaskInput,
+  OfficeDispatchTaskResponse,
+  OfficeDeskPingResponse,
 } from "@marketing-agent/shared";
 
 export class ApiError extends Error {
@@ -702,6 +711,26 @@ export const api = {
     return request(`/api/conversations/${conversationId}`);
   },
 
+  async updateConversation(
+    conversationId: string,
+    title: string,
+  ): Promise<{ conversation: ConversationView }> {
+    return request(`/api/conversations/${encodeURIComponent(conversationId)}`, {
+      method: "PATCH",
+      body: { title },
+    });
+  },
+
+  async deleteConversation(
+    conversationId: string,
+    deleteTasks = false,
+  ): Promise<{ deleted: boolean; conversationId: string; deleteTasks: boolean }> {
+    return request(
+      `/api/conversations/${encodeURIComponent(conversationId)}?deleteTasks=${deleteTasks ? "true" : "false"}`,
+      { method: "DELETE" },
+    );
+  },
+
   async sendMessage(
     conversationId: string,
     input: {
@@ -1050,6 +1079,91 @@ export const api = {
     await request(`/api/companies/${encodeURIComponent(companyId)}/mcp-servers/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
 
+  async wordpressSites(companyId: string): Promise<{ sites: WordpressSiteView[] }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/wordpress/sites`);
+  },
+  async createWordpressSite(
+    companyId: string,
+    body: {
+      name: string;
+      url: string;
+      username: string;
+      applicationPassword: string;
+      environment?: string;
+      browserChannelId?: string | null;
+      seoPlugin?: string | null;
+    },
+  ): Promise<{ site: WordpressSiteView }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/wordpress/sites`, {
+      method: "POST",
+      body,
+    });
+  },
+  async updateWordpressSite(
+    companyId: string,
+    siteId: string,
+    body: {
+      name?: string;
+      username?: string;
+      applicationPassword?: string;
+      browserChannelId?: string | null;
+      seoPlugin?: string | null;
+      environment?: string;
+    },
+  ): Promise<{ site: WordpressSiteView }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/wordpress/sites/${encodeURIComponent(siteId)}`, {
+      method: "PATCH",
+      body,
+    });
+  },
+  async deleteWordpressSite(companyId: string, siteId: string): Promise<void> {
+    await request(`/api/companies/${encodeURIComponent(companyId)}/wordpress/sites/${encodeURIComponent(siteId)}`, {
+      method: "DELETE",
+    });
+  },
+  async testWordpressSite(
+    companyId: string,
+    siteId: string,
+  ): Promise<{ ok: boolean; site?: WordpressSiteView; capabilities?: Record<string, unknown> }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/wordpress/sites/${encodeURIComponent(siteId)}/test`, {
+      method: "POST",
+      body: {},
+    });
+  },
+  async wordpressJobs(companyId: string): Promise<{ jobs: WordpressJobView[] }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/wordpress/jobs`);
+  },
+  async createWordpressJob(
+    companyId: string,
+    body: {
+      siteId: string;
+      action: WordpressJobInput['action'];
+      resource: WordpressJobInput['resource'];
+      resourceId?: string | number;
+      data: Record<string, unknown>;
+      sourceJobId?: string;
+      urls?: string[];
+      idempotencyKey?: string;
+    },
+  ): Promise<{ job: WordpressJobView }> {
+    return request(`/api/companies/${encodeURIComponent(companyId)}/wordpress/jobs`, {
+      method: "POST",
+      body,
+    });
+  },
+  async approveWordpressJob(companyId: string, jobId: string, hash: string): Promise<void> {
+    await request(`/api/companies/${encodeURIComponent(companyId)}/wordpress/jobs/${encodeURIComponent(jobId)}/approve`, {
+      method: "POST",
+      body: { hash },
+    });
+  },
+  async cancelWordpressJob(companyId: string, jobId: string): Promise<void> {
+    await request(`/api/companies/${encodeURIComponent(companyId)}/wordpress/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST",
+      body: {},
+    });
+  },
+
   async upsertIntegration(
     companyId: string,
     input: UpsertIntegrationBody,
@@ -1180,7 +1294,50 @@ export const api = {
   async diagram(companyId: string): Promise<DiagramResponse> {
     return request(`/api/companies/${companyId}/diagram`);
   },
+
+  /* ----------------------------------------------------------- văn phòng ai 3D */
+
+  async officeOverview(companyId: string): Promise<OfficeOverviewResponse> {
+    return request(`/api/companies/${companyId}/office/overview`);
+  },
+
+  async officeDesk(companyId: string, role: string): Promise<OfficeAgentDeskResponse> {
+    return request(`/api/companies/${companyId}/office/desks/${role}`);
+  },
+
+  async officeTasks(
+    companyId: string,
+    params: { role?: string; status?: string } = {},
+  ): Promise<OfficeTasksResponse> {
+    const search = new URLSearchParams();
+    if (params.role) search.set("role", params.role);
+    if (params.status) search.set("status", params.status);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return request(`/api/companies/${companyId}/office/tasks${suffix}`);
+  },
+
+  async officeDispatch(
+    companyId: string,
+    input: OfficeDispatchTaskInput,
+  ): Promise<OfficeDispatchTaskResponse> {
+    return request(`/api/companies/${companyId}/office/dispatch`, {
+      method: "POST",
+      body: input,
+    });
+  },
+
+  async officePing(
+    companyId: string,
+    role: string,
+    message?: string,
+  ): Promise<OfficeDeskPingResponse> {
+    return request(`/api/companies/${companyId}/office/desks/${role}/ping`, {
+      method: "POST",
+      body: { message },
+    });
+  },
 };
+
 
 /**
  * Một sự kiện SSE đã parse. `type` khớp `StreamEventType`; `data` là JSON tuỳ loại.

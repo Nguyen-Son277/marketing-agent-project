@@ -16,7 +16,7 @@ export interface CreateCompanyResult {
   readonly role: CompanyRole
   readonly members: number
   readonly presets: number
-  /** Số bản ghi quyền đọc/ghi kho kiến thức đã cài (6 danh mục × 10 agent). */
+  /** Số bản ghi quyền đọc/ghi kho kiến thức đã cài (6 danh mục × 11 agent). */
   readonly aclEntries: number
 }
 
@@ -26,6 +26,7 @@ const TIER_BY_ROLE: Readonly<Record<string, 'light' | 'standard' | 'deep'>> = {
   'market-research': 'standard',
   'content-writer': 'standard',
   'seo-technical': 'standard',
+  'web-technical': 'standard',
   'social-media': 'standard',
   'paid-media': 'deep',
   'email-crm': 'standard',

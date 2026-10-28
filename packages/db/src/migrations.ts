@@ -1045,4 +1045,41 @@ CREATE TABLE mcp_oauth_states (
 CREATE INDEX idx_mcp_oauth_states_expiry ON mcp_oauth_states(expires_at);
 `,
   },
+  {
+    id: '0028_wordpress',
+    sql: `
+CREATE TABLE wordpress_sites (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ name TEXT NOT NULL, url TEXT NOT NULL, environment TEXT NOT NULL DEFAULT 'production',
+ username TEXT NOT NULL, password_enc TEXT NOT NULL, password_iv TEXT NOT NULL,
+ browser_channel_id TEXT, seo_plugin TEXT, enabled INTEGER NOT NULL DEFAULT 1,
+ capabilities_json TEXT NOT NULL DEFAULT '{}', checked_at TEXT, created_at TEXT NOT NULL,
+ UNIQUE(company_id,url)
+);
+CREATE TABLE wordpress_jobs (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ site_id TEXT NOT NULL REFERENCES wordpress_sites(id), actor_id TEXT NOT NULL REFERENCES users(id),
+ action TEXT NOT NULL, input_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued',
+ idempotency_key TEXT NOT NULL, snapshot_json TEXT, result_json TEXT, error TEXT,
+ approval_hash TEXT, approved_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ UNIQUE(company_id,site_id,idempotency_key)
+);
+CREATE UNIQUE INDEX wordpress_one_writer ON wordpress_jobs(site_id) WHERE status='running';
+CREATE INDEX wordpress_jobs_company ON wordpress_jobs(company_id,created_at);
+CREATE TABLE wordpress_backups (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ site_id TEXT NOT NULL REFERENCES wordpress_sites(id), job_id TEXT REFERENCES wordpress_jobs(id),
+ provider TEXT NOT NULL DEFAULT 'updraftplus', status TEXT NOT NULL,
+ evidence_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE wordpress_events (
+ id TEXT PRIMARY KEY, company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ site_id TEXT NOT NULL REFERENCES wordpress_sites(id), job_id TEXT REFERENCES wordpress_jobs(id),
+ action TEXT NOT NULL, details_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
+);
+`,
+  },
+
+  { id: '0029_mcp_actor', sql: `ALTER TABLE mcp_servers ADD COLUMN actor_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;` },
+
 ]

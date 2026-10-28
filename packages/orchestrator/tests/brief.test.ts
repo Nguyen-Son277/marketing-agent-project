@@ -11,7 +11,10 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  cleanConversationTitle,
+  deriveConversationTitle,
   extractLabeledBrief,
+  isDefaultConversationTitle,
   mergeBriefFields,
   parseExtractedBrief,
 } from '../src/brief.ts'
@@ -164,5 +167,65 @@ describe('mergeBriefFields', () => {
     const brief = mergeBriefFields(empty, { objective: 'Mục tiêu đủ dài' })
     expect(brief.kpi).toBe('')
     expect(brief.constraints).toBe('')
+  })
+})
+
+describe('isDefaultConversationTitle', () => {
+  it('nhận diện đúng các biến thể tiêu đề mặc định', () => {
+    expect(isDefaultConversationTitle(null)).toBe(true)
+    expect(isDefaultConversationTitle(undefined)).toBe(true)
+    expect(isDefaultConversationTitle('')).toBe(true)
+    expect(isDefaultConversationTitle('   ')).toBe(true)
+    expect(isDefaultConversationTitle('Cuộc trao đổi mới')).toBe(true)
+    expect(isDefaultConversationTitle('cuộc trao đổi mới')).toBe(true)
+    expect(isDefaultConversationTitle('New conversation')).toBe(true)
+    expect(isDefaultConversationTitle('new conversation')).toBe(true)
+    expect(isDefaultConversationTitle('Cuộc trò chuyện mới')).toBe(true)
+  })
+
+  it('không coi tiêu đề đã được sửa là mặc định', () => {
+    expect(isDefaultConversationTitle('Chiến dịch tháng 11')).toBe(false)
+    expect(isDefaultConversationTitle('Banner 20/10')).toBe(false)
+  })
+})
+
+describe('cleanConversationTitle and deriveConversationTitle', () => {
+  it('loại bỏ câu chào và tiền tố xã giao', () => {
+    expect(cleanConversationTitle('Chào leader, tôi muốn chạy chiến dịch son môi mới')).toBe('Chạy chiến dịch son môi mới')
+    expect(cleanConversationTitle('Xin chào! Hãy giúp tôi lập kế hoạch content')).toBe('Lập kế hoạch content')
+    expect(cleanConversationTitle('Mục tiêu: Tăng 50 lead B2B cho POS')).toBe('Tăng 50 lead B2B cho POS')
+  })
+
+  it('loại bỏ markdown và cắt gọn khi dài quá giới hạn', () => {
+    const raw = '# Kế hoạch marketing ra mắt dòng sản phẩm chăm sóc da chống lão hóa cho thị trường miền Bắc trong quý 4'
+    const title = cleanConversationTitle(raw, 50)
+    expect(title.length).toBeLessThanOrEqual(51)
+    expect(title.endsWith('…')).toBe(true)
+    expect(title.startsWith('#')).toBe(false)
+  })
+
+  it('deriveConversationTitle ưu tiên objective của brief', () => {
+    expect(
+      deriveConversationTitle({
+        content: 'Tôi muốn làm cái này cái kia',
+        objective: 'Tăng 100 khách hàng tiềm năng',
+      }),
+    ).toBe('Tăng 100 khách hàng tiềm năng')
+  })
+
+  it('deriveConversationTitle dùng content khi chưa có objective', () => {
+    expect(
+      deriveConversationTitle({
+        content: 'Lên kế hoạch video TikTok cho trà sữa',
+      }),
+    ).toBe('Lên kế hoạch video TikTok cho trà sữa')
+  })
+
+  it('deriveConversationTitle dùng tên tệp khi chỉ có tệp đính kèm', () => {
+    expect(
+      deriveConversationTitle({
+        filenames: ['bao-cao-tai-chinh.pdf'],
+      }),
+    ).toBe('Tài liệu: bao-cao-tai-chinh.pdf')
   })
 })

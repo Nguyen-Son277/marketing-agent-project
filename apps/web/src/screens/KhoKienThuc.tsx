@@ -14,6 +14,7 @@ import type { KnowledgeClassificationFields, KnowledgeSectionView } from '../lib
 import { KB_CATEGORIES } from '@marketing-agent/shared'
 import { api, ApiError } from '../lib/api.ts'
 import { useI18n } from '../lib/i18n.tsx'
+import { useOptionalSession } from '../lib/session.tsx'
 import { KnowledgeModelStatus } from '../components/KnowledgeModelStatus.tsx'
 import { Markdown } from '../components/Markdown.tsx'
 import {
@@ -29,11 +30,22 @@ import {
   TieuDeTrang,
   Trang,
   Trong,
+  Truong,
 } from '../components/ui.tsx'
 
 interface TepCho {
   id: string
   file: File
+  status: 'queued' | 'uploading' | 'success' | 'error'
+  message?: string
+}
+
+interface TepChoAnh {
+  id: string
+  file: File
+  previewUrl: string
+  productName: string
+  brandName: string
   status: 'queued' | 'uploading' | 'success' | 'error'
   message?: string
 }
@@ -111,6 +123,11 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   // `locale` dùng cho việc sắp xếp tên tài liệu: thứ tự chữ cái phải theo ngôn ngữ
   // đang xem, không phải luôn luôn là tiếng Việt.
   const { t, locale, formatNumber, formatDateTime } = useI18n()
+  const session = useOptionalSession()
+  const companies = session?.companies ?? []
+  const currentCompany = companies.find((c) => c.id === companyId) ?? session?.company
+
+  const [cheDoXem, setCheDoXem] = useState<'tai-lieu' | 'anh-san-pham'>('tai-lieu')
   const [duLieu, setDuLieu] = useState<KnowledgeResponse | null>(null)
   const [dangTai, setDangTai] = useState(true)
   const [loi, setLoi] = useState<ApiError | null>(null)
@@ -126,9 +143,13 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   const [anhSanPham, setAnhSanPham] = useState('')
   const [anhThuongHieu, setAnhThuongHieu] = useState('')
   const [anhMoTa, setAnhMoTa] = useState('')
+  const [anhTags, setAnhTags] = useState('')
   const [dangTaoMoi, setDangTaoMoi] = useState(false)
   const [tepCho, setTepCho] = useState<TepCho[]>([])
+  const [anhTepCho, setAnhTepCho] = useState<TepChoAnh[]>([])
   const [dangTaiLen, setDangTaiLen] = useState(false)
+  const [dangTaiAnhLen, setDangTaiAnhLen] = useState(false)
+  const [tuKhoaAnh, setTuKhoaAnh] = useState('')
   const [sections, setSections] = useState<KnowledgeSectionView[]>([])
   const [classificationError, setClassificationError] = useState<string | null>(null)
   const [savingSection, setSavingSection] = useState<string | null>(null)
@@ -136,6 +157,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   const [dangTaiNoiDung, setDangTaiNoiDung] = useState(false)
   const [laTaiLen, setLaTaiLen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageFileInputRef = useRef<HTMLInputElement>(null)
   const selectionEpoch = useRef(0)
   const activeCompany = useRef(companyId)
   activeCompany.current = companyId
@@ -146,13 +168,21 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     setNoiDungTaiLen(null)
     setLaTaiLen(false)
     setTepCho([])
+    for (const item of anhTepCho) {
+      try {
+        URL.revokeObjectURL(item.previewUrl)
+      } catch {}
+    }
+    setAnhTepCho([])
     setDuLieu(null)
     setBieuMau(taoBieuMauRong(t))
     setAnhSanPham('')
     setAnhThuongHieu('')
     setAnhMoTa('')
+    setAnhTags('')
     setDangTaoMoi(false)
     setDangTaiLen(false)
+    setDangTaiAnhLen(false)
   }, [companyId])
 
   const [dangLuu, setDangLuu] = useState(false)
@@ -260,6 +290,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     setAnhSanPham(taiLieu.imageProduct ?? '')
     setAnhThuongHieu(taiLieu.imageBrand ?? '')
     setAnhMoTa(taiLieu.imageDescription ?? '')
+    setAnhTags(taiLieu.tags.join(', '))
     if (!uploaded) return
     try {
       const response = await api.knowledgeDocument(selectedCompany, selectedId)
@@ -331,6 +362,116 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
   function retryUpload(itemId: string): void {
     setTepCho((current) => current.map((entry) => entry.id === itemId ? { ...entry, status: 'queued', message: undefined } : entry))
   }
+
+  const danhSachAnhSanPham = useMemo(() => {
+    const tuKhoa = tuKhoaAnh.trim().toLowerCase()
+    const tatCaAnh = duLieu?.documents.filter((doc) => doc.mimeType?.startsWith('image/')) ?? []
+    if (!tuKhoa) return tatCaAnh
+    return tatCaAnh.filter(
+      (doc) =>
+        doc.title.toLowerCase().includes(tuKhoa) ||
+        (doc.imageProduct && doc.imageProduct.toLowerCase().includes(tuKhoa)) ||
+        (doc.imageBrand && doc.imageBrand.toLowerCase().includes(tuKhoa)) ||
+        (doc.imageDescription && doc.imageDescription.toLowerCase().includes(tuKhoa)) ||
+        doc.tags.some((tag) => tag.toLowerCase().includes(tuKhoa)),
+    )
+  }, [duLieu, tuKhoaAnh])
+
+  function themAnhSanPham(files: FileList | File[]): void {
+    const incoming = Array.from(files)
+    const accepted: TepChoAnh[] = []
+    for (const file of incoming) {
+      const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+      const isImage = ALLOWED_IMAGE_EXTENSIONS.has(extension) || file.type.startsWith('image/')
+      const invalid = !isImage
+        ? t('knowledge.invalidFileType', { name: file.name })
+        : file.size > MAX_IMAGE_UPLOAD_BYTES
+          ? t('knowledge.fileTooLarge', { name: file.name })
+          : undefined
+      if (invalid) {
+        setLoiLuu(invalid)
+        continue
+      }
+      accepted.push({
+        id: `${file.name}-${file.lastModified}-${Math.random()}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        productName: sanPhamAnh.trim(),
+        brandName: thuongHieuAnh.trim(),
+        status: 'queued',
+      })
+    }
+    setAnhTepCho((current) => {
+      const room = Math.max(0, MAX_UPLOAD_FILES - current.length)
+      if (accepted.length > room) setLoiLuu(t('knowledge.queueLimit'))
+      return [...current, ...accepted.slice(0, room)]
+    })
+  }
+
+  function retryUploadAnh(itemId: string): void {
+    setAnhTepCho((current) =>
+      current.map((entry) => (entry.id === itemId ? { ...entry, status: 'queued', message: undefined } : entry)),
+    )
+  }
+
+  function clearAnhQueue(): void {
+    for (const item of anhTepCho) {
+      try {
+        URL.revokeObjectURL(item.previewUrl)
+      } catch {}
+    }
+    setAnhTepCho([])
+  }
+
+  async function taiLenAnhSanPham(): Promise<void> {
+    if (dangTaiAnhLen || !anhTepCho.some((item) => item.status === 'queued')) return
+    setDangTaiAnhLen(true)
+    setLoiLuu(null)
+    const batchCompany = companyId
+    try {
+      for (const item of anhTepCho) {
+        if (activeCompany.current !== batchCompany) return
+        if (item.status !== 'queued') continue
+        setAnhTepCho((current) =>
+          current.map((entry) => (entry.id === item.id ? { ...entry, status: 'uploading', message: undefined } : entry)),
+        )
+        try {
+          const result = await api.uploadKnowledgeImage(batchCompany, {
+            file: item.file,
+            product: item.productName || sanPhamAnh.trim() || undefined,
+            brand: item.brandName || thuongHieuAnh.trim() || undefined,
+            tags: anhTags.split(',').map((tag) => tag.trim()).filter(Boolean),
+          })
+          if (activeCompany.current !== batchCompany) return
+          setAnhTepCho((current) =>
+            current.map((entry) => (entry.id === item.id ? { ...entry, status: 'success', message: result.warning } : entry)),
+          )
+          if (result.warning) setThongBao(result.warning)
+        } catch (error) {
+          if (activeCompany.current !== batchCompany) return
+          setAnhTepCho((current) =>
+            current.map((entry) =>
+              entry.id === item.id
+                ? {
+                    ...entry,
+                    status: 'error',
+                    message: error instanceof ApiError ? error.message : t('knowledge.uploadError'),
+                  }
+                : entry,
+            ),
+          )
+        }
+      }
+      if (activeCompany.current === batchCompany) taiLai()
+    } finally {
+      if (activeCompany.current === batchCompany) setDangTaiAnhLen(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!anhTepCho.some((item) => item.status === 'queued') || dangTaiAnhLen) return
+    void taiLenAnhSanPham()
+  }, [anhTepCho, dangTaiAnhLen, sanPhamAnh, thuongHieuAnh, anhTags])
 
   useEffect(() => {
     if (!tepCho.some((item) => item.status === 'queued') || dangTaiLen) return
@@ -426,6 +567,7 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
     setAnhSanPham('')
     setAnhThuongHieu('')
     setAnhMoTa('')
+    setAnhTags('')
   }
 
   async function luu(): Promise<void> {
@@ -540,74 +682,413 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
 
   const tyLeVector = duLieu.stats.documents > 0 ? (duLieu.stats.embedded / duLieu.stats.documents) * 100 : 0
 
+  const productImagesTotal = duLieu.documents.filter((doc) => doc.mimeType?.startsWith('image/'))
+  const imageReadyCount = productImagesTotal.filter(
+    (doc) => (doc as KnowledgeDocumentView & { imageAnalysisStatus?: string }).imageAnalysisStatus === 'ready',
+  ).length
+  const imagePendingCount = productImagesTotal.filter((doc) => {
+    const s = (doc as KnowledgeDocumentView & { imageAnalysisStatus?: string }).imageAnalysisStatus
+    return s === 'pending' || s === 'running'
+  }).length
+  const imageFailedCount = productImagesTotal.filter(
+    (doc) => (doc as KnowledgeDocumentView & { imageAnalysisStatus?: string }).imageAnalysisStatus === 'failed',
+  ).length
+
   return (
     <Trang rong>
       <TieuDeTrang moTa={t('knowledge.subtitle')}>{t('nav.knowledge')}</TieuDeTrang>
       <KnowledgeModelStatus companyId={companyId} />
 
-      <div className="luoi luoi--3" style={{ marginBottom: 12 }}>
-        <OSo nhan={t('knowledge.documents')} giaTri={formatNumber(duLieu.stats.documents)} />
-        <OSo
-          nhan={t('knowledge.chunks')}
-          giaTri={formatNumber(duLieu.stats.chunks)}
-          moTa={t('knowledge.chunksHint')}
-        />
-        <OSo nhan={t('knowledge.processingCount')} giaTri={formatNumber(processingCount)} loai={processingCount ? 'canh-bao' : 'thanh-cong'} />
-        <OSo nhan={t('knowledge.failedCount')} giaTri={formatNumber(failedCount)} loai={failedCount ? 'loi' : 'thanh-cong'} />
-        <OSo nhan={t('knowledge.readyNoVectors')} giaTri={formatNumber(lexicalReadyCount)} loai={lexicalReadyCount ? 'canh-bao' : 'thanh-cong'} />
-        <OSo
-          nhan={t('knowledge.embedded')}
-          giaTri={`${formatNumber(duLieu.stats.embedded)}/${formatNumber(duLieu.stats.documents)}`}
-          loai={duLieu.stats.embedded === duLieu.stats.documents ? 'thanh-cong' : 'canh-bao'}
-          moTa={`${t('knowledge.embeddedHint', { percent: formatNumber(Math.round(tyLeVector)) })} · ${t('knowledge.readyNoVectors')}: ${formatNumber(lexicalReadyCount)}`}
-        />
+      <div className="knowledge-company-bar">
+        <div className="hang" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600 }}>{t('knowledge.activeCompany')}</span>
+          <Nhan loai="chinh">{currentCompany?.name ?? companyId}</Nhan>
+          {companies.length > 1 && session ? (
+            <span className="hang" style={{ gap: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 13, color: 'var(--mau-chu-mo)' }}>({t('knowledge.switchCompany')}:</span>
+              <select
+                className="o-chon"
+                style={{ width: 'auto', padding: '4px 8px', fontSize: 13 }}
+                value={companyId}
+                aria-label={t('knowledge.switchCompany')}
+                onChange={(event) => session.selectCompany(event.target.value)}
+              >
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <span style={{ fontSize: 13, color: 'var(--mau-chu-mo)' }}>)</span>
+            </span>
+          ) : null}
+        </div>
+
+        <div className="knowledge-tabs" style={{ margin: 0, padding: 0, borderBottom: 'none' }}>
+          <button
+            type="button"
+            aria-selected={cheDoXem === 'tai-lieu'}
+            onClick={() => setCheDoXem('tai-lieu')}
+          >
+            📄 {t('knowledge.tabDocuments')}
+          </button>
+          <button
+            type="button"
+            aria-selected={cheDoXem === 'anh-san-pham'}
+            onClick={() => setCheDoXem('anh-san-pham')}
+          >
+            🖼️ {t('knowledge.tabProductImages', { n: formatNumber(productImagesTotal.length) })}
+          </button>
+        </div>
       </div>
 
-      {failedCount > 0 ? <div style={{ marginBottom: 12 }}><ThongBao loai="loi">{t('knowledge.failedCount')}: {formatNumber(failedCount)}</ThongBao></div> : null}
+      {cheDoXem === 'anh-san-pham' ? (
+        <div className="cot" style={{ gap: 16 }}>
+          <div className="luoi luoi--4">
+            <OSo nhan={t('knowledge.productImagesCount', { n: '' }).trim()} giaTri={formatNumber(productImagesTotal.length)} />
+            <OSo nhan={t('knowledge.imageAnalysisReady')} giaTri={formatNumber(imageReadyCount)} loai="thanh-cong" />
+            <OSo nhan={t('knowledge.imageAnalysisPending')} giaTri={formatNumber(imagePendingCount)} loai={imagePendingCount ? 'canh-bao' : 'thanh-cong'} />
+            <OSo nhan={t('knowledge.imageAnalysisFailed')} giaTri={formatNumber(imageFailedCount)} loai={imageFailedCount ? 'loi' : 'thanh-cong'} />
+          </div>
 
-      <Card
-        tieuDe={t('knowledge.indexStatus')}
-        phu={t('knowledge.indexStatusHint')}
-        hanhDong={
-          <span className="hang">
-            <Nut nho bien="phu" onClick={() => void retryAllFailed()} dangTai={dangRetryBulk} disabled={failedCount === 0}>{t('knowledge.retryFailed')}</Nut>
-            <Nut nho onClick={() => void reindex(false)} dangTai={dangReindex}>
-              {t('knowledge.reindex')}
-            </Nut>
-            <Nut bien="phu" nho onClick={() => void reindex(true)} dangTai={dangReindex}>
-              {t('knowledge.reindexForce')}
-            </Nut>
-          </span>
-        }
-      >
-        {loiReindex ? <ThongBao loai="loi">{loiReindex}</ThongBao> : null}
-        {ketQuaRetryBulk ? <ThongBao loai={ketQuaRetryBulk.failed > 0 ? 'canh-bao' : 'thanh-cong'}>{t('knowledge.retryResult', { queued: formatNumber(ketQuaRetryBulk.queued), processing: formatNumber(ketQuaRetryBulk.processing), failed: formatNumber(ketQuaRetryBulk.failed) })}</ThongBao> : null}
-        {ketQuaReindex ? (
-          <ThongBao loai={ketQuaReindex.errors.length > 0 || (ketQuaReindex.classificationFailed ?? 0) > 0 || (ketQuaReindex.queued ?? 0) > 0 || (ketQuaReindex.processing ?? 0) > 0 ? 'canh-bao' : 'thanh-cong'}>
-            {(ketQuaReindex.queued ?? 0) > 0 || (ketQuaReindex.processing ?? 0) > 0
-              ? t('knowledge.reindexClassificationResult', { queued: formatNumber(ketQuaReindex.queued ?? 0), processing: formatNumber(ketQuaReindex.processing ?? 0), failed: formatNumber(ketQuaReindex.classificationFailed ?? 0) })
-              : ketQuaReindex.indexed === 0 && ketQuaReindex.skipped === 0 && ketQuaReindex.errors.length === 0
-                ? t('knowledge.empty')
-                : t('knowledge.reindexResult', {
-                  indexed: formatNumber(ketQuaReindex.indexed),
-                  skipped: formatNumber(ketQuaReindex.skipped),
-                  chunks: formatNumber(ketQuaReindex.chunks),
+          <Card tieuDe={t('knowledge.productImageUploadTitle')} phu={t('knowledge.productImageUploadHint')}>
+            <div className="cot" style={{ gap: 12 }}>
+              <div className="luoi luoi--2">
+                <Truong nhan={t('knowledge.imageProductName')}>
+                  <ONhap value={sanPhamAnh} onChange={setSanPhamAnh} placeholder={t('knowledge.imageProductPlaceholder')} />
+                </Truong>
+                <Truong nhan={t('knowledge.imageBrandName')}>
+                  <ONhap value={thuongHieuAnh} onChange={setThuongHieuAnh} placeholder={t('knowledge.imageBrandPlaceholder')} />
+                </Truong>
+              </div>
+              <div className="luoi luoi--2">
+                <Truong nhan={t('knowledge.imageTags')}>
+                  <ONhap value={anhTags} onChange={setAnhTags} placeholder={t('knowledge.imageTagsPlaceholder')} />
+                </Truong>
+                <Truong nhan={t('knowledge.imageDescription')}>
+                  <ONhap value={anhMoTa} onChange={setAnhMoTa} placeholder={t('knowledge.imageDescriptionPlaceholder')} />
+                </Truong>
+              </div>
+              <div>
+                <Nut
+                  className="knowledge__choose-product-files"
+                  onClick={() => imageFileInputRef.current?.click()}
+                  ariaLabel={t('knowledge.chooseProductImages')}
+                >
+                  <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                    <circle cx="9" cy="9" r="2"/>
+                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                  </svg>
+                  {t('knowledge.chooseProductImages')}
+                </Nut>
+                <input
+                  ref={imageFileInputRef}
+                  type="file"
+                  multiple
+                  accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                  hidden
+                  onChange={(event) => {
+                    if (event.currentTarget.files) themAnhSanPham(event.currentTarget.files)
+                    event.currentTarget.value = ''
+                  }}
+                />
+              </div>
+              <div
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  themAnhSanPham(event.dataTransfer.files)
+                }}
+                style={{
+                  border: '2px dashed var(--mau-vien)',
+                  borderRadius: 8,
+                  padding: 20,
+                  textAlign: 'center',
+                  background: 'var(--mau-be-mat)',
+                }}
+              >
+                {t('knowledge.dropProductImages')}
+              </div>
+              {anhTepCho.length ? (
+                <div className="cot" style={{ gap: 8, marginTop: 8 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>
+                    {t('knowledge.previewThumbnails')} ({formatNumber(anhTepCho.length)}):
+                  </span>
+                  {anhTepCho.map((item) => (
+                    <div key={item.id} className="knowledge-queue-item" style={{ justifyContent: 'space-between' }}>
+                      <div className="hang" style={{ gap: 12, alignItems: 'center' }}>
+                        <img src={item.previewUrl} alt={item.file.name} className="knowledge-queue-thumb" />
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{item.file.name}</div>
+                          <div style={{ fontSize: 12, color: 'var(--mau-chu-mo)' }}>
+                            {formatNumber(Math.ceil(item.file.size / 1024))} KB
+                            {item.productName ? ` · ${t('knowledge.imageProductName')}: ${item.productName}` : ''}
+                            {item.brandName ? ` · ${t('knowledge.imageBrandName')}: ${item.brandName}` : ''}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="hang" style={{ gap: 8, alignItems: 'center' }}>
+                        <span>
+                          {item.status === 'queued'
+                            ? t('knowledge.queued')
+                            : item.status === 'uploading'
+                              ? t('knowledge.uploading')
+                              : item.status === 'success'
+                                ? t('knowledge.uploaded')
+                                : t('knowledge.uploadFailed')}
+                        </span>
+                        {item.message ? <span>{item.message}</span> : null}
+                        {item.status === 'error' ? (
+                          <Nut nho bien="phu" onClick={() => retryUploadAnh(item.id)}>
+                            {t('common.retry')}
+                          </Nut>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="hang" style={{ marginTop: 8 }}>
+                    {dangTaiAnhLen ? <DangTai nhan={t('knowledge.uploading')} /> : null}
+                    <Nut bien="phu" onClick={clearAnhQueue} disabled={dangTaiAnhLen}>
+                      {t('knowledge.clearQueue')}
+                    </Nut>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </Card>
+
+          <Card
+            tieuDe={t('knowledge.productImageGalleryTitle')}
+            phu={t('knowledge.matchCount', { n: formatNumber(danhSachAnhSanPham.length) })}
+          >
+            <div className="cot" style={{ gap: 12, marginBottom: 16 }}>
+              <ONhap
+                value={tuKhoaAnh}
+                onChange={setTuKhoaAnh}
+                placeholder={t('knowledge.searchProductImagesPlaceholder')}
+              />
+            </div>
+
+            {danhSachAnhSanPham.length === 0 ? (
+              <Trong>{t('knowledge.noProductImages')}</Trong>
+            ) : (
+              <div className="knowledge-image-grid">
+                {danhSachAnhSanPham.map((taiLieu) => {
+                  const image = taiLieu as KnowledgeDocumentView & { imageAnalysisStatus?: string; imageAnalysisError?: string | null }
+                  const imagePending = image.imageAnalysisStatus === 'pending' || image.imageAnalysisStatus === 'running'
+                  const imageFailed = image.imageAnalysisStatus === 'failed'
+                  const isSelected = chonId === taiLieu.id
+                  return (
+                    <div
+                      key={taiLieu.id}
+                      className={`knowledge-image-card ${isSelected ? 'knowledge-image-card--selected' : ''}`}
+                      onClick={() => chonTaiLieu(taiLieu)}
+                    >
+                      <div className="knowledge-image-card__thumb-wrap">
+                        <img
+                          src={api.knowledgeImageUrl(companyId, taiLieu.id)}
+                          alt={taiLieu.title}
+                          className="knowledge-image-card__thumb"
+                          loading="lazy"
+                        />
+                      </div>
+                      <div className="knowledge-image-card__body">
+                        <div className="knowledge-image-card__title" title={taiLieu.imageProduct || taiLieu.title}>
+                          {taiLieu.imageProduct || taiLieu.title}
+                        </div>
+                        {taiLieu.imageBrand ? (
+                          <div className="knowledge-image-card__meta">
+                            {t('knowledge.imageBrandName')}: <strong>{taiLieu.imageBrand}</strong>
+                          </div>
+                        ) : null}
+                        {taiLieu.tags?.length ? (
+                          <div className="hang" style={{ gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                            {taiLieu.tags.map((tag) => (
+                              <Nhan key={tag} loai="mo">{tag}</Nhan>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div style={{ fontSize: 11, color: 'var(--mau-chu-mo)', marginTop: 4 }}>
+                          {taiLieu.originalName ?? taiLieu.path} · {formatNumber(Math.ceil((taiLieu.sizeBytes ?? 0) / 1024))} KB
+                        </div>
+                        <div style={{ fontSize: 12, marginTop: 4, color: imageFailed ? 'var(--mau-loi)' : 'var(--mau-chu-mo)' }}>
+                          {imagePending
+                            ? t('knowledge.imageAnalysisPending')
+                            : imageFailed
+                              ? (image.imageAnalysisError ?? t('knowledge.imageAnalysisFailed'))
+                              : image.imageAnalysisStatus === 'ready'
+                                ? t('knowledge.imageAnalysisReady')
+                                : t('knowledge.imageAnalysisUnavailable')}
+                        </div>
+                        <div className="knowledge-image-card__actions">
+                          <span style={{ fontSize: 11, color: 'var(--mau-chu-mo)' }}>
+                            {formatDateTime(taiLieu.updatedAt)}
+                          </span>
+                          <span className="hang" style={{ gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                            {imageFailed ? (
+                              <Nut
+                                nho
+                                bien="phu"
+                                onClick={() => {
+                                  void api
+                                    .retryKnowledgeImageAnalysis(companyId, taiLieu.id)
+                                    .then(() => taiLai())
+                                    .catch((error) =>
+                                      setLoiLuu(error instanceof ApiError ? error.message : t('knowledge.imageAnalysisFailed')),
+                                    )
+                                }}
+                              >
+                                {t('common.retry')}
+                              </Nut>
+                            ) : null}
+                            <Nut
+                              nho
+                              bien="nguy-hiem"
+                              onClick={() => void xoa(taiLieu)}
+                            >
+                              {t('common.delete')}
+                            </Nut>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
                 })}
-            {(ketQuaReindex.queued ?? 0) > 0 || (ketQuaReindex.processing ?? 0) > 0 || (ketQuaReindex.classificationFailed ?? 0) > 0
-              ? ` ${t('knowledge.reindexClassificationResult', { queued: formatNumber(ketQuaReindex.queued ?? 0), processing: formatNumber(ketQuaReindex.processing ?? 0), failed: formatNumber(ketQuaReindex.classificationFailed ?? 0) })}`
-              : ''}
-            {ketQuaReindex.errors.length > 0
-              ? ` ${t('knowledge.reindexErrors', { errors: ketQuaReindex.errors.map((error) => thongBaoPhanLoai(error, t('knowledge.classificationError'))).join('; ') })}`
-              : ''}
-          </ThongBao>
-        ) : null}
-        {!ketQuaReindex && !loiReindex ? (
-          <p style={{ color: 'var(--mau-chu-mo)', margin: 0 }}>{t('knowledge.vectorNote')}</p>
-        ) : null}
-      </Card>
+              </div>
+            )}
+          </Card>
+
+          {chonId && activeDocument?.mimeType?.startsWith('image/') ? (
+            <Card tieuDe={t('knowledge.editProductImage')} phu={activeDocument.originalName ?? activeDocument.path}>
+              {thongBao ? (
+                <div style={{ marginBottom: 10 }}>
+                  <ThongBao loai="thanh-cong">{thongBao}</ThongBao>
+                </div>
+              ) : null}
+              {loiLuu ? (
+                <div style={{ marginBottom: 10 }}>
+                  <ThongBao loai="loi">{loiLuu}</ThongBao>
+                </div>
+              ) : null}
+              <div className="cot" style={{ gap: 12 }}>
+                <div className="luoi luoi--2">
+                  <Truong nhan={t('knowledge.imageProductName')}>
+                    <ONhap value={anhSanPham} onChange={setSanPhamAnh} placeholder={t('knowledge.imageProductPlaceholder')} />
+                  </Truong>
+                  <Truong nhan={t('knowledge.imageBrandName')}>
+                    <ONhap value={thuongHieuAnh} onChange={setThuongHieuAnh} placeholder={t('knowledge.imageBrandPlaceholder')} />
+                  </Truong>
+                </div>
+                <div className="luoi luoi--2">
+                  <Truong nhan={t('knowledge.imageTags')}>
+                    <ONhap
+                      value={bieuMau.tags}
+                      onChange={(giaTri) => {
+                        setBieuMau((truoc) => ({ ...truoc, tags: giaTri }))
+                        setAnhTags(giaTri)
+                      }}
+                      placeholder="tag1, tag2"
+                    />
+                  </Truong>
+                  <Truong nhan={t('knowledge.imageDescription')}>
+                    <ONhap value={anhMoTa} onChange={setAnhMoTa} placeholder={t('knowledge.imageDescriptionPlaceholder')} />
+                  </Truong>
+                </div>
+                <div className="hang" style={{ gap: 8, alignItems: 'center' }}>
+                  <Nut onClick={() => void luuMetadata()} dangTai={dangLuu}>
+                    {t('knowledge.saveChanges')}
+                  </Nut>
+                  <Nut bien="phu" onClick={() => setChonId(null)}>
+                    {t('common.close')}
+                  </Nut>
+                  <a
+                    className="btn btn--phu btn--nho"
+                    href={api.knowledgeDownloadUrl(companyId, chonId)}
+                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                  >
+                    {t('knowledge.downloadOriginal')}
+                  </a>
+                  <Nut
+                    bien="nguy-hiem"
+                    nho
+                    onClick={() => void xoa(activeDocument)}
+                  >
+                    {t('common.delete')}
+                  </Nut>
+                </div>
+              </div>
+            </Card>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          <div className="luoi luoi--3" style={{ marginBottom: 12 }}>
+            <OSo nhan={t('knowledge.documents')} giaTri={formatNumber(duLieu.stats.documents)} />
+            <OSo
+              nhan={t('knowledge.chunks')}
+              giaTri={formatNumber(duLieu.stats.chunks)}
+              moTa={t('knowledge.chunksHint')}
+            />
+            <OSo nhan={t('knowledge.processingCount')} giaTri={formatNumber(processingCount)} loai={processingCount ? 'canh-bao' : 'thanh-cong'} />
+            <OSo nhan={t('knowledge.failedCount')} giaTri={formatNumber(failedCount)} loai={failedCount ? 'loi' : 'thanh-cong'} />
+            <OSo nhan={t('knowledge.readyNoVectors')} giaTri={formatNumber(lexicalReadyCount)} loai={lexicalReadyCount ? 'canh-bao' : 'thanh-cong'} />
+            <OSo
+              nhan={t('knowledge.embedded')}
+              giaTri={`${formatNumber(duLieu.stats.embedded)}/${formatNumber(duLieu.stats.documents)}`}
+              loai={duLieu.stats.embedded === duLieu.stats.documents ? 'thanh-cong' : 'canh-bao'}
+              moTa={`${t('knowledge.embeddedHint', { percent: formatNumber(Math.round(tyLeVector)) })} · ${t('knowledge.readyNoVectors')}: ${formatNumber(lexicalReadyCount)}`}
+            />
+          </div>
+
+          {failedCount > 0 ? <div style={{ marginBottom: 12 }}><ThongBao loai="loi">{t('knowledge.failedCount')}: {formatNumber(failedCount)}</ThongBao></div> : null}
+
+          <Card
+            tieuDe={t('knowledge.indexStatus')}
+            phu={t('knowledge.indexStatusHint')}
+            hanhDong={
+              <span className="hang">
+                <Nut nho bien="phu" onClick={() => void retryAllFailed()} dangTai={dangRetryBulk} disabled={failedCount === 0}>{t('knowledge.retryFailed')}</Nut>
+                <Nut nho onClick={() => void reindex(false)} dangTai={dangReindex}>
+                  {t('knowledge.reindex')}
+                </Nut>
+                <Nut bien="phu" nho onClick={() => void reindex(true)} dangTai={dangReindex}>
+                  {t('knowledge.reindexForce')}
+                </Nut>
+              </span>
+            }
+          >
+            {loiReindex ? <ThongBao loai="loi">{loiReindex}</ThongBao> : null}
+            {ketQuaRetryBulk ? <ThongBao loai={ketQuaRetryBulk.failed > 0 ? 'canh-bao' : 'thanh-cong'}>{t('knowledge.retryResult', { queued: formatNumber(ketQuaRetryBulk.queued), processing: formatNumber(ketQuaRetryBulk.processing), failed: formatNumber(ketQuaRetryBulk.failed) })}</ThongBao> : null}
+            {ketQuaReindex ? (
+              <ThongBao loai={ketQuaReindex.errors.length > 0 || (ketQuaReindex.classificationFailed ?? 0) > 0 || (ketQuaReindex.queued ?? 0) > 0 || (ketQuaReindex.processing ?? 0) > 0 ? 'canh-bao' : 'thanh-cong'}>
+                {(ketQuaReindex.queued ?? 0) > 0 || (ketQuaReindex.processing ?? 0) > 0
+                  ? t('knowledge.reindexClassificationResult', { queued: formatNumber(ketQuaReindex.queued ?? 0), processing: formatNumber(ketQuaReindex.processing ?? 0), failed: formatNumber(ketQuaReindex.classificationFailed ?? 0) })
+                  : ketQuaReindex.indexed === 0 && ketQuaReindex.skipped === 0 && ketQuaReindex.errors.length === 0
+                    ? t('knowledge.empty')
+                    : t('knowledge.reindexResult', {
+                      indexed: formatNumber(ketQuaReindex.indexed),
+                      skipped: formatNumber(ketQuaReindex.skipped),
+                      chunks: formatNumber(ketQuaReindex.chunks),
+                    })}
+                {(ketQuaReindex.queued ?? 0) > 0 || (ketQuaReindex.processing ?? 0) > 0 || (ketQuaReindex.classificationFailed ?? 0) > 0
+                  ? ` ${t('knowledge.reindexClassificationResult', { queued: formatNumber(ketQuaReindex.queued ?? 0), processing: formatNumber(ketQuaReindex.processing ?? 0), failed: formatNumber(ketQuaReindex.classificationFailed ?? 0) })}`
+                  : ''}
+                {ketQuaReindex.errors.length > 0
+                  ? ` ${t('knowledge.reindexErrors', { errors: ketQuaReindex.errors.map((error) => thongBaoPhanLoai(error, t('knowledge.classificationError'))).join('; ') })}`
+                  : ''}
+              </ThongBao>
+            ) : null}
+            {!ketQuaReindex && !loiReindex ? (
+              <p style={{ color: 'var(--mau-chu-mo)', margin: 0 }}>{t('knowledge.vectorNote')}</p>
+            ) : null}
+          </Card>
 
       <Card tieuDe={t('knowledge.uploadTitle')} phu={t('knowledge.uploadHint')}>
         <div className="cot" style={{ gap: 10 }}>
+          <div style={{ fontSize: 13, color: 'var(--mau-chu-mo)' }}>
+            💡 <Nut nho bien="phu" onClick={() => setCheDoXem('anh-san-pham')}>{t('knowledge.switchToProductImages')}</Nut>
+          </div>
           <div className="luoi luoi--2">
             <ONhap value={sanPhamAnh} onChange={setSanPhamAnh} placeholder={t('knowledge.imageProductPlaceholder')} />
             <ONhap value={thuongHieuAnh} onChange={setThuongHieuAnh} placeholder={t('knowledge.imageBrandPlaceholder')} />
@@ -868,6 +1349,8 @@ export function KhoKienThuc({ companyId }: { companyId: string }): ReactNode {
           )}
         </Card>
       </div>
+        </>
+      )}
     </Trang>
   )
 }

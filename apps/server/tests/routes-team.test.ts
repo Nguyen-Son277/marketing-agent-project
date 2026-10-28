@@ -38,7 +38,7 @@ describe('team routes', () => {
       availableTools: { name: string }[]
       models: { providerName: string; providerId: string }[]
     }>()
-    expect(body.members).toHaveLength(10)
+    expect(body.members).toHaveLength(11)
     expect(body.members.some((member) => member.role === 'marketing-leader')).toBe(true)
     expect(body.members.every((member) => member.modelFk !== null)).toBe(true)
     expect(body.members.every((member) => Array.isArray(member.fallbackModelFks))).toBe(true)

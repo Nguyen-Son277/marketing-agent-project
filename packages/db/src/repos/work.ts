@@ -274,6 +274,32 @@ export class WorkRepo {
     return this.requireConversation(id, companyId)
   }
 
+  /**
+   * Delete a conversation, cascading through its messages and attachments.
+   * If `options.deleteTasks` is true, linked tasks and employee tasks are also deleted.
+   * If false or omitted, linked tasks and employee tasks have their conversation association unlinked (set to NULL).
+   */
+  deleteConversation(
+    id: string,
+    companyId: string,
+    options: { deleteTasks?: boolean } = {},
+  ): void {
+    const conversation = this.findConversation(id, companyId)
+    if (!conversation) return
+
+    this.db.tx(() => {
+      if (options.deleteTasks) {
+        this.db.run('DELETE FROM employee_tasks WHERE source_conversation_id = ? AND company_id = ?', [id, companyId])
+        this.db.run('DELETE FROM tasks WHERE conversation_id = ? AND company_id = ?', [id, companyId])
+      } else {
+        this.db.run('UPDATE tasks SET conversation_id = NULL WHERE conversation_id = ? AND company_id = ?', [id, companyId])
+        this.db.run('UPDATE employee_tasks SET source_conversation_id = NULL WHERE source_conversation_id = ? AND company_id = ?', [id, companyId])
+      }
+      this.db.run('DELETE FROM chat_attachments WHERE conversation_id = ? AND company_id = ?', [id, companyId])
+      this.db.run('DELETE FROM conversations WHERE id = ? AND company_id = ?', [id, companyId])
+    })
+  }
+
   /** Metadata-only, consistent workflow graph; never silently returns a cut task graph. */
   workflowData(companyId: string, conversationId: string): {
     tasks: WorkflowTaskNode[]

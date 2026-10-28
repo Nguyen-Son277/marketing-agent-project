@@ -17,3 +17,6 @@ export * from './daily-reports.ts'
 export * from './notifications.ts'
 export * from './chat-attachments.ts'
 export * from './social-browser.ts'
+export * from './wordpress.ts'
+export * from './office.ts'
+
